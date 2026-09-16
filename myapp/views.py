@@ -2222,6 +2222,14 @@ AI_FREE_MODEL_KEYS = frozenset({
     ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
     ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
 })
+# Accounts that already have full model access (staff or an active AI
+# subscription) keep seeing the ChatGPT-branded and Gemini picker entries as
+# before. New/free accounts and signed-out guests never see them at all (not
+# even locked/greyed-out) — they get the Vidhyora-branded lineup only.
+AI_FULL_ACCESS_ONLY_MODEL_KEYS = frozenset({
+    ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, 'gpt-oss-20b',
+    ai_chat.GEMINI_36_FLASH_MODEL_KEY,
+})
 _CLOUDFLARE_IMAGE_MODEL_KEYS = (
     ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
     ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
@@ -2862,6 +2870,7 @@ def ai_page(request):
         }
         for key, cfg in ai_chat.MODELS.items()
         if key != 'vision' and not cfg.get('hidden_from_picker', False)
+        and (ai_full_model_access or key not in AI_FULL_ACCESS_ONLY_MODEL_KEYS)
     ]
 
     return render(request, 'ai.html', {

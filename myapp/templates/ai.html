@@ -1323,21 +1323,27 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
             <span class="logo-txt">Vidhyora <span>AI</span></span>
             <span class="logo-sub">A Fun, Powerful AI</span>
           </div>
-          {% if ai_authenticated %}
+          {% if ai_full_model_access %}
+          {# Only accounts that already have full model access keep seeing the ChatGPT-branded call-out. #}
           <p class="empty-lead">
-            {% if ai_full_model_access %}Full access to{% else %}Get{% endif %}
+            Full access to
             <span class="hl-model">ChatGPT&nbsp;5.6 Sol, Terra &amp; Luna</span> —
             with deep reasoning, coding, vision and image generation, all in one place.
           </p>
-          {% else %}
-          {# A signed-out visitor sees the original, product-neutral line. #}
-          <p class="empty-lead">A powerful AI with access to multiple models — fast chat, deep reasoning, coding, vision, and image generation, all in one place.</p>
-          {% endif %}
           <ul class="empty-models" aria-label="Featured AI models">
             <li>5.6 Sol</li>
             <li>5.6 Terra</li>
             <li>5.6 Luna</li>
           </ul>
+          {% else %}
+          {# New/free accounts and signed-out guests see the Vidhyora-branded line and badges only. #}
+          <p class="empty-lead">A powerful AI with access to multiple models — fast chat, deep reasoning, coding, vision, and image generation, all in one place.</p>
+          <ul class="empty-models" aria-label="Featured AI models">
+            <li>Vidhyora Ultra</li>
+            <li>Vidhyora Quick</li>
+            <li>Vidhyora Code</li>
+          </ul>
+          {% endif %}
           <p class="empty-hint">Bring a question, an idea, or your next big project.</p>
         </div>
       </div>
