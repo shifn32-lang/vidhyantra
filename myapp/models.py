@@ -25,6 +25,9 @@ class StoreProfile(models.Model):
 
     user           = models.OneToOneField(User, on_delete=models.CASCADE, related_name='store_profile')
     phone          = models.CharField(max_length=20, blank=True)
+    age            = models.PositiveSmallIntegerField(null=True, blank=True)
+    state          = models.CharField(max_length=100, blank=True)
+    city           = models.CharField(max_length=100, blank=True)
     avatar         = models.ImageField(upload_to='avatars/', blank=True, null=True)
     wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     manual_amount_paid = models.DecimalField(
@@ -45,6 +48,10 @@ class StoreProfile(models.Model):
     location_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     location_accuracy_m = models.PositiveIntegerField(null=True, blank=True)
     location_updated_at = models.DateTimeField(null=True, blank=True)
+    location_place_name = models.CharField(
+        max_length=255, blank=True,
+        help_text='Reverse-geocoded "City, State" for location_latitude/longitude, resolved once when captured.',
+    )
 
     # Vidhyora AI subscription — buying the AI plan product (see
     # AI_SUBSCRIPTION_PRODUCT_SLUG below) extends this instead of granting
@@ -52,6 +59,11 @@ class StoreProfile(models.Model):
     # bypass both the cap and this field entirely (see views._ai_profile_gate)
     # rather than being modeled as a permanent subscription here.
     ai_subscription_until = models.DateTimeField(null=True, blank=True, help_text="Vidhyora AI access is unlimited until this time. Blank/past = free tier.")
+    # Set alongside ai_subscription_until at the same two grant points
+    # (dashboard AddUserForm account creation, dashboard_ai_grant) and
+    # cleared with it on revoke — lets the account's own Subscription tab
+    # show a start date next to the expiry, not just "active until X".
+    ai_subscription_started_at = models.DateTimeField(null=True, blank=True, help_text="When the current AI subscription period began.")
     ai_free_messages_used = models.PositiveIntegerField(default=0, help_text="Free-tier Vidhyora AI messages sent so far (resets on each new subscription purchase).")
     login_count = models.PositiveIntegerField(
         default=0,
@@ -813,6 +825,12 @@ class SiteCustomization(models.Model):
     context processor in edutrellis/settings.py, for how SITE_FAVICON_URL
     reaches every template without each view needing to fetch this itself."""
     favicon    = models.ImageField(upload_to='branding/', blank=True, null=True, help_text='Browser-tab icon. Square, ideally 512×512px or smaller (PNG/ICO). Leave blank to use the default EduTrellis favicon.')
+    ai_brand_name = models.CharField(
+        max_length=60, default='Vidhyora',
+        help_text='The AI assistant\'s name — shown across the chat UI (header, title, model picker) and used '
+                   'in its own replies ("I\'m an AI model built by the ... team"). Changing this takes effect '
+                   'immediately, no restart needed.',
+    )
     social_preview_title = models.CharField(
         max_length=120, default='Vidhyora AI — Free AI Chat Assistant',
         help_text='Heading shown in WhatsApp and social link previews.',
@@ -825,6 +843,28 @@ class SiteCustomization(models.Model):
     social_preview_image = models.ImageField(
         upload_to='branding/social/', blank=True, null=True,
         help_text='Large preview image. 1200×630px is recommended. Leave blank to use the default cover.',
+    )
+    support_whatsapp_number = models.CharField(
+        max_length=20, default='9695953183',
+        help_text='Shown in the in-app "Contact support" popup\'s WhatsApp option, exactly as typed. Also used '
+                   'to build its wa.me link — with or without a country code both work.',
+    )
+    support_email = models.EmailField(
+        max_length=254, default='support@edutrellis.in',
+        help_text='Shown in the in-app "Contact support" popup\'s email option and used for its mailto: link.',
+    )
+    youtube_cookies_txt = models.TextField(
+        blank=True,
+        help_text='Paste a YouTube cookies.txt (Netscape format), exported while logged into YouTube in a normal '
+                   'browser — fixes "Sign in to confirm you\'re not a bot" download failures, which datacenter/'
+                   'server IPs (like most hosting providers) hit far more than a home connection. Leave blank to '
+                   'disable. Superadmin-only feature — see myapp.youtube_download.',
+    )
+    site_disabled = models.BooleanField(
+        default=False,
+        help_text='Shows a bare 404 "Site Not Found" page to every visitor instead of the real site. The '
+                   'dashboard itself (and /admin/) stays reachable so staff can always log in and switch this '
+                   'back off — see myapp.middleware.SiteDisabledMiddleware.',
     )
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -959,3 +999,27 @@ class AIAPIKey(models.Model):
         if not raw_key:
             return None
         return cls.objects.select_related('user').filter(key_hash=cls._hash(raw_key)).first()
+
+
+class ProviderAPICredential(models.Model):
+    """Dashboard-editable override for one of the outbound provider API keys
+    normally hardcoded/env-configured in edutrellis/settings.py (see
+    myapp.provider_keys.get_key, which every live call site reads through
+    instead of settings directly). A blank/missing row here just means "use
+    the settings.py default" — nothing breaks if this table is empty."""
+    setting_name = models.CharField(
+        max_length=80, unique=True, db_index=True,
+        help_text='The Django settings attribute this overrides, e.g. NVIDIA_LUNA_API_KEY.',
+    )
+    value = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+
+    class Meta:
+        verbose_name = 'Provider API Credential'
+        verbose_name_plural = 'Provider API Credentials'
+
+    def __str__(self):
+        return self.setting_name

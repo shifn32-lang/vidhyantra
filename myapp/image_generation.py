@@ -7,8 +7,9 @@ import re
 from dataclasses import dataclass
 
 import requests
-from django.conf import settings
 from PIL import Image, ImageOps, UnidentifiedImageError
+
+from myapp.provider_keys import get_key as _get_key
 
 
 FLUX_API_URL = (
@@ -259,7 +260,7 @@ def _api_key(*, editing=False):
     # Editing can use a separately entitled NVIDIA account/key while normal
     # prompt-to-image generation keeps its existing credential.
     setting_name = "NVIDIA_FLUX_EDIT_API_KEY" if editing else "NVIDIA_FLUX_API_KEY"
-    return getattr(settings, setting_name, "").strip()
+    return _get_key(setting_name).strip()
 
 
 _IMAGE_DATA_URI_RE = re.compile(
@@ -382,8 +383,8 @@ def _generate_cloudflare(prompt, source_image, model_key):
     but a failure comes back as JSON ({"success": false, "errors": [...]})
     instead, so the content-type decides how to read the body.
     """
-    account_id = getattr(settings, 'CLOUDFLARE_ACCOUNT_ID', '').strip()
-    token = getattr(settings, 'CLOUDFLARE_API_TOKEN', '').strip()
+    account_id = _get_key('CLOUDFLARE_ACCOUNT_ID').strip()
+    token = _get_key('CLOUDFLARE_API_TOKEN').strip()
     endpoint = CLOUDFLARE_MODEL_ENDPOINTS.get(model_key)
     if not endpoint:
         raise ImageGenerationError('That image model is not recognized.', status_code=400)
@@ -454,10 +455,10 @@ def _generate_cloudflare(prompt, source_image, model_key):
 def _generate_qwen_edit(prompt, source_image):
     if not source_image:
         raise ImageGenerationError('Attach an image and describe the changes you want.', status_code=400)
-    url = getattr(settings, 'QWEN_IMAGE_EDIT_API_URL', '').strip()
+    url = _get_key('QWEN_IMAGE_EDIT_API_URL').strip()
     if not url:
         raise ImageGenerationError('Qwen Image Edit is not connected yet. An image-editing server must be configured before uploads can be edited.')
-    key = getattr(settings, 'QWEN_IMAGE_EDIT_ENDPOINT_KEY', '').strip()
+    key = _get_key('QWEN_IMAGE_EDIT_ENDPOINT_KEY').strip()
     try:
         response = requests.post(
             url,
@@ -508,7 +509,7 @@ def generate_image(prompt, source_image=None, *, model_key=None):
             and model_key in (None, 'flux-klein-4b')
             and not exc.blocked
             and not exc.editing_unavailable
-            and getattr(settings, 'NVIDIA_FLUX_DEV_API_KEY', '').strip()
+            and _get_key('NVIDIA_FLUX_DEV_API_KEY')
         ):
             return _generate_flux_dev(prompt)
         if not exc.blocked:
@@ -528,7 +529,7 @@ def generate_image(prompt, source_image=None, *, model_key=None):
 
 def _generate_flux_dev(prompt):
     """One backup attempt using FLUX.1-dev's hosted text-to-image schema."""
-    key = getattr(settings, 'NVIDIA_FLUX_DEV_API_KEY', '').strip()
+    key = _get_key('NVIDIA_FLUX_DEV_API_KEY').strip()
     if not key:
         raise ImageGenerationError('The backup image service is not configured.')
     try:
@@ -561,7 +562,7 @@ def _dispatch_generate(prompt, source_image, model_key):
     try:
         return _dispatch_generate_once(prompt, source_image, model_key)
     except ImageGenerationError as exc:
-        backup = getattr(settings, 'NVIDIA_FLUX_BACKUP_API_KEY', '').strip()
+        backup = _get_key('NVIDIA_FLUX_BACKUP_API_KEY').strip()
         if (
             not source_image
             and model_key in (None, 'flux-klein-4b')
@@ -584,7 +585,7 @@ def _dispatch_generate_once(prompt, source_image, model_key, *, generation_key=N
     kontext = model_key == 'flux-kontext-dev'
     if kontext and not editing:
         raise ImageGenerationError('Attach an image and describe the changes you want.', status_code=400)
-    edit_url = getattr(settings, 'FLUX_EDIT_API_URL', '').strip() if editing else ''
+    edit_url = _get_key('FLUX_EDIT_API_URL').strip() if editing else ''
     # NVIDIA's hosted FLUX.2 Klein preview does not accept arbitrary uploads.
     # Its ``image`` field only accepts one of four NVIDIA-owned example IDs
     # (data:image/png;example_id,0..3), so sending a browser image as base64
@@ -600,12 +601,12 @@ def _dispatch_generate_once(prompt, source_image, model_key, *, generation_key=N
         )
     # A private deployment has its own optional credential. Never forward the
     # hosted NVIDIA credential to a separately configured server.
-    key = getattr(settings, 'FLUX_EDIT_API_KEY', '').strip() if edit_url else _api_key(editing=editing)
+    key = _get_key('FLUX_EDIT_API_KEY').strip() if edit_url else _api_key(editing=editing)
     if not editing and generation_key is not None:
         key = generation_key
     if kontext:
         edit_url = ''
-        key = getattr(settings, 'NVIDIA_FLUX_KONTEXT_API_KEY', '').strip()
+        key = _get_key('NVIDIA_FLUX_KONTEXT_API_KEY').strip()
     if not key and not edit_url:
         setting_name = 'NVIDIA_FLUX_KONTEXT_API_KEY' if kontext else ("NVIDIA_FLUX_EDIT_API_KEY" if editing else "NVIDIA_FLUX_API_KEY")
         raise ImageGenerationError(

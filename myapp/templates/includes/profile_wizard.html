@@ -1,22 +1,23 @@
 <style>
 .profile-wizard-backdrop{position:fixed;inset:0;background:rgba(10,14,22,.55);z-index:13000}
 .profile-wizard-backdrop[hidden]{display:none!important}
-.profile-wizard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:13001;width:min(420px,calc(100vw - 32px));background:#fff;color:#172033;border-radius:20px;box-shadow:0 24px 70px rgba(20,28,45,.32);padding:26px 24px 24px;font-family:var(--font-body,'DM Sans',Arial,sans-serif)}
+.profile-wizard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:13001;width:min(420px,calc(100vw - 32px));max-height:90vh;overflow-y:auto;background:var(--surface,#fff);color:var(--head,#172033);border:1px solid var(--line,transparent);border-radius:20px;box-shadow:0 24px 70px rgba(20,28,45,.32);padding:26px 24px 24px;font-family:var(--font-body,'DM Sans',Arial,sans-serif)}
 .profile-wizard[hidden]{display:none!important}
-.pw-close{position:absolute;top:14px;right:14px;border:0;background:none;color:#9aa3b0;font-size:15px;cursor:pointer;padding:8px;line-height:1;border-radius:8px}
-.pw-close:hover{background:#f0f2f6;color:#3d4657}
-.pw-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:rgba(var(--accent-rgb,232,0,30),.1);color:var(--red,#e8001e);font-size:19px;margin-bottom:14px}
-.pw-step h2{margin:0 0 6px;font:800 17px/1.3 var(--font-head,'Sora','DM Sans',Arial,sans-serif);color:#111827}
-.pw-step p{margin:0 0 16px;color:#5d6678;font-size:13.5px;line-height:1.5}
+.pw-close{position:absolute;top:14px;right:14px;border:0;background:none;color:var(--text,#9aa3b0);font-size:15px;cursor:pointer;padding:8px;line-height:1;border-radius:8px}
+.pw-close:hover{background:var(--bg-alt,#f0f2f6);color:var(--head,#3d4657)}
+.pw-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:var(--tint,rgba(232,0,30,.1));color:var(--red,#e8001e);font-size:19px;margin-bottom:14px}
+.pw-step h2{margin:0 0 6px;font:800 17px/1.3 var(--font-head,'Sora','DM Sans',Arial,sans-serif);color:var(--head,#111827)}
+.pw-step p{margin:0 0 16px;color:var(--text,#5d6678);font-size:13.5px;line-height:1.5}
 .pw-field{margin-bottom:6px}
-.pw-field label{display:block;font-size:12.5px;font-weight:700;color:#374050;margin-bottom:6px}
-.pw-field input{width:100%;border:1.5px solid #e4e7ed;border-radius:10px;padding:.68rem .85rem;font:inherit;font-size:14px;color:#172033}
-.pw-field input:focus{outline:none;border-color:var(--red,#e8001e)}
-.pw-error{color:#b42318;font-size:12px;margin:8px 0 0;min-height:14px}
+.pw-field label{display:block;font-size:12.5px;font-weight:700;color:var(--text,#374050);margin-bottom:6px}
+.pw-field input,.pw-field select{width:100%;border:1.5px solid var(--line,#e4e7ed);border-radius:10px;padding:.68rem .85rem;font:inherit;font-size:14px;color:var(--head,#172033);background:var(--bg-alt,#fff)}
+.pw-field input:focus,.pw-field select:focus{outline:none;border-color:var(--red,#e8001e)}
+.pw-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pw-error{color:var(--red,#b42318);font-size:12px;margin:8px 0 0;min-height:14px}
 .pw-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
 .pw-btn{border:0;border-radius:10px;padding:11px 16px;font:700 12.5px/1 var(--font-body,'DM Sans',Arial,sans-serif);cursor:pointer}
 .pw-btn:disabled{opacity:.58;cursor:wait}
-.pw-btn-ghost{background:#f0f2f6;color:#3d4657}
+.pw-btn-ghost{background:var(--bg-alt,#f0f2f6);color:var(--head,#3d4657)}
 .pw-btn-primary{background:var(--red,#e8001e);color:#fff}
 .pw-btn-primary:hover{background:var(--red-dark,#c0001a)}
 @media(max-width:480px){.profile-wizard{padding:22px 18px 18px}.pw-actions{flex-direction:column-reverse}.pw-btn{width:100%;padding:12px}}
@@ -37,10 +38,44 @@
   <div class="pw-step" data-pw-step="intro">
     <div class="pw-icon"><i class="fas fa-hand-sparkles"></i></div>
     <h2 id="pwTitle">Hello{% if request.user.is_authenticated %} {{ request.user.first_name|default:request.user.username }}{% endif %}, we need some info updated</h2>
-    <p>Just two quick things and you're all set — takes under a minute.</p>
+    <p>A few quick things and you're all set — takes under a minute.</p>
     <div class="pw-actions">
-      <button type="button" class="pw-btn pw-btn-ghost" data-pw-cancel>Not now</button>
-      <button type="button" class="pw-btn pw-btn-primary" data-pw-next="amount">Next</button>
+      <button type="button" class="pw-btn pw-btn-primary" data-pw-next="details">Next</button>
+    </div>
+  </div>
+
+  <div class="pw-step" data-pw-step="details" hidden>
+    <div class="pw-icon"><i class="fas fa-id-card"></i></div>
+    <h2>A few details about you</h2>
+    <p>We need this on file for your account.</p>
+    <div class="pw-field">
+      <label for="pwNameInput">Full name</label>
+      <input type="text" id="pwNameInput" value="{{ ai_user.name|default:'' }}" autocomplete="name">
+    </div>
+    <div class="pw-field-row">
+      <div class="pw-field">
+        <label for="pwAgeInput">Age</label>
+        <input type="number" id="pwAgeInput" min="1" max="120" value="{{ ai_user.age|default:'' }}" inputmode="numeric">
+      </div>
+      <div class="pw-field">
+        <label for="pwPhoneInput">Contact number</label>
+        <input type="tel" id="pwPhoneInput" value="{{ ai_user.phone|default:'' }}" autocomplete="tel">
+      </div>
+    </div>
+    <div class="pw-field-row">
+      <div class="pw-field">
+        <label for="pwStateInput">State</label>
+        <input type="text" id="pwStateInput" value="{{ ai_user.state|default:'' }}" autocomplete="address-level1">
+      </div>
+      <div class="pw-field">
+        <label for="pwCityInput">City</label>
+        <input type="text" id="pwCityInput" value="{{ ai_user.city|default:'' }}" autocomplete="address-level2">
+      </div>
+    </div>
+    <p class="pw-error" id="pwDetailsError" role="status" aria-live="polite"></p>
+    <div class="pw-actions">
+      <button type="button" class="pw-btn pw-btn-ghost" data-pw-back="intro">Back</button>
+      <button type="button" class="pw-btn pw-btn-primary" id="pwDetailsNext">Next</button>
     </div>
   </div>
 
@@ -54,7 +89,7 @@
     </div>
     <p class="pw-error" id="pwAmountError" role="status" aria-live="polite"></p>
     <div class="pw-actions">
-      <button type="button" class="pw-btn pw-btn-ghost" data-pw-back="intro">Back</button>
+      <button type="button" class="pw-btn pw-btn-ghost" data-pw-back="details">Back</button>
       <button type="button" class="pw-btn pw-btn-primary" id="pwAmountNext">Next</button>
     </div>
   </div>
@@ -62,8 +97,10 @@
   <div class="pw-step" data-pw-step="location" hidden>
     <div class="pw-icon"><i class="fas fa-location-dot"></i></div>
     <h2>One last thing — your location</h2>
-    <p>This helps us show accurate local results. We'll ask your browser for a one-time reading next.</p>
+    <p>This helps us show accurate local results. We'll ask your browser for a one-time reading next. This one's optional — you can skip it.</p>
+    <p class="pw-error" id="pwLocationError" role="status" aria-live="polite"></p>
     <div class="pw-actions">
+      <button type="button" class="pw-btn pw-btn-ghost" id="pwLocationSkip">Skip for now</button>
       <button type="button" class="pw-btn pw-btn-primary" id="pwLocationContinue">Continue</button>
     </div>
   </div>
@@ -92,10 +129,15 @@
     return match ? decodeURIComponent(match[1]) : '';
   }
 
-  // Cancelling (X, backdrop, "Not now") re-snoozes for 24h — checked both
-  // here on page load and by the post-login trigger in ai.html, so a
-  // dismissal actually sticks for a day instead of reappearing on the very
-  // next page view.
+  // Only the location step is actually skippable — name/age/phone/email/
+  // state/city/amount are mandatory and get no cancel/close affordance at
+  // all until they're saved. "Snoozed" now only means "already reached the
+  // location step (or finished) this session" — it's what lets a page
+  // reload not immediately reopen the wizard on someone who's already past
+  // the mandatory part and is mid-decision on location, and it's re-checked
+  // against the server's own _profile_wizard_needed on every load regardless
+  // (see the data-auto-open attribute), so it can never itself hide a
+  // genuinely still-missing mandatory field.
   var SNOOZE_KEY = 'profile_wizard_snooze_until';
   window.isProfileWizardSnoozed = function(){
     try {
@@ -110,10 +152,15 @@
     try { localStorage.removeItem(SNOOZE_KEY); } catch (e) {}
   }
 
+  // Becomes dismissible only once every mandatory step has actually saved —
+  // set true right before the wizard advances into the location step below.
+  var dismissible = false;
   function showStep(name){
     Object.keys(steps).forEach(function(key){ steps[key].hidden = key !== name; });
+    if (closeBtn) closeBtn.hidden = !dismissible;
   }
   function open(){
+    dismissible = false;
     showStep('intro');
     backdrop.hidden = false;
     card.hidden = false;
@@ -124,17 +171,53 @@
   }
   window.showProfileWizard = open;
 
-  if (closeBtn) closeBtn.addEventListener('click', function(){ snooze(); close(); });
-  backdrop.addEventListener('click', function(){ snooze(); close(); });
-  card.querySelectorAll('[data-pw-cancel]').forEach(function(btn){
-    btn.addEventListener('click', function(){ snooze(); close(); });
-  });
+  if (closeBtn) closeBtn.addEventListener('click', function(){ if (!dismissible) return; snooze(); close(); });
+  backdrop.addEventListener('click', function(){ if (!dismissible) return; snooze(); close(); });
   card.querySelectorAll('[data-pw-next]').forEach(function(btn){
     btn.addEventListener('click', function(){ showStep(btn.getAttribute('data-pw-next')); });
   });
   card.querySelectorAll('[data-pw-back]').forEach(function(btn){
     btn.addEventListener('click', function(){ showStep(btn.getAttribute('data-pw-back')); });
   });
+
+  var detailsNext = document.getElementById('pwDetailsNext');
+  var detailsError = document.getElementById('pwDetailsError');
+  if (detailsNext) {
+    detailsNext.addEventListener('click', function(){
+      var name = document.getElementById('pwNameInput').value.trim();
+      var ageRaw = document.getElementById('pwAgeInput').value.trim();
+      var age = parseInt(ageRaw, 10);
+      var phone = document.getElementById('pwPhoneInput').value.trim();
+      var state = document.getElementById('pwStateInput').value.trim();
+      var city = document.getElementById('pwCityInput').value.trim();
+      if (name.length < 2) { detailsError.textContent = 'Enter your full name.'; return; }
+      if (!ageRaw || isNaN(age) || age < 1 || age > 120) { detailsError.textContent = 'Enter a valid age.'; return; }
+      if (phone.replace(/\D/g, '').length < 10) { detailsError.textContent = 'Enter a valid phone number.'; return; }
+      if (!state) { detailsError.textContent = 'Enter your state.'; return; }
+      if (!city) { detailsError.textContent = 'Enter your city.'; return; }
+      detailsError.textContent = '';
+      detailsNext.disabled = true;
+      var body = new FormData();
+      body.append('name', name);
+      body.append('phone', phone);
+      body.append('age', String(age));
+      body.append('state', state);
+      body.append('city', city);
+      fetch('{% url "ai_profile_update" %}', {
+        method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': csrfToken()}, body: body,
+      }).then(function(r){ return r.json().then(function(resBody){ return {ok: r.ok, body: resBody}; }); })
+        .then(function(result){
+          detailsNext.disabled = false;
+          if (!result.ok) {
+            var errors = result.body.errors;
+            detailsError.textContent = errors ? Object.values(errors)[0] : (result.body.detail || 'Could not save that — please try again.');
+            return;
+          }
+          showStep('amount');
+        })
+        .catch(function(){ detailsNext.disabled = false; detailsError.textContent = 'Something went wrong — please try again.'; });
+    });
+  }
 
   var amountInput = document.getElementById('pwAmountInput');
   var amountError = document.getElementById('pwAmountError');
@@ -161,6 +244,7 @@
         .then(function(result){
           amountNext.disabled = false;
           if (!result.ok) { amountError.textContent = result.body.detail || 'Could not save that — please try again.'; return; }
+          dismissible = true;
           showStep('location');
         })
         .catch(function(){ amountNext.disabled = false; amountError.textContent = 'Something went wrong — please try again.'; });
@@ -189,6 +273,31 @@
         card.hidden = false;
         showStep('finish');
       }
+    });
+  }
+
+  var locationSkip = document.getElementById('pwLocationSkip');
+  var locationError = document.getElementById('pwLocationError');
+  if (locationSkip) {
+    locationSkip.addEventListener('click', function(){
+      // Records the same "denied" consent the location card itself would
+      // on a decline, rather than leaving it unknown — otherwise it would
+      // still read as missing and reopen the whole wizard again next load
+      // (see views._profile_wizard_needed). A day-later re-ask still
+      // happens, just through the ordinary one-time card elsewhere on the
+      // site (views._location_prompt_needed), same as any other decline.
+      locationSkip.disabled = true;
+      fetch('{% url "ai_location_update" %}', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken()},
+        body: JSON.stringify({consent: 'denied'}),
+      }).then(function(r){ return r.json().then(function(body){ return {ok: r.ok, body: body}; }); })
+        .then(function(result){
+          locationSkip.disabled = false;
+          if (!result.ok) { locationError.textContent = result.body.detail || 'Could not save that — please try again.'; return; }
+          showStep('finish');
+        })
+        .catch(function(){ locationSkip.disabled = false; locationError.textContent = 'Something went wrong — please try again.'; });
     });
   }
 

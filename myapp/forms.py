@@ -154,34 +154,6 @@ class AddUserForm(forms.Form):
         return password
 
 
-class AISignupForm(forms.Form):
-    name     = forms.CharField(max_length=120, required=True, error_messages={'required': 'Enter your full name.'})
-    phone    = forms.CharField(max_length=20, required=True, error_messages={'required': 'Enter your phone number.'})
-    email    = forms.EmailField(required=True, error_messages={'required': 'Enter your email address.', 'invalid': 'Enter a valid email address.'})
-    password = forms.CharField(min_length=6, required=True, error_messages={'required': 'Create a password.', 'min_length': 'Password must be at least 6 characters.'})
-
-    def clean_name(self):
-        name = self.cleaned_data['name'].strip()
-        if len(name) < 2:
-            raise forms.ValidationError('Enter your full name.')
-        return name
-
-    def clean_phone(self):
-        phone = self.cleaned_data['phone'].strip()
-        digits = ''.join(ch for ch in phone if ch.isdigit())
-        if len(digits) < 10:
-            raise forms.ValidationError('Enter a valid phone number.')
-        if StoreProfile.objects.filter(phone=phone).exists():
-            raise forms.ValidationError('An account with this phone number already exists — try logging in.')
-        return phone
-
-    def clean_email(self):
-        email = self.cleaned_data['email'].strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError('An account with this email already exists — try logging in.')
-        return email
-
-
 class PhoneVerifyForm(forms.Form):
     otp = forms.CharField(max_length=6, min_length=6, required=True, error_messages={
         'required': 'Enter the code we texted you.', 'min_length': 'Enter the full 6-digit code.',
@@ -205,6 +177,12 @@ class AIProfileEditForm(forms.Form):
     # Optional keeps the existing store profile form backwards-compatible;
     # the AI account modal supplies it so customers can change their login.
     email  = forms.EmailField(required=False, error_messages={'invalid': 'Enter a valid email address.'})
+    # Mandatory as of the post-login profile wizard (includes/profile_wizard.html)
+    # — every account is required to have these on file, not just the ones
+    # created through the (now-removed) public signup form.
+    age    = forms.IntegerField(required=True, min_value=1, max_value=120, error_messages={'required': 'Enter your age.', 'min_value': 'Enter a valid age.', 'max_value': 'Enter a valid age.'})
+    state  = forms.CharField(max_length=100, required=True, error_messages={'required': 'Enter your state.'})
+    city   = forms.CharField(max_length=100, required=True, error_messages={'required': 'Enter your city.'})
     avatar = forms.ImageField(required=False)
 
     def __init__(self, *args, user=None, **kwargs):
@@ -216,6 +194,12 @@ class AIProfileEditForm(forms.Form):
         if len(name) < 2:
             raise forms.ValidationError('Enter your full name.')
         return name
+
+    def clean_state(self):
+        return self.cleaned_data['state'].strip()
+
+    def clean_city(self):
+        return self.cleaned_data['city'].strip()
 
     def clean_phone(self):
         phone = self.cleaned_data['phone'].strip()
@@ -337,12 +321,29 @@ class SiteCustomizationForm(forms.ModelForm):
     class Meta:
         model = SiteCustomization
         fields = [
-            'favicon', 'social_preview_title', 'social_preview_description',
-            'social_preview_image',
+            'favicon', 'ai_brand_name', 'social_preview_title', 'social_preview_description',
+            'social_preview_image', 'support_whatsapp_number', 'support_email',
+            'youtube_cookies_txt', 'site_disabled',
         ]
         widgets = {
             'social_preview_description': forms.Textarea(attrs={'rows': 3}),
+            'youtube_cookies_txt': forms.Textarea(attrs={'rows': 6, 'spellcheck': 'false', 'autocomplete': 'off'}),
         }
+
+    def clean_ai_brand_name(self):
+        name = self.cleaned_data['ai_brand_name'].strip()
+        if not name:
+            raise forms.ValidationError('Enter a name for the AI assistant.')
+        return name
+
+    def clean_youtube_cookies_txt(self):
+        return self.cleaned_data['youtube_cookies_txt'].strip()
+
+    def clean_support_whatsapp_number(self):
+        value = self.cleaned_data['support_whatsapp_number'].strip()
+        if not any(ch.isdigit() for ch in value):
+            raise forms.ValidationError('Enter a WhatsApp number.')
+        return value
 
 
 

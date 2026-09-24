@@ -181,7 +181,8 @@ def search(query, max_results=MAX_RESULTS):
     if cached is not None:
         return cached
 
-    tavily_key = getattr(settings, 'TAVILY_API_KEY', '').strip()
+    from myapp.provider_keys import get_key
+    tavily_key = get_key('TAVILY_API_KEY').strip()
     if tavily_key:
         try:
             response = requests.post(

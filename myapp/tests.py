@@ -3328,10 +3328,11 @@ class AIResponseReliabilityTests(TestCase):
 
     def test_company_context_contains_verified_ai_contacts(self):
         self.assertTrue(company_knowledge.is_company_query('what is the sales team number?'))
-        self.assertIn('+91 96959 53183', company_knowledge.PUBLIC_SITE_CONTEXT)
-        self.assertIn('Vidhyora AI is an AI assistant', company_knowledge.PUBLIC_SITE_CONTEXT)
-        self.assertNotIn('/websitecreation', company_knowledge.PUBLIC_SITE_CONTEXT)
-        self.assertNotIn('/store', company_knowledge.PUBLIC_SITE_CONTEXT)
+        context = company_knowledge.public_site_context()
+        self.assertIn('+91 96959 53183', context)
+        self.assertIn('Vidhyora AI is an AI assistant', context)
+        self.assertNotIn('/websitecreation', context)
+        self.assertNotIn('/store', context)
 
     def test_company_query_detection_covers_realistic_contact_phrasings(self):
         # These specific phrasings are what actually reached the AI model
@@ -3352,15 +3353,15 @@ class AIResponseReliabilityTests(TestCase):
 
     def test_no_fabricated_contact_details_anywhere_in_ai_facing_text(self):
         wrong_markers = ('555', 'edutrellis.com', 'sales@edutrellis', '1-800', '1‑800')
-        for text in (ai_chat.SYSTEM_PROMPT, company_knowledge.PUBLIC_SITE_CONTEXT):
+        for text in (ai_chat.SYSTEM_PROMPT, company_knowledge.public_site_context()):
             for marker in wrong_markers:
                 self.assertNotIn(marker, text)
         # The real values must come from one shared source, not be retyped.
         self.assertIn(business_info.PHONE_DISPLAY, ai_chat.SYSTEM_PROMPT)
         self.assertIn(business_info.EMAIL_SUPPORT, ai_chat.SYSTEM_PROMPT)
-        self.assertIn(business_info.PHONE_DISPLAY, company_knowledge.PUBLIC_SITE_CONTEXT)
+        self.assertIn(business_info.PHONE_DISPLAY, company_knowledge.public_site_context())
         self.assertIn('no separate sales line', ai_chat.SYSTEM_PROMPT)
-        self.assertIn('toll-free', company_knowledge.PUBLIC_SITE_CONTEXT)
+        self.assertIn('toll-free', company_knowledge.public_site_context())
 
     @override_settings(AI_USE_PRESIDIO=False)
     def test_fast_privacy_path_redacts_common_identifiers(self):

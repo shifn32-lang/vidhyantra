@@ -14,6 +14,9 @@
 .block-btn{border:none;background:none;color:#9aa3b0;cursor:pointer;font-size:.78rem;font-weight:700;transition:color .2s}
 .block-btn:hover{color:var(--red)}
 .panel-note{padding:0 1.4rem 1.1rem;font-size:.8rem;color:var(--text)}
+.panel-filters{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.panel-filters select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 .7rem;font-family:inherit;font-size:.82rem;background:var(--bg-alt);color:var(--head)}
+.panel-filters select:focus{outline:none;border-color:var(--red)}
 </style>
 {% endblock %}
 
@@ -24,13 +27,27 @@
 
 <div class="panel">
   <div class="panel-head">
-    <h3>{{ conversations|length }} recent conversation{{ conversations|length|pluralize }}</h3>
-    <form class="panel-search" method="get">
-      <i class="fas fa-magnifying-glass"></i>
-      <input type="search" name="q" value="{{ q }}" placeholder="Search email, username, IP…">
+    <h3>{{ conversations|length }} conversation{{ conversations|length|pluralize }}</h3>
+    <form class="panel-filters" method="get">
+      <span class="panel-search">
+        <i class="fas fa-magnifying-glass"></i>
+        <input type="search" name="q" value="{{ q }}" placeholder="Search email, username, IP, or message text…">
+      </span>
+      <select name="when" onchange="this.form.submit()" aria-label="Filter by last active">
+        <option value="all" {% if date_filter == 'all' %}selected{% endif %}>All time</option>
+        <option value="today" {% if date_filter == 'today' %}selected{% endif %}>Today</option>
+        <option value="yesterday" {% if date_filter == 'yesterday' %}selected{% endif %}>Yesterday</option>
+        <option value="week" {% if date_filter == 'week' %}selected{% endif %}>Last 7 days</option>
+        <option value="month" {% if date_filter == 'month' %}selected{% endif %}>Last 30 days</option>
+      </select>
+      <select name="sort" onchange="this.form.submit()" aria-label="Sort by">
+        <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Most recent</option>
+        <option value="most_messages" {% if sort == 'most_messages' %}selected{% endif %}>Most messages</option>
+        <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+      </select>
     </form>
   </div>
-  <p class="panel-note">Every AI chat thread, guest or logged-in, with who sent it and how many messages — use this to spot the same IP or account hammering the chat, then block it below.</p>
+  <p class="panel-note">Every AI chat thread, guest or logged-in, with who sent it and how many messages — use this to spot the same IP or account hammering the chat, then block it below. Search also matches text inside the messages themselves, not just email/username/IP. Showing up to 200{% if date_filter != 'all' %}, filtered to last active{% if date_filter == 'today' %} today{% elif date_filter == 'yesterday' %} yesterday{% elif date_filter == 'week' %} in the last 7 days{% elif date_filter == 'month' %} in the last 30 days{% endif %}{% endif %}.</p>
   <div class="table-scroll">
   <table>
     <thead><tr><th>From</th><th>IP</th><th>Messages</th><th>Started</th><th>Last active</th><th></th></tr></thead>
@@ -70,7 +87,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="6" class="empty-row">No AI conversations match your search</td></tr>
+      <tr><td colspan="6" class="empty-row">No AI conversations match these filters</td></tr>
       {% endfor %}
     </tbody>
   </table>

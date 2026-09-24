@@ -84,6 +84,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'myapp.middleware.CanonicalHostMiddleware',
+    'myapp.middleware.SiteDisabledMiddleware',
     'myapp.middleware.PublicAssetCacheMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -211,8 +212,14 @@ TWO_FACTOR_API_KEY = '12feb4c9-9636-11f1-9cb1-0200cd936042'
 # the credentials above, which means it's visible in this repo's git
 # history to anyone with access. Rotate it in the NVIDIA console if it ever
 # needs to change.
-NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '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').strip()
-NVIDIA_CHAT_MODEL = os.environ.get('NVIDIA_CHAT_MODEL', 'nvidia/nemotron-3.5-lightning-30b-a3b').strip()
+# Moved off nemotron-3.5-lightning-30b-a3b: that deployment stopped
+# responding for this account (every key tested against it hangs with no
+# reply, verified directly against NVIDIA's API), which took Ultra/Quick/Code
+# down together since all three share this one model id. Repointed at
+# nemotron-3-super-120b-a12b — the same backend Sol/Terra/Luna already use
+# successfully — with a key confirmed working against it.
+NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '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').strip()
+NVIDIA_CHAT_MODEL = os.environ.get('NVIDIA_CHAT_MODEL', 'nvidia/nemotron-3-super-120b-a12b').strip()
 # Spare keys for the same endpoint. One key being rate-limited, out of
 # credit, or revoked shouldn't take the whole chat down, so ai_chat tries
 # these in order after the primary above (see _nvidia_key_pool there).
@@ -229,7 +236,20 @@ NVIDIA_CHAT_BACKUP_API_KEY = os.environ.get('NVIDIA_CHAT_BACKUP_API_KEY', '').st
 _chat_backup_key_file = BASE_DIR / '.secrets' / 'nvidia_chat_backup_api_key'
 if not NVIDIA_CHAT_BACKUP_API_KEY and _chat_backup_key_file.is_file():
     NVIDIA_CHAT_BACKUP_API_KEY = _chat_backup_key_file.read_text(encoding='utf-8').strip()
-NVIDIA_LUNA_API_KEY = os.environ.get('NVIDIA_LUNA_API_KEY', '').strip()
+# Same trade-off as NVIDIA_NEMOTRON_SUPER_API_KEY/NVIDIA_TERRA_API_KEY below:
+# hardcoded so Luna has a working dedicated key even when the deployment
+# environment never set one. Without this default, an unset env var left
+# NVIDIA_LUNA_API_KEY empty in production (the .secrets file below is
+# gitignored and never reaches a git-deployed environment like Railway),
+# which silently pushed every Luna turn onto the shared NVIDIA_API_KEY pool
+# instead of its own isolated backend — that pool is also Quick/Code's, so
+# Luna (the default, highest-traffic model) contended it into rate limits
+# and surfaced as "temporarily unavailable", while Sol/Terra's own always-
+# configured dedicated keys never touched that shared pool at all.
+NVIDIA_LUNA_API_KEY = os.environ.get(
+    'NVIDIA_LUNA_API_KEY',
+    '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',
+).strip()
 _luna_key_file = BASE_DIR / '.secrets' / 'nvidia_luna_api_key'
 if not NVIDIA_LUNA_API_KEY and _luna_key_file.is_file():
     NVIDIA_LUNA_API_KEY = _luna_key_file.read_text(encoding='utf-8').strip()

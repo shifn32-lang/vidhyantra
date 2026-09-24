@@ -1,11 +1,13 @@
-"""Verified Vidhyora AI company facts supplied to chat models."""
+"""Verified AI company facts supplied to chat models. Brand name comes from
+SiteCustomization.ai_brand_name (dashboard Customize page) — see _brand_name
+below — not hardcoded, so a rename applies here immediately too."""
 
 import re
 
 from myapp import business_info
 
+_DEFAULT_BRAND_NAME = 'Vidhyora'
 
-_BRAND_RE = re.compile(r"\b(vidhyora|edutrellis|edutrellis\.in)\b", re.IGNORECASE)
 _CONTACT_KEYWORD_RE = re.compile(
     r"\b(phone|telephone|mobile|whatsapp|what.?s ?app|call(?:ing)?|e-?mail|"
     r"contact|address|location|office|sales|support|helpline|instagram|"
@@ -14,18 +16,31 @@ _CONTACT_KEYWORD_RE = re.compile(
 )
 
 
+def _brand_name():
+    from myapp.models import SiteCustomization
+    try:
+        return (SiteCustomization.get_solo().ai_brand_name or '').strip() or _DEFAULT_BRAND_NAME
+    except Exception:
+        return _DEFAULT_BRAND_NAME
+
+
 def is_company_query(text):
     text = text or ''
-    return bool(_BRAND_RE.search(text) or _CONTACT_KEYWORD_RE.search(text))
+    brand_re = re.compile(
+        rf"\b({re.escape(_brand_name())}|edutrellis|edutrellis\.in)\b", re.IGNORECASE,
+    )
+    return bool(brand_re.search(text) or _CONTACT_KEYWORD_RE.search(text))
 
 
-PUBLIC_SITE_CONTEXT = f"""VERIFIED VIDHYORA AI DATA (authoritative):
+def public_site_context():
+    brand = _brand_name()
+    return f"""VERIFIED {brand.upper()} AI DATA (authoritative):
 Use only these details for company answers. Never invent a phone number,
 email, address, person, statistic, social handle, product, price, or URL.
 If a requested detail is absent, say so and point to edutrellis.in or
 {business_info.EMAIL_SUPPORT}.
 
-Vidhyora AI is an AI assistant offering chat, reasoning, coding, document
+{brand} AI is an AI assistant offering chat, reasoning, coding, document
 help, image understanding, image generation/editing, notes, web-assisted
 answers, audio transcription, YouTube downloads, and optional GitHub
 repository workflows.

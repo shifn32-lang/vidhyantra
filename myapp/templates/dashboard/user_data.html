@@ -3,10 +3,26 @@
 {% block page_title %}User Data{% endblock %}
 
 {% block extra_head %}
-<style>.btn-sm{padding:.4rem .85rem;font-size:.78rem;white-space:nowrap}</style>
+<style>
+.btn-sm{padding:.4rem .85rem;font-size:.78rem;white-space:nowrap}
+.panel-filters{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.panel-filters select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 .7rem;font-family:inherit;font-size:.82rem;background:var(--bg-alt);color:var(--head)}
+.panel-filters select:focus{outline:none;border-color:var(--red)}
+.badge.loc-enabled{background:#e8fbf0;color:#1da851}
+.badge.loc-declined{background:var(--red-soft);color:var(--red)}
+.badge.loc-unknown{background:var(--bg-alt);color:var(--text)}
+.geo-banner{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;background:#eef2ff;color:#3b5bdb;border-radius:12px;padding:.85rem 1.1rem;font-size:.85rem;font-weight:600;margin-bottom:1.2rem}
+.geo-banner .btn{white-space:nowrap}
+</style>
 {% endblock %}
 
 {% block content %}
+{% if location_backfill_pending %}
+<div class="geo-banner" id="geoBackfillBanner">
+  <span id="geoBackfillText"><i class="fas fa-map-location-dot"></i> {{ location_backfill_pending }} user{{ location_backfill_pending|pluralize }} have location enabled but no city/state name saved yet — these were granted before name-lookup was added.</span>
+  <button type="button" class="btn btn-primary btn-sm" id="geoBackfillBtn"><i class="fas fa-magnifying-glass-location"></i> Resolve names now</button>
+</div>
+{% endif %}
 <div class="stat-grid">
   <div class="stat-card"><div class="stat-ico"><i class="fas fa-users"></i></div><div><div class="stat-num">{{ total_users }}</div><div class="stat-lbl">Customers</div></div></div>
   <div class="stat-card"><div class="stat-ico"><i class="fas fa-comments"></i></div><div><div class="stat-num">{{ total_chats }}</div><div class="stat-lbl">Chats created</div></div></div>
@@ -16,9 +32,35 @@
 <div class="panel">
   <div class="panel-head">
     <h3>{{ users|length }} user{{ users|length|pluralize }}</h3>
-    <form class="panel-search" method="get">
-      <i class="fas fa-magnifying-glass"></i>
-      <input type="search" name="q" value="{{ q }}" placeholder="Search name or location…">
+    <form class="panel-filters" method="get">
+      <span class="panel-search">
+        <i class="fas fa-magnifying-glass"></i>
+        <input type="search" name="q" value="{{ q }}" placeholder="Search name or location…">
+      </span>
+      <select name="when" onchange="this.form.submit()" aria-label="Filter by joined date">
+        <option value="all" {% if date_filter == 'all' %}selected{% endif %}>All time</option>
+        <option value="today" {% if date_filter == 'today' %}selected{% endif %}>Joined today</option>
+        <option value="yesterday" {% if date_filter == 'yesterday' %}selected{% endif %}>Joined yesterday</option>
+        <option value="week" {% if date_filter == 'week' %}selected{% endif %}>Joined last 7 days</option>
+        <option value="month" {% if date_filter == 'month' %}selected{% endif %}>Joined last 30 days</option>
+      </select>
+      <select name="location" onchange="this.form.submit()" aria-label="Filter by location permission">
+        <option value="all" {% if location_filter == 'all' %}selected{% endif %}>Any location status</option>
+        <option value="enabled" {% if location_filter == 'enabled' %}selected{% endif %}>Location enabled</option>
+        <option value="declined" {% if location_filter == 'declined' %}selected{% endif %}>Location declined</option>
+        <option value="unknown" {% if location_filter == 'unknown' %}selected{% endif %}>Not asked</option>
+      </select>
+      <select name="subscription" onchange="this.form.submit()" aria-label="Filter by AI subscription">
+        <option value="all" {% if subscription_filter == 'all' %}selected{% endif %}>Any plan</option>
+        <option value="subscribed" {% if subscription_filter == 'subscribed' %}selected{% endif %}>AI subscribed</option>
+        <option value="free" {% if subscription_filter == 'free' %}selected{% endif %}>Free tier</option>
+      </select>
+      <select name="sort" onchange="this.form.submit()" aria-label="Sort by">
+        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+        <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+        <option value="most_chats" {% if sort == 'most_chats' %}selected{% endif %}>Most chats</option>
+        <option value="most_logins" {% if sort == 'most_logins' %}selected{% endif %}>Most logins</option>
+      </select>
     </form>
   </div>
   <div class="table-scroll">
@@ -32,12 +74,14 @@
           <td><strong>{{ u.get_full_name|default:u.username }}</strong></td>
           <td>{{ u.email|default:"—" }}</td>
           <td>
-            {% if u.store_profile.ai_location %}
-              {{ u.store_profile.ai_location }}
-            {% elif u.store_profile.location_latitude != None and u.store_profile.location_longitude != None %}
-              {{ u.store_profile.location_latitude|floatformat:4 }}, {{ u.store_profile.location_longitude|floatformat:4 }}
+            {% if u.store_profile.location_consent == 'granted' %}
+              <span class="badge loc-enabled">Enabled</span>
+              {% if u.store_profile.location_place_name %}<div class="sub-line">{{ u.store_profile.location_place_name }}</div>
+              {% elif u.store_profile.location_latitude != None %}<div class="sub-line">{{ u.store_profile.location_latitude|floatformat:4 }}, {{ u.store_profile.location_longitude|floatformat:4 }}</div>{% endif %}
+            {% elif u.store_profile.location_consent == 'denied' %}
+              <span class="badge loc-declined">Declined</span>
             {% else %}
-              —
+              <span class="badge loc-unknown">Not asked</span>
             {% endif %}
           </td>
           <td>{{ u.chat_count }}</td>
@@ -45,10 +89,52 @@
           <td><a class="btn btn-ghost btn-sm" href="{% url 'dashboard_ai_activity' %}?q={{ u.email|urlencode }}"><i class="fas fa-comments"></i> View chats</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="empty-row">No users match your search</td></tr>
+        <tr><td colspan="6" class="empty-row">No users match these filters</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+{% if location_backfill_pending %}
+<script>
+(function(){
+  var btn = document.getElementById('geoBackfillBtn');
+  var text = document.getElementById('geoBackfillText');
+  if (!btn) return;
+  var polling = null;
+
+  function poll(){
+    fetch('{% url "dashboard_location_backfill_status" %}')
+      .then(function(r){ return r.json(); })
+      .then(function(status){
+        if (status.running) {
+          text.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resolving location names… ' + (status.done || 0) + ' of ' + (status.total || 0) + ' done.';
+        } else {
+          clearInterval(polling);
+          text.innerHTML = '<i class="fas fa-circle-check"></i> Done — resolved ' + (status.resolved || 0) + ' of ' + (status.total || 0) + '. Refresh to see the updated names.';
+          btn.textContent = 'Refresh page';
+          btn.disabled = false;
+          btn.onclick = function(){ window.location.reload(); };
+        }
+      })
+      .catch(function(){});
+  }
+
+  btn.addEventListener('click', function(){
+    btn.disabled = true;
+    fetch('{% url "dashboard_location_backfill_start" %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest'},
+    })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        text.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resolving location names… 0 of ' + (data.total || 0) + ' done.';
+        polling = setInterval(poll, 2000);
+      })
+      .catch(function(){ btn.disabled = false; });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -1,5 +1,6 @@
 """Bounded background YouTube downloads for content users may lawfully save."""
 import re
+import tempfile
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
@@ -22,7 +23,7 @@ def is_youtube_url(url):
 
 
 def _run(job_id):
-    from myapp.models import YouTubeDownloadJob
+    from myapp.models import YouTubeDownloadJob, SiteCustomization
     close_old_connections()
     job = YouTubeDownloadJob.objects.get(pk=job_id)
     job.status = YouTubeDownloadJob.STATUS_WORKING
@@ -31,11 +32,32 @@ def _run(job_id):
     output_dir = Path(settings.MEDIA_ROOT) / 'ai_youtube'
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = str(job.token)
+    cookie_path = None
 
     try:
         import imageio_ffmpeg
         import yt_dlp
         ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+
+        # Server/datacenter IPs (which is what every host, including this
+        # one, downloads from) get YouTube's "Sign in to confirm you're not
+        # a bot" check far more often than a home connection ever would —
+        # that's why this can work fine when run locally and still fail in
+        # production. A cookies.txt from a real logged-in browser session
+        # (dashboard Customize -> YouTube downloader) is the standard fix.
+        cookies_txt = SiteCustomization.get_solo().youtube_cookies_txt.strip()
+        if cookies_txt:
+            # A dedicated temp file, not output_dir — that directory's
+            # "{stem}.*" glob below is how the finished video file gets
+            # found after download, and a cookies file living there would
+            # match that same glob and could get picked up as the result.
+            cookie_fd = tempfile.NamedTemporaryFile(
+                mode='w', suffix='.txt', prefix=f'ytcookies-{stem}-',
+                delete=False, encoding='utf-8',
+            )
+            cookie_fd.write(cookies_txt)
+            cookie_fd.close()
+            cookie_path = Path(cookie_fd.name)
 
         def match_filter(info, *, incomplete=False):
             if info.get('_type') == 'playlist':
@@ -72,7 +94,15 @@ def _run(job_id):
             'progress_hooks': [progress_hook],
             'quiet': True,
             'no_warnings': True,
+            # The android client's player response usually isn't gated behind
+            # the "confirm you're not a bot" check the way the web client's
+            # is, so trying it first is free extra resilience even with
+            # cookies configured; 'web' stays as a fallback for anything the
+            # android client can't resolve.
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
+        if cookie_path:
+            options['cookiefile'] = str(cookie_path)
         if audio_only:
             options['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320',
@@ -112,6 +142,11 @@ def _run(job_id):
             status=YouTubeDownloadJob.STATUS_FAILED, error=clean_error[:500],
         )
     finally:
+        if cookie_path:
+            try:
+                cookie_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         close_old_connections()
 
 

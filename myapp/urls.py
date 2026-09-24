@@ -19,6 +19,8 @@ urlpatterns = [
     path('store/dashboard/', views.dashboard_home, name='dashboard_home'),
     path('store/dashboard/signups/', views.dashboard_signups, name='dashboard_signups'),
     path('store/dashboard/user-data/', views.dashboard_user_data, name='dashboard_user_data'),
+    path('store/dashboard/user-data/location-backfill/start/', views.dashboard_location_backfill_start, name='dashboard_location_backfill_start'),
+    path('store/dashboard/user-data/location-backfill/status/', views.dashboard_location_backfill_status, name='dashboard_location_backfill_status'),
     path('store/dashboard/users/add/', views.dashboard_user_add, name='dashboard_user_add'),
     path('store/dashboard/signups/<int:pk>/edit/', views.dashboard_signup_edit, name='dashboard_signup_edit'),
     path('store/dashboard/signups/<int:pk>/reset-password/', views.dashboard_signup_reset_password, name='dashboard_signup_reset_password'),
@@ -82,6 +84,7 @@ urlpatterns = [
     path('AI/api/notes/', views.ai_notes_list, name='ai_notes_list'),
     path('AI/api/notes/<int:note_id>/delete/', views.ai_note_delete, name='ai_note_delete'),
     path('AI/api/account/', views.ai_account_details, name='ai_account_details'),
+    path('AI/api/images/delete-all/', views.ai_images_delete_all, name='ai_images_delete_all'),
     path('AI/api/report/', views.ai_report_submit, name='ai_report_submit'),
     path('AI/api/developer-key/generate/', views.ai_developer_key_generate, name='ai_developer_key_generate'),
 

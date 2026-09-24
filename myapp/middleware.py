@@ -1,4 +1,5 @@
 from django.http import HttpResponsePermanentRedirect
+from django.shortcuts import render
 
 from django.contrib.auth import logout
 from django.contrib.sessions.models import Session
@@ -6,6 +7,33 @@ from django.utils import timezone
 
 from .models import ActiveUserSession
 from .single_device import register_active_session
+
+
+class SiteDisabledMiddleware:
+    """The dashboard Customize page's "Disable site" checkbox (see
+    SiteCustomization.site_disabled) — every visitor gets a bare 404 instead
+    of the real site. The dashboard and Django admin stay reachable
+    (by path, not by login state) so staff can always get back in and
+    switch it off again, even logged out, without touching the database
+    directly. Static/media stay reachable too so the dashboard's own login
+    page still renders correctly while the rest of the site is down."""
+
+    EXEMPT_PREFIXES = ('/store/dashboard/', '/admin/', '/static/', '/media/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith(self.EXEMPT_PREFIXES):
+            return self.get_response(request)
+        from myapp.models import SiteCustomization
+        try:
+            disabled = SiteCustomization.get_solo().site_disabled
+        except Exception:
+            disabled = False
+        if disabled:
+            return render(request, 'site_disabled.html', status=404)
+        return self.get_response(request)
 
 
 class CanonicalHostMiddleware:

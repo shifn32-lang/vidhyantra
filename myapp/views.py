@@ -22,7 +22,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.models import User
 from django.db import OperationalError, ProgrammingError
-from django.db.models import Q, F, Count, Sum, Prefetch
+from django.db.models import Q, F, Count, Sum, Max, Prefetch
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.urls import resolve, Resolver404, reverse
@@ -36,8 +36,8 @@ from django.conf import settings
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime, timedelta, timezone as dt_timezone
-from myapp.forms import AISignupForm, PhoneVerifyForm, AILoginForm, SignupEditForm, AIProfileEditForm, AIPasswordChangeForm, PaymentSettingsForm, DropboxSettingsForm, PWASettingsForm, GrantAISubscriptionForm, GrantAPIAccessForm, AddUserForm, SiteCustomizationForm, MAX_AMOUNT_PAID
-from myapp.models import StoreProfile, Order, OrderItem, PaymentSettings, Payment, DropboxSettings, PhoneVerification, PWASettings, SiteCustomization, AIAccountMessageSettings, AIConversation, AIMessage, AIBlock, AINote, AIReport, AIGeneratedFile, AIUserImage, GitHubConnection, YouTubeDownloadJob, AIAPIAccess, AIAPIKey
+from myapp.forms import PhoneVerifyForm, AILoginForm, SignupEditForm, AIProfileEditForm, AIPasswordChangeForm, PaymentSettingsForm, DropboxSettingsForm, PWASettingsForm, GrantAISubscriptionForm, GrantAPIAccessForm, AddUserForm, SiteCustomizationForm, MAX_AMOUNT_PAID
+from myapp.models import StoreProfile, Order, OrderItem, PaymentSettings, Payment, DropboxSettings, PhoneVerification, PWASettings, SiteCustomization, AIAccountMessageSettings, AIConversation, AIMessage, AIBlock, AINote, AIReport, AIGeneratedFile, AIUserImage, GitHubConnection, YouTubeDownloadJob, AIAPIAccess, AIAPIKey, ProviderAPICredential
 from myapp import dropbox_backup
 from myapp import dropbox_images
 from myapp import ai_chat
@@ -52,6 +52,8 @@ from myapp import file_convert
 from myapp import web_search
 from myapp import audio_transcribe
 from myapp import youtube_download
+from myapp import location_backfill
+from myapp.geocoding import reverse_geocode_place
 from myapp.ai_report_analysis import analyze_report, aggregate_report_issues
 from myapp.emailing import send_store_email, get_notify_email
 from myapp.sms import send_phone_otp, verify_phone_otp
@@ -73,13 +75,21 @@ def site_customization_context(request):
     fetch SiteCustomization itself."""
     try:
         obj = SiteCustomization.get_solo()
+        whatsapp_number = obj.support_whatsapp_number or '9695953183'
+        whatsapp_digits = re.sub(r'\D', '', whatsapp_number)
+        if len(whatsapp_digits) == 10:
+            whatsapp_digits = '91' + whatsapp_digits
         return {
             'SITE_FAVICON_URL': obj.favicon.url if obj.favicon else None,
+            'SITE_AI_BRAND_NAME': obj.ai_brand_name or 'Vidhyora',
             'SITE_SOCIAL_PREVIEW_TITLE': obj.social_preview_title,
             'SITE_SOCIAL_PREVIEW_DESCRIPTION': obj.social_preview_description,
             'SITE_SOCIAL_PREVIEW_IMAGE_URL': request.build_absolute_uri(
                 obj.social_preview_image.url if obj.social_preview_image else static_url('img/og-cover.jpg')
             ),
+            'SITE_SUPPORT_WHATSAPP_DISPLAY': whatsapp_number,
+            'SITE_SUPPORT_WHATSAPP_LINK': f'https://wa.me/{whatsapp_digits}',
+            'SITE_SUPPORT_EMAIL': obj.support_email or 'support@edutrellis.in',
         }
     except (OperationalError, ProgrammingError):
         # A restored backup can predate the SiteCustomization migration.
@@ -87,9 +97,13 @@ def site_customization_context(request):
         # below upgrades that older schema.
         return {
             'SITE_FAVICON_URL': None,
+            'SITE_AI_BRAND_NAME': 'Vidhyora',
             'SITE_SOCIAL_PREVIEW_TITLE': 'Vidhyora AI — Free AI Chat Assistant',
             'SITE_SOCIAL_PREVIEW_DESCRIPTION': 'Chat with Vidhyora AI for product help, quick answers and learning support — free, right from your browser.',
             'SITE_SOCIAL_PREVIEW_IMAGE_URL': request.build_absolute_uri(static_url('img/og-cover.jpg')),
+            'SITE_SUPPORT_WHATSAPP_DISPLAY': '9695953183',
+            'SITE_SUPPORT_WHATSAPP_LINK': 'https://wa.me/919695953183',
+            'SITE_SUPPORT_EMAIL': 'support@edutrellis.in',
         }
 
 
@@ -106,6 +120,9 @@ def _user_payload(user):
         'name': user.get_full_name().strip() or user.username,
         'email': user.email,
         'phone': profile.phone if profile else '',
+        'age': profile.age if profile else None,
+        'state': profile.state if profile else '',
+        'city': profile.city if profile else '',
         # A superuser is an administrator even if the independently editable
         # is_staff checkbox was accidentally cleared in the backend.
         'is_staff': bool(user.is_staff or user.is_superuser),
@@ -134,19 +151,25 @@ def _location_prompt_needed(user):
 
 
 def _profile_wizard_needed(user):
-    """Whether to show the "some info needs to be updated" wizard (see
-    includes/profile_wizard.html) — an older account still missing BOTH
-    its location and a recorded amount-paid figure. Only fires when both
-    are missing since the wizard's fixed two-step flow always asks for
-    both; a user missing just one of the two (e.g. staff already recorded
-    their amount paid) isn't shown it — the plain one-time location card
-    (_location_prompt_needed) still covers a location-only gap on its own."""
+    """Whether to show the mandatory "complete your profile" wizard (see
+    includes/profile_wizard.html) on this account's next page load — its
+    details/amount/location steps are how every account now supplies name,
+    age, state, city, email, contact, and amount paid, since there is no
+    public self-signup form to collect them at account-creation time
+    anymore (accounts are created manually by staff — dashboard AddUserForm
+    — which doesn't ask for age/state/city at all and leaves amount paid
+    optional). Fires whenever any one of those is still missing, not just
+    when all are — unlike the old amount-and-location-only version of this
+    check, this is meant to actually be mandatory."""
     if not user.is_authenticated:
         return False
     profile = getattr(user, 'store_profile', None)
-    location_missing = not profile or profile.location_consent == StoreProfile.LOCATION_UNKNOWN
-    amount_missing = not profile or profile.manual_amount_paid <= 0
-    return location_missing and amount_missing
+    if not profile:
+        return True
+    location_missing = profile.location_consent == StoreProfile.LOCATION_UNKNOWN
+    amount_missing = profile.manual_amount_paid <= 0
+    details_missing = not (profile.age and profile.state.strip() and profile.city.strip() and profile.phone.strip())
+    return location_missing or amount_missing or details_missing
 
 
 def _merge_session_ai_chats_into_user(user, session_key):
@@ -203,51 +226,15 @@ def _new_phone_verification(user, phone, now):
 
 
 def ai_signup(request):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
-
-    form = AISignupForm(_parse_json_body(request))
-    if not form.is_valid():
-        return JsonResponse(
-            {'status': 'validation_error', 'errors': {k: v[0] for k, v in form.errors.items()}},
-            status=400,
-        )
-
-    name = form.cleaned_data['name']
-    phone = form.cleaned_data['phone']
-    email = form.cleaned_data['email']
-    password = form.cleaned_data['password']
-    first_name, _, last_name = name.partition(' ')
-
-    user = User.objects.create_user(
-        username=email, email=email, password=password,
-        first_name=first_name, last_name=last_name,
+    # Self-service signup is retired — accounts are created manually by
+    # staff (dashboard AddUserForm), who hand the customer their login
+    # directly. Kept as a standing 403 (URL/view still registered) rather
+    # than deleted, so a stray client hitting the old endpoint gets a clear
+    # answer instead of a 404.
+    return JsonResponse(
+        {'status': 'error', 'detail': 'Self-service signup is not available. Contact support for account access.'},
+        status=403,
     )
-    StoreProfile.objects.create(user=user, phone=phone)
-
-    if not request.session.session_key:
-        request.session.create()
-    pre_login_session_key = request.session.session_key
-
-    auth_user = authenticate(request, username=email, password=password)
-    if auth_user:
-        login(request, auth_user)
-        _merge_session_ai_chats_into_user(auth_user, pre_login_session_key)
-
-    # Best-effort — the account is already created and the user is
-    # already logged in above, so a slow/flaky SMS send (or none configured
-    # at all) can never fail or delay signup itself. They can verify anytime
-    # from Edit Profile.
-    try:
-        _new_phone_verification(auth_user or user, phone, timezone.now())
-        print(f"[signup sms] OTP SMS SENT via 2Factor to {phone}")
-    except Exception as e:
-        import traceback
-        print(f"[signup sms] OTP SMS FAILED to send via 2Factor to {phone}: {e!r}")
-        traceback.print_exc()
-        logger.warning("Signup verification SMS failed for %s: %s", phone, e)
-
-    return JsonResponse({'status': 'ok', 'user': _user_payload(auth_user or user)})
 
 
 def ai_phone_verify_send(request):
@@ -373,13 +360,14 @@ def ai_location_update(request):
     profile.location_updated_at = timezone.now()
     update_fields = [
         'location_consent', 'location_updated_at', 'location_latitude',
-        'location_longitude', 'location_accuracy_m',
+        'location_longitude', 'location_accuracy_m', 'location_place_name',
     ]
 
     if consent == StoreProfile.LOCATION_DENIED:
         profile.location_latitude = None
         profile.location_longitude = None
         profile.location_accuracy_m = None
+        profile.location_place_name = ''
     else:
         try:
             latitude = Decimal(str(data.get('latitude')))
@@ -398,6 +386,7 @@ def ai_location_update(request):
         profile.location_latitude = latitude
         profile.location_longitude = longitude
         profile.location_accuracy_m = int(accuracy.to_integral_value())
+        profile.location_place_name = reverse_geocode_place(latitude, longitude)
 
     profile.save(update_fields=update_fields)
     return JsonResponse({
@@ -480,6 +469,9 @@ def ai_profile_update(request):
     if profile.phone != new_phone:
         profile.phone_verified = False
     profile.phone = new_phone
+    profile.age = form.cleaned_data['age']
+    profile.state = form.cleaned_data['state']
+    profile.city = form.cleaned_data['city']
     if form.cleaned_data.get('avatar'):
         profile.avatar = form.cleaned_data['avatar']
     profile.save()
@@ -588,6 +580,10 @@ def ai_account_details(request):
             'plan_name': plan_name,
             'active': bool(is_staff or is_subscribed),
             'is_staff': is_staff,
+            'started_at': (
+                timezone.localtime(profile.ai_subscription_started_at).isoformat()
+                if profile.ai_subscription_started_at and is_subscribed else None
+            ),
             'expires_at': (
                 timezone.localtime(profile.ai_subscription_until).isoformat()
                 if profile.ai_subscription_until and is_subscribed else None
@@ -962,10 +958,31 @@ def dashboard_signups(request):
     })
 
 
+USER_DATA_LOCATION_FILTERS = {
+    'enabled': StoreProfile.LOCATION_GRANTED,
+    'declined': StoreProfile.LOCATION_DENIED,
+    'unknown': StoreProfile.LOCATION_UNKNOWN,
+}
+
+USER_DATA_SORTS = {
+    'newest': ('-date_joined', '-pk'),
+    'oldest': ('date_joined', 'pk'),
+    'most_chats': ('-chat_count', '-date_joined'),
+    'most_logins': ('-store_profile__login_count', '-date_joined'),
+}
+
+
 @dashboard_staff_required
 def dashboard_user_data(request):
     """Minimal customer usage table requested for the staff dashboard."""
     q = request.GET.get('q', '').strip()
+    date_filter = request.GET.get('when', '').strip()
+    location_filter = request.GET.get('location', '').strip()
+    subscription_filter = request.GET.get('subscription', '').strip()
+    sort = request.GET.get('sort', '').strip()
+    if sort not in USER_DATA_SORTS:
+        sort = 'newest'
+
     customers = User.objects.filter(
         is_staff=False, is_superuser=False,
     )
@@ -979,7 +996,7 @@ def dashboard_user_data(request):
 
     users = customers.select_related('store_profile').annotate(
         chat_count=Count('ai_conversations', distinct=True),
-    ).order_by('-date_joined', '-pk')
+    ).order_by(*USER_DATA_SORTS[sort])
     if q:
         users = users.filter(
             Q(username__icontains=q)
@@ -987,16 +1004,70 @@ def dashboard_user_data(request):
             | Q(last_name__icontains=q)
             | Q(store_profile__ai_display_name__icontains=q)
             | Q(store_profile__ai_location__icontains=q)
+            | Q(store_profile__location_place_name__icontains=q)
         )
+    if date_filter == 'yesterday':
+        now = timezone.localtime()
+        start = AI_ACTIVITY_DATE_FILTERS['yesterday'](now)
+        users = users.filter(date_joined__gte=start, date_joined__lt=start + timedelta(days=1))
+    elif date_filter in AI_ACTIVITY_DATE_FILTERS:
+        start = AI_ACTIVITY_DATE_FILTERS[date_filter](timezone.localtime())
+        users = users.filter(date_joined__gte=start)
+    else:
+        date_filter = 'all'
+    if location_filter in USER_DATA_LOCATION_FILTERS:
+        users = users.filter(store_profile__location_consent=USER_DATA_LOCATION_FILTERS[location_filter])
+    else:
+        location_filter = 'all'
+    if subscription_filter == 'subscribed':
+        users = users.filter(store_profile__ai_subscription_until__gt=timezone.now())
+    elif subscription_filter == 'free':
+        users = users.filter(
+            Q(store_profile__ai_subscription_until__isnull=True)
+            | Q(store_profile__ai_subscription_until__lte=timezone.now())
+        )
+    else:
+        subscription_filter = 'all'
 
     return render(request, 'dashboard/user_data.html', {
         'active': 'user_data',
         'users': users,
         'q': q,
+        'date_filter': date_filter,
+        'location_filter': location_filter,
+        'subscription_filter': subscription_filter,
+        'sort': sort,
         'total_users': total_users,
         'total_chats': total_chats,
         'total_logins': total_logins,
+        'location_backfill_pending': StoreProfile.objects.filter(
+            location_consent=StoreProfile.LOCATION_GRANTED, location_place_name='',
+            location_latitude__isnull=False, location_longitude__isnull=False,
+        ).count(),
     })
+
+
+@dashboard_staff_required
+def dashboard_location_backfill_start(request):
+    """Kicks off myapp.location_backfill in the background — resolves a
+    proper "City, State" name for every existing profile that granted
+    location before that save started caching one, instead of leaving them
+    stuck showing raw coordinates forever."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    started = location_backfill.start()
+    status = location_backfill.get_status()
+    return JsonResponse({
+        'status': 'ok',
+        'started': started,
+        'detail': 'Started.' if started else 'Already running.',
+        **status,
+    })
+
+
+@dashboard_staff_required
+def dashboard_location_backfill_status(request):
+    return JsonResponse(location_backfill.get_status())
 
 
 @dashboard_staff_required
@@ -1030,12 +1101,14 @@ def dashboard_user_add(request):
                 username=email, email=email, password=password,
                 first_name=first_name, last_name=last_name,
             )
-            access_until = timezone.now() + timedelta(days=access_days) if access_days else None
+            access_started = timezone.now() if access_days else None
+            access_until = access_started + timedelta(days=access_days) if access_days else None
             profile = StoreProfile.objects.create(
                 user=user, phone=phone, manual_amount_paid=amount_paid,
                 manual_payment_received_at=(
                     (payment_received_at or timezone.now()) if amount_paid > 0 else None
                 ),
+                ai_subscription_started_at=access_started,
                 ai_subscription_until=access_until,
             )
             success_message = f'Created account for {email}.'
@@ -1276,9 +1349,10 @@ def dashboard_ai_grant(request):
             target_user = form.matched_user
             days = form.cleaned_data['days']
             profile, _ = StoreProfile.objects.get_or_create(user=target_user)
+            profile.ai_subscription_started_at = timezone.now()
             profile.ai_subscription_until = timezone.now() + timedelta(days=days)
             profile.ai_free_messages_used = 0
-            profile.save(update_fields=['ai_subscription_until', 'ai_free_messages_used'])
+            profile.save(update_fields=['ai_subscription_started_at', 'ai_subscription_until', 'ai_free_messages_used'])
             success_message = (
                 f"Granted {target_user.email or target_user.username} Vidhyora AI premium access "
                 f"until {timezone.localtime(profile.ai_subscription_until):%d %b %Y}."
@@ -1328,7 +1402,8 @@ def dashboard_ai_revoke(request, pk):
 
     profile = get_object_or_404(StoreProfile, pk=pk)
     profile.ai_subscription_until = None
-    profile.save(update_fields=['ai_subscription_until'])
+    profile.ai_subscription_started_at = None
+    profile.save(update_fields=['ai_subscription_until', 'ai_subscription_started_at'])
     success_message = f'Revoked Vidhyora AI premium access for {profile.user.email or profile.user.username}.'
     if ajax:
         now = timezone.now()
@@ -1437,6 +1512,24 @@ def _ai_activity_redirect(conversation_id):
     return redirect('dashboard_ai_activity')
 
 
+AI_ACTIVITY_DATE_FILTERS = {
+    # Each maps to how far back from "now" to look, keyed off updated_at
+    # (last active) rather than created_at — this page exists to spot a
+    # spam pattern happening now, so "today" should mean "active today",
+    # not just "the thread happened to start today".
+    'today': lambda now: now.replace(hour=0, minute=0, second=0, microsecond=0),
+    'yesterday': lambda now: (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0),
+    'week': lambda now: now - timedelta(days=7),
+    'month': lambda now: now - timedelta(days=30),
+}
+
+AI_ACTIVITY_SORTS = {
+    'recent': '-updated_at',
+    'most_messages': '-message_count',
+    'oldest': 'created_at',
+}
+
+
 @dashboard_staff_required
 def dashboard_ai_activity(request):
     """Every AI conversation — who sent it (account or guest IP) and how
@@ -1445,22 +1538,47 @@ def dashboard_ai_activity(request):
     live rate limiter. See AIBlock / dashboard_ai_block for the
     accompanying block tools."""
     q = request.GET.get('q', '').strip()
+    date_filter = request.GET.get('when', '').strip()
+    sort = request.GET.get('sort', '').strip()
+    if sort not in AI_ACTIVITY_SORTS:
+        sort = 'recent'
+
     conversations = (
         AIConversation.objects.select_related('user')
         .annotate(message_count=Count('messages'))
-        .order_by('-updated_at')
+        .order_by(AI_ACTIVITY_SORTS[sort])
     )
     if q:
+        # Matched by conversation PK against a separate subquery, not a
+        # direct messages__content__icontains join on this same queryset —
+        # joining here would make the message_count annotation above count
+        # only the messages that happen to match the search text instead of
+        # the conversation's real total (a classic Django gotcha: filtering
+        # and aggregating over the same reverse relation in one queryset).
+        content_match_ids = AIMessage.objects.filter(content__icontains=q).values_list('conversation_id', flat=True)
         conversations = conversations.filter(
             Q(user__email__icontains=q) | Q(user__username__icontains=q) |
-            Q(ip_address__icontains=q) | Q(title__icontains=q)
+            Q(ip_address__icontains=q) | Q(title__icontains=q) |
+            Q(pk__in=content_match_ids)
         )
+    if date_filter == 'yesterday':
+        now = timezone.localtime()
+        start = AI_ACTIVITY_DATE_FILTERS['yesterday'](now)
+        conversations = conversations.filter(updated_at__gte=start, updated_at__lt=start + timedelta(days=1))
+    elif date_filter in AI_ACTIVITY_DATE_FILTERS:
+        start = AI_ACTIVITY_DATE_FILTERS[date_filter](timezone.localtime())
+        conversations = conversations.filter(updated_at__gte=start)
+    else:
+        date_filter = 'all'
+
     blocked_ips = set(AIBlock.objects.exclude(ip_address__isnull=True).values_list('ip_address', flat=True))
     blocked_user_ids = set(AIBlock.objects.exclude(user__isnull=True).values_list('user_id', flat=True))
     context = {
         'active': 'ai_activity',
         'conversations': conversations[:200],
         'q': q,
+        'date_filter': date_filter,
+        'sort': sort,
         'blocks': AIBlock.objects.select_related('user', 'created_by').order_by('-created_at'),
         'blocked_ips': blocked_ips,
         'blocked_user_ids': blocked_user_ids,
@@ -1484,90 +1602,143 @@ def dashboard_ai_activity_detail(request, pk):
 # Every external AI/image provider this app can call, and which model_keys
 # (as stored on AIMessage.model_key / AIUserImage.model_key) route through
 # it. Kept as one static registry here rather than scattered checks so the
-# "API Data" dashboard page can show connection status and request volume
-# per provider without guessing at ai_chat/image_generation internals.
+# "API Data" dashboard page can show connection status, request volume, and
+# an editable credential per provider without guessing at ai_chat/
+# image_generation internals. 'fields' lists the ProviderAPICredential
+# setting_name(s) each provider actually reads (see myapp.provider_keys) —
+# 'secret' fields are masked in the dashboard, 'text' fields (server URLs)
+# are shown in full since they are not sensitive the same way.
 def _ai_api_registry():
-    from django.conf import settings as dj_settings
+    from myapp.provider_keys import get_key
     return [
         {
             'name': 'NVIDIA Lightning (shared pool)',
             'note': 'Backs Quick/Code/Ultra/Reasoning modes and Vidhyora Vision.',
-            'connected': bool(dj_settings.NVIDIA_API_KEYS or dj_settings.NVIDIA_API_KEY),
+            'connected': bool(get_key('NVIDIA_API_KEY')),
             'model_keys': ['ultra', 'quick', 'code', 'reasoning', 'vision'],
+            'fields': [('NVIDIA_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'NVIDIA Luna (dedicated)',
             'note': 'Dedicated text credential for ChatGPT 5.6 Luna and its automatic routing.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_LUNA_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_LUNA_API_KEY')),
             'model_keys': [ai_chat.CHATGPT_56_MODEL_KEY],
+            'fields': [('NVIDIA_LUNA_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'NVIDIA Nemotron Super (dedicated)',
             'note': 'Backs ChatGPT 5.6 Sol and Nemotron 3 Super.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_NEMOTRON_SUPER_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_NEMOTRON_SUPER_API_KEY')),
             'model_keys': [ai_chat.SOL_MODEL_KEY, ai_chat.NEMOTRON_SUPER_MODEL_KEY],
+            'fields': [('NVIDIA_NEMOTRON_SUPER_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'NVIDIA Terra (dedicated)',
             'note': 'Backs ChatGPT 5.6 Terra.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_TERRA_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_TERRA_API_KEY')),
             'model_keys': [ai_chat.TERRA_MODEL_KEY],
+            'fields': [('NVIDIA_TERRA_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'NVIDIA GPT-OSS (dedicated)',
             'note': 'Backs ChatGPT 5.5.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_GPT_OSS_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_GPT_OSS_API_KEY')),
             'model_keys': ['gpt-oss-20b'],
+            'fields': [('NVIDIA_GPT_OSS_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'NVIDIA FLUX (image generation)',
             'note': 'Backs FLUX.2 Klein 4B text-to-image generation.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_FLUX_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_FLUX_API_KEY')),
             'model_keys': [ai_chat.FLUX_KLEIN_4B_MODEL_KEY],
+            'fields': [
+                ('NVIDIA_FLUX_API_KEY', 'API key', 'secret'),
+                ('NVIDIA_FLUX_BACKUP_API_KEY', 'Backup API key (optional)', 'secret'),
+                ('NVIDIA_FLUX_DEV_API_KEY', 'FLUX.1-dev backup key (optional)', 'secret'),
+            ],
         },
         {
             'name': 'FLUX Edit NIM',
             'note': 'Upload-capable FLUX server for real photo editing. Without it, uploads use described text-to-image regeneration.',
-            'connected': bool(getattr(dj_settings, 'FLUX_EDIT_API_URL', '')),
+            'connected': bool(get_key('FLUX_EDIT_API_URL')),
             'model_keys': [],
+            'fields': [
+                ('FLUX_EDIT_API_URL', 'Server URL', 'text'),
+                ('FLUX_EDIT_API_KEY', 'API key (optional)', 'secret'),
+                ('NVIDIA_FLUX_EDIT_API_KEY', 'Hosted preview key (fallback)', 'secret'),
+            ],
         },
         {
             'name': 'NVIDIA FLUX Kontext',
             'note': 'Legacy image-editing endpoint, not currently offered in the model picker.',
-            'connected': bool(getattr(dj_settings, 'NVIDIA_FLUX_KONTEXT_API_KEY', '')),
+            'connected': bool(get_key('NVIDIA_FLUX_KONTEXT_API_KEY')),
             'model_keys': [],
+            'fields': [('NVIDIA_FLUX_KONTEXT_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'Qwen Image Edit',
             'note': 'Optional self-hosted image-editing server, not currently offered in the model picker.',
-            'connected': bool(getattr(dj_settings, 'QWEN_IMAGE_EDIT_API_URL', '')),
+            'connected': bool(get_key('QWEN_IMAGE_EDIT_API_URL')),
             'model_keys': [],
+            'fields': [
+                ('QWEN_IMAGE_EDIT_API_URL', 'Server URL', 'text'),
+                ('QWEN_IMAGE_EDIT_ENDPOINT_KEY', 'API key (optional)', 'secret'),
+            ],
         },
         {
             'name': 'Cloudflare Workers AI',
             'note': 'Backs SDXL Lightning, Flux 1 Schnell, Stable Diffusion XL Base, and DreamShaper 8 LCM.',
-            'connected': bool(getattr(dj_settings, 'CLOUDFLARE_ACCOUNT_ID', '') and getattr(dj_settings, 'CLOUDFLARE_API_TOKEN', '')),
+            'connected': bool(get_key('CLOUDFLARE_ACCOUNT_ID') and get_key('CLOUDFLARE_API_TOKEN')),
             'model_keys': [
                 ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
                 ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
+            ],
+            'fields': [
+                ('CLOUDFLARE_ACCOUNT_ID', 'Account ID', 'secret'),
+                ('CLOUDFLARE_API_TOKEN', 'API token', 'secret'),
             ],
         },
         {
             'name': 'Google Gemini',
             'note': 'Backs Gemini 3.6 Flash.',
-            'connected': bool(getattr(dj_settings, 'GEMINI_API_KEY', '')),
+            'connected': bool(get_key('GEMINI_API_KEY')),
             'model_keys': [ai_chat.GEMINI_36_FLASH_MODEL_KEY],
+            'fields': [('GEMINI_API_KEY', 'API key', 'secret')],
         },
         {
             'name': 'OpenRouter',
             'note': 'Backs OpenRouter Auto Free, Laguna S 2.1, and Cohere North Mini Code.',
-            'connected': bool(getattr(dj_settings, 'OPENROUTER_API_KEY', '')),
+            'connected': bool(get_key('OPENROUTER_API_KEY')),
             'model_keys': [
                 ai_chat.OPENROUTER_AUTO_FREE_MODEL_KEY, ai_chat.LAGUNA_S_21_MODEL_KEY,
                 ai_chat.COHERE_NORTH_MINI_CODE_MODEL_KEY,
             ],
+            'fields': [('OPENROUTER_API_KEY', 'API key', 'secret')],
+        },
+        {
+            'name': '2Factor (phone OTP)',
+            'note': 'Sends and verifies the SMS OTP used for phone verification.',
+            'connected': bool(get_key('TWO_FACTOR_API_KEY')),
+            'model_keys': [],
+            'fields': [('TWO_FACTOR_API_KEY', 'API key', 'secret')],
+        },
+        {
+            'name': 'Tavily (web search)',
+            'note': 'Live web search results the AI can pull into its replies.',
+            'connected': bool(get_key('TAVILY_API_KEY')),
+            'model_keys': [],
+            'fields': [('TAVILY_API_KEY', 'API key', 'secret')],
         },
     ]
+
+
+def _mask_secret(value):
+    value = (value or '').strip()
+    if not value:
+        return ''
+    if len(value) <= 8:
+        return '•' * len(value)
+    return value[:4] + '…' + value[-4:]
 
 
 @dashboard_staff_required
@@ -1575,7 +1746,42 @@ def dashboard_api_data(request):
     """How many AI/image provider APIs are connected, how many models that
     resolves to in the frontend picker, and how many requests each API and
     each model has actually served — so staff can see provider health and
-    usage split at a glance instead of reading ai_chat.MODELS source."""
+    usage split at a glance instead of reading ai_chat.MODELS source. Also
+    handles saving/clearing a ProviderAPICredential override from this same
+    page, so a key can be rotated without touching the server's env vars."""
+    from myapp.provider_keys import get_key, invalidate
+
+    registry = _ai_api_registry()
+    all_fields = {}
+    for entry in registry:
+        for setting_name, label, kind in entry['fields']:
+            all_fields[setting_name] = (label, kind)
+
+    saved = False
+    saved_message = ''
+    if request.method == 'POST':
+        clear_name = request.POST.get('clear_field', '').strip()
+        if clear_name and clear_name in all_fields:
+            ProviderAPICredential.objects.filter(setting_name=clear_name).delete()
+            invalidate(clear_name)
+            saved = True
+            saved_message = f'{all_fields[clear_name][0]} reverted to its default.'
+        else:
+            changed_labels = []
+            for setting_name, (label, _kind) in all_fields.items():
+                value = request.POST.get(setting_name, '').strip()
+                if not value:
+                    continue
+                ProviderAPICredential.objects.update_or_create(
+                    setting_name=setting_name,
+                    defaults={'value': value, 'updated_by': request.user},
+                )
+                invalidate(setting_name)
+                changed_labels.append(label)
+            if changed_labels:
+                saved = True
+                saved_message = f"Saved: {', '.join(changed_labels)}."
+
     text_counts = dict(
         AIMessage.objects.filter(role=AIMessage.ROLE_ASSISTANT)
         .exclude(model_key='').values('model_key')
@@ -1589,34 +1795,116 @@ def dashboard_api_data(request):
     for key, count in image_counts.items():
         request_counts[key] = request_counts.get(key, 0) + count
 
+    text_last_used = dict(
+        AIMessage.objects.filter(role=AIMessage.ROLE_ASSISTANT)
+        .exclude(model_key='').values('model_key')
+        .annotate(last=Max('created_at')).values_list('model_key', 'last')
+    )
+    image_last_used = dict(
+        AIUserImage.objects.exclude(model_key='').values('model_key')
+        .annotate(last=Max('created_at')).values_list('model_key', 'last')
+    )
+    last_used = dict(text_last_used)
+    for key, when in image_last_used.items():
+        if key not in last_used or when > last_used[key]:
+            last_used[key] = when
+
+    total_requests = sum(request_counts.values())
+    overrides = {row.setting_name: row for row in ProviderAPICredential.objects.all()}
+
+    api_q = request.GET.get('api_q', '').strip()
+    api_status = request.GET.get('api_status', '').strip()
+    if api_status not in ('connected', 'disconnected'):
+        api_status = 'all'
+
     apis = []
-    for entry in _ai_api_registry():
+    for entry in registry:
+        if api_status == 'connected' and not entry['connected']:
+            continue
+        if api_status == 'disconnected' and entry['connected']:
+            continue
+        if api_q and api_q.lower() not in entry['name'].lower() and api_q.lower() not in entry['note'].lower():
+            continue
+        field_rows = []
+        for setting_name, label, kind in entry['fields']:
+            current_value = get_key(setting_name)
+            override = overrides.get(setting_name)
+            field_rows.append({
+                'setting_name': setting_name,
+                'label': label,
+                'is_secret': kind == 'secret',
+                'preview': _mask_secret(current_value) if kind == 'secret' else current_value,
+                'configured': bool(current_value),
+                'overridden': override is not None,
+                'updated_at': override.updated_at if override else None,
+            })
+        api_last_used = None
+        for model_key in entry['model_keys']:
+            when = last_used.get(model_key)
+            if when and (api_last_used is None or when > api_last_used):
+                api_last_used = when
         apis.append({
             'name': entry['name'],
             'note': entry['note'],
             'connected': entry['connected'],
             'requests': sum(request_counts.get(k, 0) for k in entry['model_keys']),
+            'last_used': api_last_used,
+            'fields': field_rows,
         })
 
-    models = [
-        {
+    model_q = request.GET.get('model_q', '').strip()
+    model_scope = request.GET.get('model_scope', '').strip()
+    if model_scope not in ('frontend', 'internal'):
+        model_scope = 'all'
+    model_sort = request.GET.get('model_sort', '').strip()
+    if model_sort not in ('most_requests', 'least_requests', 'az', 'recent'):
+        model_sort = 'most_requests'
+
+    models = []
+    for key, cfg in ai_chat.MODELS.items():
+        in_frontend = key != 'vision' and not cfg.get('hidden_from_picker', False)
+        if model_scope == 'frontend' and not in_frontend:
+            continue
+        if model_scope == 'internal' and in_frontend:
+            continue
+        if model_q and model_q.lower() not in cfg['label'].lower():
+            continue
+        requests_served = request_counts.get(key, 0)
+        models.append({
             'key': key,
             'label': cfg['label'],
-            'in_frontend': key != 'vision' and not cfg.get('hidden_from_picker', False),
-            'requests': request_counts.get(key, 0),
-        }
-        for key, cfg in ai_chat.MODELS.items()
-    ]
-    models.sort(key=lambda m: m['requests'], reverse=True)
+            'in_frontend': in_frontend,
+            'requests': requests_served,
+            'share_pct': round(requests_served * 100 / total_requests, 1) if total_requests else 0,
+            'last_used': last_used.get(key),
+        })
+    model_sort_keys = {
+        'most_requests': (lambda m: m['requests'], True),
+        'least_requests': (lambda m: m['requests'], False),
+        'az': (lambda m: m['label'].lower(), False),
+        'recent': (lambda m: m['last_used'] or datetime.min.replace(tzinfo=dt_timezone.utc), True),
+    }
+    sort_fn, sort_reverse = model_sort_keys[model_sort]
+    models.sort(key=sort_fn, reverse=sort_reverse)
 
     context = {
         'active': 'api_data',
+        'saved': saved,
+        'saved_message': saved_message,
         'apis': apis,
-        'total_apis': len(apis),
-        'connected_apis_count': sum(1 for a in apis if a['connected']),
+        'api_q': api_q,
+        'api_status': api_status,
+        'total_apis': len(registry),
+        'connected_apis_count': sum(1 for a in registry if a['connected']),
         'models': models,
-        'frontend_model_count': sum(1 for m in models if m['in_frontend']),
-        'total_requests': sum(request_counts.values()),
+        'model_q': model_q,
+        'model_scope': model_scope,
+        'model_sort': model_sort,
+        'frontend_model_count': sum(
+            1 for key, cfg in ai_chat.MODELS.items()
+            if key != 'vision' and not cfg.get('hidden_from_picker', False)
+        ),
+        'total_requests': total_requests,
     }
     return render(request, 'dashboard/api_data.html', context)
 
@@ -2824,6 +3112,10 @@ def ai_pwa_icon(request, size):
 
 
 def ai_page(request):
+    # Refreshes MODELS' brand-suffixed labels (Ultra/Quick/Code/Vision) from
+    # the dashboard setting before model_labels/models below read them, so a
+    # rename shows up on the very next page load with no restart needed.
+    ai_chat.get_ai_brand_name()
     pwa = PWASettings.get_solo()
     pwa_version = int(pwa.updated_at.timestamp() * 1_000_000)
     conversations = list(
@@ -2885,6 +3177,7 @@ def ai_page(request):
             max(request.session.get('ai_guest_msg_count', 0), _ip_free_messages_used(_client_ip(request))),
         ),
         'ai_is_staff': ai_is_staff,
+        'ai_is_superuser': bool(request.user.is_authenticated and request.user.is_superuser),
         'ai_subscribed': ai_subscribed,
         'ai_free_limit': AI_FREE_MESSAGE_LIMIT,
         'ai_free_used': ai_free_used,
@@ -3586,10 +3879,11 @@ def _vidhyora_public_reply(reply, mode_label):
     (which only run for the ChatGPT 5.6 persona), so a whole-reply pass is
     the only backstop these modes have.
     """
+    brand_name = ai_chat.get_ai_brand_name()
     cleaned = str(reply or '')
     for _ in range(_CHATGPT_SANITIZE_MAX_PASSES):
-        replaced = _CHATGPT_SELF_ATTRIBUTION_RE.sub(r'\1the Vidhyora team', cleaned)
-        replaced = _CHATGPT_SELF_IDENTITY_RE.sub("I'm an AI model built by the Vidhyora team", replaced)
+        replaced = _CHATGPT_SELF_ATTRIBUTION_RE.sub(rf'\1the {brand_name} team', cleaned)
+        replaced = _CHATGPT_SELF_IDENTITY_RE.sub(f"I'm an AI model built by the {brand_name} team", replaced)
         replaced = _CHATGPT_SELF_NAME_RE.sub(f'My name is {mode_label}', replaced)
         if replaced == cleaned:
             break
@@ -4461,7 +4755,7 @@ def ai_chat_send(request):
             retrieved_context = web_context
             retrieved_source = 'web_search'
     elif message and company_knowledge.is_company_query(recent_company_text):
-        retrieved_context = company_knowledge.PUBLIC_SITE_CONTEXT
+        retrieved_context = company_knowledge.public_site_context()
         retrieved_source = 'company_site'
     elif message and not image_data and (
         # A downloadable reference document (population/GDP/rankings/etc.)
@@ -4527,6 +4821,12 @@ def ai_chat_send(request):
         fix_wrong_persona_identity = response_model_key not in (
             ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY,
         )
+        # Refreshes MODELS' brand-suffixed labels before reading one — usually
+        # already synced by an earlier stream_chat()/ai_page call this
+        # process, but not guaranteed (e.g. this is the very first AI request
+        # since a restart, or a developer-API caller who never loaded the
+        # page), so this call makes response_model_label reliable regardless.
+        ai_chat.get_ai_brand_name()
         response_model_label = ai_chat.MODELS.get(response_model_key, {}).get('label', 'Vidhyora AI')
         # A file-generation turn gets the same held-back streaming on every
         # model, because the model may write its own fabricated download link
@@ -4901,6 +5201,8 @@ def ai_youtube_start(request):
         return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'login_required', 'detail': 'Log in to prepare downloads.'}, status=403)
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'error', 'detail': 'YouTube downloads are restricted to superadmins.'}, status=403)
     payload = _parse_json_body(request)
     url = str(payload.get('url', '')).strip() if isinstance(payload, dict) else ''
     quality = str(payload.get('quality', '1080')).strip() if isinstance(payload, dict) else '1080'
@@ -5070,6 +5372,23 @@ def ai_note_delete(request, note_id):
     if any(item['id'] == note_id for item in _ai_notes_snapshot(request)):
         return JsonResponse({'status': 'error', 'detail': 'Could not delete note.'}, status=500)
     response = JsonResponse({'status': 'ok', 'notes': _ai_notes_snapshot(request)})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+def ai_images_delete_all(request):
+    """Wipe the signed-in user's "My Images" gallery.
+
+    AIUserImage rows are otherwise never deleted by the app (see the model's
+    docstring) — this is the one deliberate, user-initiated exception, scoped
+    strictly to request.user so it can never touch another account's images.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'detail': 'You need to be logged in.'}, status=401)
+    AIUserImage.objects.filter(user=request.user).delete()
+    response = JsonResponse({'status': 'ok', 'images': []})
     response['Cache-Control'] = 'private, no-store'
     return response
 

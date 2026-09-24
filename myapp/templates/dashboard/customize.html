@@ -3,54 +3,132 @@
 {% block title %}Customize{% endblock %}
 {% block page_title %}Customize{% endblock %}
 
+{% block extra_head %}
+<style>
+.customize-panel{max-width:640px}
+.customize-panel>.panel-body{padding:0 1.4rem 1.4rem}
+</style>
+{% endblock %}
+
 {% block content %}
 <p class="backup-sub" style="color:var(--text);font-size:.88rem;margin:0 0 1.4rem">
-  Site-wide branding controls for the browser icon and the preview people see when your homepage link is shared on WhatsApp or social media.
+  Site-wide branding controls for the browser icon, the AI assistant's name, and the preview people see when your homepage link is shared on WhatsApp or social media.
 </p>
 
 {% if saved %}<div class="save-msg"><i class="fas fa-circle-check"></i> Saved.</div>{% endif %}
 
-<form class="form-card" style="max-width:640px" method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data">
   {% csrf_token %}
 
-  <div class="form-group">
-    <label for="{{ form.favicon.id_for_label }}">Favicon</label>
-    <div class="current-thumb">
-      <img src="{% if settings_obj and settings_obj.favicon %}{{ settings_obj.favicon.url }}{% else %}{% static 'favicon.ico' %}{% endif %}" alt="Current favicon" style="width:40px;height:40px;object-fit:contain;background:var(--bg-alt)">
-      <span class="help">{% if settings_obj and settings_obj.favicon %}Current favicon — upload a new one to replace it.{% else %}Using the default EduTrellis favicon — upload one below to replace it.{% endif %}</span>
+  <details class="panel add-user-panel customize-panel" open>
+    <summary><i class="fas fa-gear"></i> App settings <i class="fas fa-chevron-down chevron"></i></summary>
+    <div class="panel-body">
+      <div class="form-group">
+        <label for="{{ form.favicon.id_for_label }}">Favicon</label>
+        <div class="current-thumb">
+          <img src="{% if settings_obj and settings_obj.favicon %}{{ settings_obj.favicon.url }}{% else %}{% static 'favicon.ico' %}{% endif %}" alt="Current favicon" style="width:40px;height:40px;object-fit:contain;background:var(--bg-alt)">
+          <span class="help">{% if settings_obj and settings_obj.favicon %}Current favicon — upload a new one to replace it.{% else %}Using the default EduTrellis favicon — upload one below to replace it.{% endif %}</span>
+        </div>
+        {{ form.favicon }}
+        <div class="help">Square, ideally 512×512px or smaller (PNG or ICO).</div>
+        {{ form.favicon.errors }}
+      </div>
+
+      <div style="border-top:1px solid var(--line);margin:1.4rem 0"></div>
+      <h3 style="font-size:1rem;margin-bottom:1rem">WhatsApp &amp; social link preview</h3>
+
+      <div class="form-group">
+        <label for="{{ form.social_preview_title.id_for_label }}">Preview heading</label>
+        {{ form.social_preview_title }}
+        <div class="help">The bold heading displayed with a shared homepage link.</div>
+        {{ form.social_preview_title.errors }}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.social_preview_description.id_for_label }}">Preview description</label>
+        {{ form.social_preview_description }}
+        <div class="help">Keep this concise so WhatsApp does not truncate the important part.</div>
+        {{ form.social_preview_description.errors }}
+      </div>
+
+      <div class="form-group">
+        <label for="{{ form.social_preview_image.id_for_label }}">Preview image</label>
+        <div class="current-thumb">
+          <img src="{% if settings_obj and settings_obj.social_preview_image %}{{ settings_obj.social_preview_image.url }}{% else %}{% static 'img/og-cover.jpg' %}{% endif %}" alt="Current social preview image" style="width:180px;height:95px;object-fit:cover">
+          <span class="help">{% if settings_obj and settings_obj.social_preview_image %}Current preview — upload a new image to replace it.{% else %}Using the default preview image.{% endif %}</span>
+        </div>
+        {{ form.social_preview_image }}
+        <div class="help">1200×630px is recommended for a large, clear WhatsApp preview.</div>
+        {{ form.social_preview_image.errors }}
+      </div>
     </div>
-    {{ form.favicon }}
-    <div class="help">Square, ideally 512×512px or smaller (PNG or ICO).</div>
-    {{ form.favicon.errors }}
-  </div>
+  </details>
 
-  <div style="border-top:1px solid var(--line);margin:1.4rem 0"></div>
-  <h3 style="font-size:1rem;margin-bottom:1rem">WhatsApp &amp; social link preview</h3>
-
-  <div class="form-group">
-    <label for="{{ form.social_preview_title.id_for_label }}">Preview heading</label>
-    {{ form.social_preview_title }}
-    <div class="help">The bold heading displayed with a shared homepage link.</div>
-    {{ form.social_preview_title.errors }}
-  </div>
-
-  <div class="form-group">
-    <label for="{{ form.social_preview_description.id_for_label }}">Preview description</label>
-    {{ form.social_preview_description }}
-    <div class="help">Keep this concise so WhatsApp does not truncate the important part.</div>
-    {{ form.social_preview_description.errors }}
-  </div>
-
-  <div class="form-group">
-    <label for="{{ form.social_preview_image.id_for_label }}">Preview image</label>
-    <div class="current-thumb">
-      <img src="{% if settings_obj and settings_obj.social_preview_image %}{{ settings_obj.social_preview_image.url }}{% else %}{% static 'img/og-cover.jpg' %}{% endif %}" alt="Current social preview image" style="width:180px;height:95px;object-fit:cover">
-      <span class="help">{% if settings_obj and settings_obj.social_preview_image %}Current preview — upload a new image to replace it.{% else %}Using the default preview image.{% endif %}</span>
+  <details class="panel add-user-panel customize-panel" open>
+    <summary><i class="fas fa-robot"></i> AI name <i class="fas fa-chevron-down chevron"></i></summary>
+    <div class="panel-body">
+      <div class="form-group">
+        <label for="{{ form.ai_brand_name.id_for_label }}">AI name</label>
+        {{ form.ai_brand_name }}
+        <div class="help">Shown across the chat UI (header, page title, model picker) and used in the AI's own replies — e.g. "I'm an AI model built by the {{ settings_obj.ai_brand_name|default:"Vidhyora" }} team". Takes effect immediately, no restart needed.</div>
+        {{ form.ai_brand_name.errors }}
+      </div>
     </div>
-    {{ form.social_preview_image }}
-    <div class="help">1200×630px is recommended for a large, clear WhatsApp preview.</div>
-    {{ form.social_preview_image.errors }}
-  </div>
+  </details>
+
+  <details class="panel add-user-panel customize-panel" open>
+    <summary><i class="fas fa-headset"></i> Support contact <i class="fas fa-chevron-down chevron"></i></summary>
+    <div class="panel-body">
+      <div class="form-group">
+        <label for="{{ form.support_whatsapp_number.id_for_label }}">WhatsApp number</label>
+        {{ form.support_whatsapp_number }}
+        <div class="help">Shown in the in-app "Contact support" popup's WhatsApp option, exactly as typed here.</div>
+        {{ form.support_whatsapp_number.errors }}
+      </div>
+      <div class="form-group">
+        <label for="{{ form.support_email.id_for_label }}">Support email</label>
+        {{ form.support_email }}
+        <div class="help">Shown in the "Contact support" popup's email option, and used as the fallback AI Premium purchase-inquiry address.</div>
+        {{ form.support_email.errors }}
+      </div>
+    </div>
+  </details>
+
+  <details class="panel add-user-panel customize-panel" open>
+    <summary><i class="fab fa-youtube"></i> YouTube downloader <i class="fas fa-chevron-down chevron"></i></summary>
+    <div class="panel-body">
+      <div class="form-group">
+        <label for="{{ form.youtube_cookies_txt.id_for_label }}">YouTube cookies.txt</label>
+        {{ form.youtube_cookies_txt }}
+        <div class="help">
+          Fixes "Sign in to confirm you're not a bot" download failures — YouTube blocks that far more
+          aggressively for server/datacenter IPs than for a home connection, which is why this can work locally
+          and fail on the live site. Log into YouTube in a normal browser, export cookies with an extension like
+          "Get cookies.txt LOCALLY" (Netscape format), and paste the file's contents here. Leave blank to disable.
+          This feature is restricted to superadmin accounts only.
+        </div>
+        {{ form.youtube_cookies_txt.errors }}
+      </div>
+    </div>
+  </details>
+
+  <details class="panel add-user-panel customize-panel">
+    <summary><i class="fas fa-power-off"></i> Site status <i class="fas fa-chevron-down chevron"></i></summary>
+    <div class="panel-body">
+      <div class="form-group">
+        <div class="form-check">
+          {{ form.site_disabled }}
+          <label for="{{ form.site_disabled.id_for_label }}">Disable site</label>
+        </div>
+        <div class="help" style="color:var(--red)">
+          When checked, every visitor sees a bare "404 Not Found" page instead of the real site — no theme, no
+          branding, just a plain white page, as if nothing is there. This dashboard and /admin/ stay reachable so
+          you can always log back in and uncheck this. Nothing else is affected — no data is deleted.
+        </div>
+        {{ form.site_disabled.errors }}
+      </div>
+    </div>
+  </details>
 
   <div class="form-actions">
     <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Save settings</button>

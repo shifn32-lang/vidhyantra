@@ -515,6 +515,7 @@ MODELS = {
         'api_key_setting': 'NVIDIA_GPT_OSS_API_KEY',
         'timeout': 15.0,
         'retry_attempts': 1,
+        'hidden_from_picker': True,  # Removed from the picker; retain existing chats/routing.
     },
     'ultra': {
         'id': NVIDIA_CHAT_MODEL,
@@ -695,6 +696,38 @@ MODELS = {
     },
 }
 DEFAULT_MODEL_KEY = CHATGPT_56_MODEL_KEY
+
+# The plain (non-ChatGPT-persona) modes carry the product's own brand name in
+# their picker label — kept in sync with the dashboard-configurable
+# SiteCustomization.ai_brand_name by _sync_brand() below, called once per
+# relevant request rather than read fresh on every dict access, since MODELS
+# is a plain module-level dict shared by many call sites that just do
+# MODELS[key]['label']. Sol/Terra/Luna/gpt-oss-20b intentionally excluded —
+# their "ChatGPT 5.6 ..." labels represent OpenAI's product, not this one.
+_BRAND_MODEL_SUFFIXES = {'ultra': 'Ultra', 'quick': 'Quick', 'code': 'Code', 'vision': 'Vision'}
+_DEFAULT_BRAND_NAME = 'Vidhyora'
+
+
+def get_ai_brand_name():
+    """The current AI assistant name (dashboard Customize page), and the
+    single point that keeps MODELS' brand-suffixed labels in step with it.
+    Falls back to the default on any DB error (e.g. a restored backup that
+    predates the ai_brand_name migration) so a chat request never 500s over
+    branding. Cheap enough (one row, likely already warm in the DB's own
+    cache) to call once per request rather than caching it in this process,
+    which is what makes a dashboard change apply immediately instead of
+    needing a restart."""
+    from myapp.models import SiteCustomization
+    try:
+        brand = (SiteCustomization.get_solo().ai_brand_name or '').strip() or _DEFAULT_BRAND_NAME
+    except Exception:
+        brand = _DEFAULT_BRAND_NAME
+    for key, suffix in _BRAND_MODEL_SUFFIXES.items():
+        cfg = MODELS.get(key)
+        if cfg is not None:
+            cfg['label'] = f'{brand} {suffix}'
+    return brand
+
 
 LANGUAGES = {
     'en': 'English',
@@ -1629,7 +1662,12 @@ COMPACT_SYSTEM_PROMPT = (
 
 def nvidia_key_pool():
     """The ordered chat API keys to try, primary first. Falls back to the
-    single NVIDIA_API_KEY so a settings file without the pool still works."""
+    single NVIDIA_API_KEY so a settings file without the pool still works.
+    A dashboard-saved override of NVIDIA_API_KEY (see myapp.provider_keys)
+    is spliced in as the new front-of-pool entry — but only when one was
+    actually saved, so a caller/test that controls NVIDIA_API_KEYS directly
+    (e.g. via override_settings) still gets exactly that list back."""
+    from myapp.provider_keys import get_db_override
     keys = [
         key.strip() for key in (getattr(settings, 'NVIDIA_API_KEYS', None) or [])
         if isinstance(key, str) and key.strip()
@@ -1637,6 +1675,9 @@ def nvidia_key_pool():
     if not keys:
         primary = (getattr(settings, 'NVIDIA_API_KEY', '') or '').strip()
         keys = [primary] if primary else []
+    override = get_db_override('NVIDIA_API_KEY')
+    if override and override not in keys:
+        keys.insert(0, override)
     return keys
 
 
@@ -1682,7 +1723,8 @@ def _get_client(api_key_setting=None, key_index=0):
     stream_chat's failover passes anything other than 0. A model with its own
     dedicated key (api_key_setting) is not part of the pool."""
     if api_key_setting:
-        api_key = getattr(settings, api_key_setting, '').strip()
+        from myapp.provider_keys import get_key
+        api_key = get_key(api_key_setting).strip()
         if not api_key:
             raise ValueError(f'{api_key_setting} is not configured.')
         base_url = _NON_NVIDIA_BASE_URLS.get(api_key_setting, 'https://integrate.api.nvidia.com/v1')
@@ -2008,6 +2050,10 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
     is responsible for actually parsing/saving whatever they say next (see
     extract_onboarding_fields), same reasoning as the My Notes system.
     Yields text chunks as they arrive from the model."""
+    # Refreshes MODELS' brand-suffixed labels (Ultra/Quick/Code/Vision) from
+    # the dashboard setting and returns the current name, used below to
+    # rebrand the system prompt text itself.
+    brand_name = get_ai_brand_name()
     cfg = MODELS.get(model_key) or MODELS[DEFAULT_MODEL_KEY]
     identity_key = identity_model_key or model_key
     identity_cfg = MODELS.get(identity_key) or cfg
@@ -2309,6 +2355,15 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
         late_reminders.append({'role': 'system', 'content': jagu_system_note(greet=jagu_greet, farewell=persona_farewell)})
     if onboarding_ask:
         late_reminders.append({'role': 'system', 'content': ONBOARDING_ASK_NOTE})
+    # One pass over the fully-assembled prompt catches every "Vidhyora"
+    # mention added above (COMPACT_SYSTEM_PROMPT, CODE_SYSTEM_SUFFIX,
+    # CHATGPT_56_SYSTEM_SUFFIX's own instruction not to reveal the real
+    # brand, etc.) without needing each of those constants to be rewritten
+    # individually — safe because "Vidhyora" is only ever used here as this
+    # product's own name, never as a substring of anything else (EduTrellis,
+    # the separate parent-company name, doesn't contain it).
+    if brand_name != _DEFAULT_BRAND_NAME:
+        system_prompt = system_prompt.replace(_DEFAULT_BRAND_NAME, brand_name)
     if messages:
         full_messages = [{'role': 'system', 'content': system_prompt}] + messages[:-1] + late_reminders + [messages[-1]]
     else:

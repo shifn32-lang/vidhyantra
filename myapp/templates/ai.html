@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Vidhyora AI — Free AI Chat Assistant for Shopping &amp; Learning</title>
-<meta name="description" content="Chat with Vidhyora AI, a free assistant with access to multiple AI models for fast chat, reasoning, coding, vision, and image generation — right from your browser.">
-<meta name="keywords" content="Vidhyora AI, AI chat assistant, free AI chatbot India, AI shopping assistant, AI study help">
+<title>{{ SITE_AI_BRAND_NAME }} AI — Free AI Chat Assistant for Shopping &amp; Learning</title>
+<meta name="description" content="Chat with {{ SITE_AI_BRAND_NAME }} AI, a free assistant with access to multiple AI models for fast chat, reasoning, coding, vision, and image generation — right from your browser.">
+<meta name="keywords" content="{{ SITE_AI_BRAND_NAME }} AI, AI chat assistant, free AI chatbot India, AI shopping assistant, AI study help">
 <meta name="author" content="EduTrellis">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://www.edutrellis.in{{ request.path }}">
@@ -64,11 +64,11 @@
 {
  "@context":"https://schema.org",
  "@type":"WebApplication",
- "name":"Vidhyora AI",
+ "name":"{{ SITE_AI_BRAND_NAME }} AI",
  "url":"https://www.edutrellis.in/",
  "applicationCategory":"BusinessApplication",
  "operatingSystem":"Any",
- "description":"Free Vidhyora AI chat assistant from EduTrellis with access to multiple AI models for fast chat, reasoning, coding, vision, and image generation.",
+ "description":"Free {{ SITE_AI_BRAND_NAME }} AI chat assistant from EduTrellis with access to multiple AI models for fast chat, reasoning, coding, vision, and image generation.",
  "image":"https://www.edutrellis.in{% static 'img/og-cover.jpg' %}",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"INR"},
  "provider":{"@type":"Organization","name":"EduTrellis","url":"https://www.edutrellis.in"}
@@ -242,6 +242,11 @@ header{background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px s
 .account-save-btn:hover:not(:disabled),.account-plan-btn:hover{transform:translateY(-1px)}
 .account-save-btn:active:not(:disabled),.account-plan-btn:active{transform:translateY(0) scale(.98)}
 .account-save-btn:disabled{opacity:.55;cursor:default}
+.images-panel-head{display:flex;justify-content:flex-end;margin-bottom:.75rem}
+.account-danger-btn{border:1.5px solid var(--red);background:transparent;color:var(--red);font-family:inherit;font-size:.78rem;font-weight:700;padding:.5rem .85rem;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;transition:background .15s,color .15s,transform .12s}
+.account-danger-btn:hover:not(:disabled){background:var(--red);color:#fff;transform:translateY(-1px)}
+.account-danger-btn:active:not(:disabled){transform:translateY(0) scale(.98)}
+.account-danger-btn:disabled{opacity:.55;cursor:default}
 .account-message{font-size:.75rem;flex:1;color:var(--red)}
 .account-message.success{color:#168548}
 .account-divider{border:none;border-top:1px solid var(--line);margin:1.25rem 0}
@@ -840,10 +845,6 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 /* ---- inline "log in to keep chatting" gate card ---- */
 .gate-card{max-width:420px;margin:.5rem auto 0;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:1.6rem 1.5rem;box-shadow:0 12px 32px rgba(17,20,24,.08);text-align:center}
 .gate-card p{font-size:.85rem;color:var(--text);margin:.5rem 0 1.1rem;line-height:1.55}
-.auth-tabs{display:flex;background:var(--bg-alt);border-radius:12px;padding:.25rem;margin-bottom:1.1rem}
-.auth-tab{flex:1;border:none;background:none;padding:.55rem 0;font-size:.83rem;font-weight:700;color:var(--text);border-radius:9px;cursor:pointer;transition:background .15s,color .15s}
-.auth-tab:not(.active):hover{color:var(--head)}
-.auth-tab.active{background:var(--surface);color:var(--red);box-shadow:0 1px 4px rgba(17,20,24,.1)}
 .auth-form{display:flex;flex-direction:column;gap:.65rem;text-align:left}
 .auth-form input{border:1.5px solid var(--line);border-radius:11px;padding:.7rem .85rem;font-family:inherit;font-size:.87rem;color:var(--head);background:var(--bg-alt)}
 .auth-form input:focus{outline:none;border-color:var(--red);background:var(--surface)}
@@ -949,7 +950,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 </head>
 <body>
 <div id="loader">
-  <div class="loader-logo">Vidhyora <span>AI</span></div>
+  <div class="loader-logo">{{ SITE_AI_BRAND_NAME }} <span>AI</span></div>
   <div class="loader-tag">A Fun, Powerful AI</div>
   <div class="loader-progress"><div class="loader-fill" id="loaderFill"></div></div>
   <div class="loader-pct" id="loaderPct">0%</div>
@@ -971,7 +972,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     <div class="hd-left">
       <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle chat history"><i class="fas fa-bars"></i></button>
       <a href="/" class="logo-wrap">
-        <span class="logo-txt">Vidhyora <span>AI</span></span>
+        <span class="logo-txt">{{ SITE_AI_BRAND_NAME }} <span>AI</span></span>
         <span class="logo-sub">A Fun, Powerful AI</span>
       </a>
     </div>
@@ -1008,7 +1009,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
 <div class="install-banner" id="welcomeBanner" hidden>
   <i class="fas fa-hand-sparkles welcome-banner-icon"></i>
-  <span class="install-banner-text">Welcome to Vidhyora AI! If any reply is ever wrong or not what you expected, tap <strong>Report it</strong> under that message — we'll fix it within 1 hour.</span>
+  <span class="install-banner-text">Welcome to {{ SITE_AI_BRAND_NAME }} AI! If any reply is ever wrong or not what you expected, tap <strong>Report it</strong> under that message — we'll fix it within 1 hour.</span>
   <button type="button" class="install-banner-close" id="welcomeBannerClose" aria-label="Dismiss"><i class="fas fa-xmark"></i></button>
 </div>
 
@@ -1036,9 +1037,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 </div>
 
 <div class="feature-modal-backdrop" id="featureModalBackdrop" hidden></div>
-<div class="feature-modal" id="featureModal" hidden role="dialog" aria-modal="true" aria-label="What Vidhyora AI can do">
+<div class="feature-modal" id="featureModal" hidden role="dialog" aria-modal="true" aria-label="What {{ SITE_AI_BRAND_NAME }} AI can do">
   <button type="button" class="feature-modal-close" id="featureModalClose" aria-label="Dismiss"><i class="fas fa-xmark"></i></button>
-  <p class="feature-modal-title">More things Vidhyora AI can do</p>
+  <p class="feature-modal-title">More things {{ SITE_AI_BRAND_NAME }} AI can do</p>
   <div class="feature-modal-list">
     <div class="feature-modal-item">
       <i class="fas fa-note-sticky feature-modal-icon"></i>
@@ -1086,13 +1087,13 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   <p class="feature-modal-title" id="supportModalTitle">Contact support</p>
   <p class="feature-modal-item-desc">Choose how you would like to contact the EduTrellis support team.</p>
   <div class="support-contact-list">
-    <a class="support-contact-action" href="https://wa.me/919695953183?text=Hello%2C%20I%20need%20help%20with%20Vidhyora%20AI." target="_blank" rel="noopener noreferrer">
+    <a class="support-contact-action" href="{{ SITE_SUPPORT_WHATSAPP_LINK }}?text=Hello%2C%20I%20need%20help%20with%20{{ SITE_AI_BRAND_NAME|urlencode }}%20AI." target="_blank" rel="noopener noreferrer">
       <i class="fab fa-whatsapp"></i>
-      <div><strong>WhatsApp support</strong><span>9695953183</span></div>
+      <div><strong>WhatsApp support</strong><span>{{ SITE_SUPPORT_WHATSAPP_DISPLAY }}</span></div>
     </a>
-    <a class="support-contact-action" href="mailto:support@edutrellis.in">
+    <a class="support-contact-action" href="mailto:{{ SITE_SUPPORT_EMAIL }}">
       <i class="fas fa-envelope"></i>
-      <div><strong>Email support</strong><span>support@edutrellis.in</span></div>
+      <div><strong>Email support</strong><span>{{ SITE_SUPPORT_EMAIL }}</span></div>
     </a>
   </div>
 </section>
@@ -1127,7 +1128,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         <div class="account-form-grid">
           <div class="account-field"><label for="accountNameInput">Full name</label><input id="accountNameInput" name="name" required maxlength="120" autocomplete="name"></div>
           <div class="account-field"><label for="accountEmailInput">Email / login</label><input id="accountEmailInput" name="email" type="email" required autocomplete="email"></div>
-          <div class="account-field full"><label for="accountPhoneInput">Phone number</label><input id="accountPhoneInput" name="phone" required maxlength="20" autocomplete="tel"></div>
+          <div class="account-field"><label for="accountPhoneInput">Phone number</label><input id="accountPhoneInput" name="phone" required maxlength="20" autocomplete="tel"></div>
+          <div class="account-field"><label for="accountAgeInput">Age</label><input id="accountAgeInput" name="age" type="number" min="1" max="120" required inputmode="numeric"></div>
+          <div class="account-field"><label for="accountStateInput">State</label><input id="accountStateInput" name="state" required maxlength="100" autocomplete="address-level1"></div>
+          <div class="account-field"><label for="accountCityInput">City</label><input id="accountCityInput" name="city" required maxlength="100" autocomplete="address-level2"></div>
         </div>
         <div class="account-form-actions"><span class="account-message" id="accountProfileMessage" aria-live="polite"></span><button type="submit" class="account-save-btn">Save profile</button></div>
       </form>
@@ -1144,7 +1148,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     </div>
     <div class="account-panel" data-account-content="customize" hidden>
       <h3 class="account-section-title">Choose your color combination</h3>
-      <p class="theme-combination-intro">Emerald and black is the Vidhyora default. Your choice is saved on this device and works in both light and dark mode.</p>
+      <p class="theme-combination-intro">Emerald and black is the {{ SITE_AI_BRAND_NAME }} default. Your choice is saved on this device and works in both light and dark mode.</p>
       <div class="theme-combination-grid" id="themeCombinationGrid">
         <button type="button" class="theme-combination" data-color-theme="orange">
           <span class="theme-swatches"><i class="theme-swatch" style="background:#ff7a00"></i><i class="theme-swatch" style="background:#101114"></i></span>
@@ -1160,7 +1164,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         </button>
         <button type="button" class="theme-combination" data-color-theme="emerald">
           <span class="theme-swatches"><i class="theme-swatch" style="background:#059669"></i><i class="theme-swatch" style="background:#071713"></i></span>
-          <span class="theme-combination-copy"><span>Emerald &amp; Black</span><small>Vidhyora default</small></span>
+          <span class="theme-combination-copy"><span>Emerald &amp; Black</span><small>{{ SITE_AI_BRAND_NAME }} default</small></span>
         </button>
         <button type="button" class="theme-combination" data-color-theme="crimson">
           <span class="theme-swatches"><i class="theme-swatch" style="background:#e11d48"></i><i class="theme-swatch" style="background:#181112"></i></span>
@@ -1169,7 +1173,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       </div>
       <hr class="account-divider">
       <h3 class="account-section-title">Choose your font</h3>
-      <p class="theme-combination-intro">Pick the typeface used across Vidhyora AI. Your choice is saved on this device.</p>
+      <p class="theme-combination-intro">Pick the typeface used across {{ SITE_AI_BRAND_NAME }} AI. Your choice is saved on this device.</p>
       <div class="font-combination-grid" id="fontCombinationGrid">
         <button type="button" class="font-combination active" data-font-theme="default">
           <span class="font-combination-glyph" style="font-family:'Outfit',sans-serif">Aa</span>
@@ -1320,7 +1324,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       <div class="chat-col" id="chatCol">
         <div class="empty-state" id="emptyState">
           <div class="brand-mark">
-            <span class="logo-txt">Vidhyora <span>AI</span></span>
+            <span class="logo-txt">{{ SITE_AI_BRAND_NAME }} <span>AI</span></span>
             <span class="logo-sub">A Fun, Powerful AI</span>
           </div>
           {% if ai_full_model_access %}
@@ -1336,12 +1340,12 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
             <li>5.6 Luna</li>
           </ul>
           {% else %}
-          {# New/free accounts and signed-out guests see the Vidhyora-branded line and badges only. #}
+          {# New/free accounts and signed-out guests see the brand-named line and badges only. #}
           <p class="empty-lead">A powerful AI with access to multiple models — fast chat, deep reasoning, coding, vision, and image generation, all in one place.</p>
           <ul class="empty-models" aria-label="Featured AI models">
-            <li>Vidhyora Ultra</li>
-            <li>Vidhyora Quick</li>
-            <li>Vidhyora Code</li>
+            <li>{{ SITE_AI_BRAND_NAME }} Ultra</li>
+            <li>{{ SITE_AI_BRAND_NAME }} Quick</li>
+            <li>{{ SITE_AI_BRAND_NAME }} Code</li>
           </ul>
           {% endif %}
           <p class="empty-hint">Bring a question, an idea, or your next big project.</p>
@@ -1454,11 +1458,13 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var AI_GUEST_LIMIT = {{ ai_guest_limit|default:6 }};
   var AI_GUEST_USED = {{ ai_guest_used|default:0 }};
   var AI_IS_STAFF = {% if ai_is_staff %}true{% else %}false{% endif %};
+  var AI_IS_SUPERUSER = {% if ai_is_superuser %}true{% else %}false{% endif %};
   var AI_SUBSCRIBED = {% if ai_subscribed %}true{% else %}false{% endif %};
   var AI_FREE_LIMIT = {{ ai_free_limit|default:20 }};
   var AI_FREE_USED = {{ ai_free_used|default:0 }};
-  var AI_PURCHASE_URL = '{{ ai_purchase_url|default:"mailto:support@edutrellis.in?subject=Vidhyora%20AI%20Premium" }}';
+  var AI_PURCHASE_URL = '{% if ai_purchase_url %}{{ ai_purchase_url }}{% else %}mailto:{{ SITE_SUPPORT_EMAIL }}?subject={{ SITE_AI_BRAND_NAME|urlencode }}%20AI%20Premium{% endif %}';
   var AI_DEFAULT_MODEL = '{{ ai_default_model|default:"ultra" }}';
+  var AI_BRAND_NAME = '{{ SITE_AI_BRAND_NAME|escapejs }}';
   var AI_RESUME_CONVERSATION_ID = {{ ai_resume_conversation_id|default:"null" }};
   var MODEL_LABELS = JSON.parse(document.getElementById('boot-model-labels').textContent || '{}');
 
@@ -1898,7 +1904,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     // (see footer conditional in ai.html) — staff/subscribed accounts get
     // the plain foot-note instead and never see this element at all.
     var freeLeft = Math.max(0, AI_FREE_LIMIT - state.freeUsed);
-    guestMeter.innerHTML = freeLeft + ' of ' + AI_FREE_LIMIT + ' free Vidhyora AI messages left — <a href="' + AI_PURCHASE_URL + '">contact support for premium access</a>.';
+    guestMeter.innerHTML = freeLeft + ' of ' + AI_FREE_LIMIT + ' free ' + AI_BRAND_NAME + ' AI messages left — <a href="' + AI_PURCHASE_URL + '">contact support for premium access</a>.';
   }
   updateGuestMeter();
 
@@ -2901,8 +2907,14 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         showAiToast('Free users can use Quick, Code, and image generation. Request premium access for this model.', true);
         return;
       }
-      applyModelSelection(opt.getAttribute('data-model'), true);
+      var key = opt.getAttribute('data-model');
+      // Switching models mid-conversation is exactly what leads to identity
+      // leaks (e.g. a ChatGPT 5.6 persona reply naming a different backend) —
+      // starting a fresh chat keeps each conversation's history on one model.
+      var switchingModel = key !== currentModel && !!state.currentConversationId;
+      applyModelSelection(key, true);
       closeDropdown();
+      if (switchingModel) startNewChat();
     });
     document.addEventListener('click', function(e){
       if (!modelDropdown.hidden && !modelPickerBtn.contains(e.target) && !modelDropdown.contains(e.target)) closeDropdown();
@@ -3713,7 +3725,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         col.innerHTML = '';
         emptyState = null;
         data.messages.forEach(function(m){
-          var label = m.model_key === 'github' ? 'Vidhyora GitHub' : (m.model_key ? MODEL_LABELS[m.model_key] : null);
+          var label = m.model_key === 'github' ? (AI_BRAND_NAME + ' GitHub') : (m.model_key ? MODEL_LABELS[m.model_key] : null);
           renderRow(m.role, m.content, {
             image: m.role === 'user' ? (m.image_data || null) : null,
             generatedImage: m.role === 'assistant' ? (m.image_data || null) : null,
@@ -3891,9 +3903,15 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var nameInput = document.getElementById('accountNameInput');
     var emailInput = document.getElementById('accountEmailInput');
     var phoneInput = document.getElementById('accountPhoneInput');
+    var ageInput = document.getElementById('accountAgeInput');
+    var stateInput = document.getElementById('accountStateInput');
+    var cityInput = document.getElementById('accountCityInput');
     if (nameInput) nameInput.value = user.name || '';
     if (emailInput) emailInput.value = user.email || '';
     if (phoneInput) phoneInput.value = user.phone || '';
+    if (ageInput) ageInput.value = user.age || '';
+    if (stateInput) stateInput.value = user.state || '';
+    if (cityInput) cityInput.value = user.city || '';
     setAccountAvatar(accountAvatarPreview, user);
     setAccountAvatar(document.getElementById('headerAccountAvatar'), user);
     var headerName = document.getElementById('headerAccountName');
@@ -3908,10 +3926,22 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var statusText;
     if (subscription.is_staff) statusText = 'Unlimited access is included with this staff account.';
     else if (subscription.active && subscription.expires_at) statusText = 'Active until ' + new Date(subscription.expires_at).toLocaleString();
-    else statusText = 'You are currently using the free Vidhyora AI plan.';
+    else statusText = 'You are currently using the free ' + AI_BRAND_NAME + ' AI plan.';
     var hasUnlimitedMessages = subscription.is_staff || subscription.active;
+    // Staff access has no start/end at all — it's a permanent bypass, not a
+    // subscription period (see StoreProfile.ai_subscription_until's own
+    // comment) — so these tiles only apply to an actual paid/granted plan.
+    var dateStats = '';
+    if (!subscription.is_staff && subscription.active) {
+      if (subscription.started_at) {
+        dateStats += '<div class="subscription-stat"><span>Starting</span><strong>' + escHtml(new Date(subscription.started_at).toLocaleDateString()) + '</strong></div>';
+      }
+      if (subscription.expires_at) {
+        dateStats += '<div class="subscription-stat"><span>Ending</span><strong>' + escHtml(new Date(subscription.expires_at).toLocaleDateString()) + '</strong></div>';
+      }
+    }
     var stats = hasUnlimitedMessages
-      ? '<div class="subscription-stat subscription-stat-wide"><span>Message access</span><strong>Unlimited messages</strong></div>'
+      ? dateStats + '<div class="subscription-stat subscription-stat-wide"><span>Message access</span><strong>Unlimited messages</strong></div>'
       : '<div class="subscription-stat"><span>Free message usage</span><strong>' + escHtml(subscription.free_used + ' of ' + subscription.free_limit + ' used') + '</strong></div>' +
         '<div class="subscription-stat"><span>Free messages remaining</span><strong>' + escHtml(String(subscription.free_remaining)) + '</strong></div>';
     var action = '';
@@ -3955,13 +3985,37 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       panel.innerHTML = '<div class="account-empty"><i class="fas fa-images"></i><br><br>You have not generated any images yet.</div>';
       return;
     }
-    panel.innerHTML = '<div class="image-gallery-grid">' + images.map(function(image){
-      var created = image.created_at ? new Date(image.created_at).toLocaleDateString() : '';
-      return '<button type="button" class="image-gallery-item" data-url="' + escHtml(image.url) + '">' +
-        '<img src="' + escHtml(image.url) + '" loading="lazy" alt="Generated image">' +
-        (created ? '<span class="image-gallery-date">' + escHtml(created) + '</span>' : '') +
-      '</button>';
-    }).join('') + '</div>';
+    panel.innerHTML =
+      '<div class="images-panel-head"><button type="button" class="account-danger-btn" id="imagesDeleteAllBtn"><i class="fas fa-trash"></i> Delete all images</button></div>' +
+      '<div class="image-gallery-grid">' + images.map(function(image){
+        var created = image.created_at ? new Date(image.created_at).toLocaleDateString() : '';
+        return '<button type="button" class="image-gallery-item" data-url="' + escHtml(image.url) + '">' +
+          '<img src="' + escHtml(image.url) + '" loading="lazy" alt="Generated image">' +
+          (created ? '<span class="image-gallery-date">' + escHtml(created) + '</span>' : '') +
+        '</button>';
+      }).join('') + '</div>';
+    var deleteAllBtn = panel.querySelector('#imagesDeleteAllBtn');
+    if (deleteAllBtn) {
+      deleteAllBtn.addEventListener('click', function(){
+        var count = images.length;
+        if (!confirm('Delete all ' + count + ' generated image' + (count === 1 ? '' : 's') + '? This cannot be undone.')) return;
+        deleteAllBtn.disabled = true;
+        deleteAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+        fetch('/AI/api/images/delete-all/', {
+          method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': csrfToken() },
+        }).then(function(response){
+          return response.json().then(function(body){ return { ok: response.ok, body: body }; });
+        }).then(function(result){
+          if (!result.ok) throw new Error(result.body.detail || 'Could not delete images.');
+          if (accountData) accountData.images = [];
+          renderAccountImages([]);
+        }).catch(function(error){
+          deleteAllBtn.disabled = false;
+          deleteAllBtn.innerHTML = '<i class="fas fa-trash"></i> Delete all images';
+          showAiToast(error.message, true);
+        });
+      });
+    }
   }
 
   function renderAccountApi(apiAccess, revealedKey){
@@ -4284,7 +4338,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       reader.onload = function(){
         var parsed;
         try { parsed = JSON.parse(String(reader.result)); }
-        catch (e) { showAiToast('Could not read that file — expected a Vidhyora AI chat export (.json).', true); return; }
+        catch (e) { showAiToast('Could not read that file — expected a ' + AI_BRAND_NAME + ' AI chat export (.json).', true); return; }
         var normalized = normalizeImportedChat(parsed);
         if (!normalized || !normalized.messages.length) {
           showAiToast('That file has no recognizable chat messages.', true); return;
@@ -4305,24 +4359,18 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }
 
   // ---- inline "log in to keep chatting" gate ----
+  // Self-service signup is intentionally gone — accounts are created
+  // manually by staff (dashboard AddUserForm), who hand the customer their
+  // login. This card only ever offers Log In now.
   function gateCardHtml(){
     return (
       '<div class="gate-card" id="gateCard">' +
-        '<p>You\'ve used your ' + AI_GUEST_LIMIT + ' free messages. Log in or sign up to keep chatting — your conversation is saved and carries over to your account.</p>' +
-        '<div class="auth-tabs"><button type="button" class="auth-tab active" data-tab="login">Log In</button><button type="button" class="auth-tab" data-tab="signup">Sign Up</button></div>' +
+        '<p>You\'ve used your ' + AI_GUEST_LIMIT + ' free messages. Log in to keep chatting — your conversation is saved and carries over to your account.</p>' +
         '<form id="gateLoginForm" class="auth-form">' +
           '<input type="text" name="identifier" placeholder="Email or phone number" required autocomplete="username">' +
           '<input type="password" name="password" placeholder="Password" required autocomplete="current-password">' +
           '<p class="auth-error" id="gateLoginError"></p>' +
           '<button type="submit" class="auth-submit">Log In</button>' +
-        '</form>' +
-        '<form id="gateSignupForm" class="auth-form" style="display:none">' +
-          '<input type="text" name="name" placeholder="Full name" required autocomplete="name">' +
-          '<input type="tel" name="phone" placeholder="Phone number" required autocomplete="tel">' +
-          '<input type="email" name="email" placeholder="Email address" required autocomplete="email">' +
-          '<input type="password" name="password" placeholder="Create a password (6+ characters)" required autocomplete="new-password" minlength="6">' +
-          '<p class="auth-error" id="gateSignupError"></p>' +
-          '<button type="submit" class="auth-submit">Create Account</button>' +
         '</form>' +
       '</div>'
     );
@@ -4382,30 +4430,12 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     col.appendChild(card);
     scrollToBottom();
 
-    var tabs = card.querySelectorAll('.auth-tab');
     var loginForm = card.querySelector('#gateLoginForm');
-    var signupForm = card.querySelector('#gateSignupForm');
-    tabs.forEach(function(tab){
-      tab.addEventListener('click', function(){
-        tabs.forEach(function(t){ t.classList.remove('active'); });
-        tab.classList.add('active');
-        var isLogin = tab.getAttribute('data-tab') === 'login';
-        loginForm.style.display = isLogin ? 'flex' : 'none';
-        signupForm.style.display = isLogin ? 'none' : 'flex';
-      });
-    });
     loginForm.addEventListener('submit', function(e){
       e.preventDefault();
       submitGateForm(loginForm, '/AI/api/login/', {
         identifier: loginForm.identifier.value.trim(), password: loginForm.password.value,
       }, card.querySelector('#gateLoginError'), loginForm.querySelector('.auth-submit'));
-    });
-    signupForm.addEventListener('submit', function(e){
-      e.preventDefault();
-      submitGateForm(signupForm, '/AI/api/signup/', {
-        name: signupForm.name.value.trim(), phone: signupForm.phone.value.trim(),
-        email: signupForm.email.value.trim(), password: signupForm.password.value,
-      }, card.querySelector('#gateSignupError'), signupForm.querySelector('.auth-submit'));
     });
   }
 
@@ -4421,7 +4451,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var wrap = document.createElement('div');
     wrap.innerHTML = (
       '<div class="gate-card" id="gateCard">' +
-        '<p>' + escHtml(detail || ('You\'ve used all ' + AI_FREE_LIMIT + ' free Vidhyora AI messages.')) + '</p>' +
+        '<p>' + escHtml(detail || ('You\'ve used all ' + AI_FREE_LIMIT + ' free ' + AI_BRAND_NAME + ' AI messages.')) + '</p>' +
         '<a href="' + AI_PURCHASE_URL + '" class="auth-submit" style="display:block;text-decoration:none">Request Premium Access</a>' +
       '</div>'
     );
@@ -4461,8 +4491,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       stopBubbleTyping(bubble);
       var githubAnswerModelKey = res.body.model_key || 'github';
       var githubAnswerLabel = githubAnswerModelKey === 'github'
-        ? 'Vidhyora GitHub'
-        : (MODEL_LABELS[githubAnswerModelKey] || 'Vidhyora GitHub');
+        ? (AI_BRAND_NAME + ' GitHub')
+        : (MODEL_LABELS[githubAnswerModelKey] || (AI_BRAND_NAME + ' GitHub'));
       var tagHtml = '<div class="msg-model-tag">' + escHtml(githubAnswerLabel) + '</div>';
       bubble.innerHTML = tagHtml + (formatMd(res.body.reply) || '<i>No response — please try again.</i>');
       addMsgCopyAction(bubble, res.body.reply, { conversationId: state.currentConversationId, modelKey: githubAnswerModelKey });
@@ -4614,7 +4644,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       ? (documentToSend.mode === 'coding' ? documentToSend.codingTruncated : documentToSend.truncated)
       : false;
 
-    var youtubeUrl = !imageToSend && !documentToSend ? youtubeUrlFromText(text) : null;
+    var youtubeUrl = (AI_IS_SUPERUSER && !imageToSend && !documentToSend) ? youtubeUrlFromText(text) : null;
     if (youtubeUrl) {
       showYoutubeOptions(text, youtubeUrl);
       return;

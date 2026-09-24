@@ -1,5 +1,6 @@
 import requests
-from django.conf import settings
+
+from myapp.provider_keys import get_key
 
 TWO_FACTOR_BASE = 'https://2factor.in/API/V1'
 
@@ -15,7 +16,7 @@ def send_phone_otp(phone):
     """Sends an auto-generated OTP via 2Factor to `phone`. Returns the
     2Factor session id — must be kept and passed into verify_phone_otp()."""
     number = '91' + _normalize_phone(phone)
-    url = f'{TWO_FACTOR_BASE}/{settings.TWO_FACTOR_API_KEY}/SMS/{number}/AUTOGEN'
+    url = f'{TWO_FACTOR_BASE}/{get_key("TWO_FACTOR_API_KEY")}/SMS/{number}/AUTOGEN'
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     data = resp.json()
@@ -26,7 +27,7 @@ def send_phone_otp(phone):
 
 def verify_phone_otp(session_id, otp):
     """True if `otp` matches what 2Factor sent for that session."""
-    url = f'{TWO_FACTOR_BASE}/{settings.TWO_FACTOR_API_KEY}/SMS/VERIFY/{session_id}/{otp}'
+    url = f'{TWO_FACTOR_BASE}/{get_key("TWO_FACTOR_API_KEY")}/SMS/VERIFY/{session_id}/{otp}'
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     data = resp.json()

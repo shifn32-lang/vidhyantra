@@ -6,7 +6,11 @@
   <td>
     {% if u.store_profile.location_consent == 'granted' %}
       <span class="location-status enabled"><i class="fas fa-location-dot"></i> Enabled</span>
+      {% if u.store_profile.location_place_name %}
+      <span class="location-coords">{{ u.store_profile.location_place_name }}</span>
+      {% else %}
       <span class="location-coords" data-lat="{{ u.store_profile.location_latitude }}" data-lng="{{ u.store_profile.location_longitude }}">{{ u.store_profile.location_latitude|floatformat:4 }}, {{ u.store_profile.location_longitude|floatformat:4 }}</span>
+      {% endif %}
     {% elif u.store_profile.location_consent == 'denied' %}
       <span class="location-status declined"><i class="fas fa-location-crosshairs"></i> Declined</span>
     {% else %}
