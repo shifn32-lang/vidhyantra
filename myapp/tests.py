@@ -32,7 +32,7 @@ from . import (
     web_search,
 )
 from .middleware import CanonicalHostMiddleware, PublicAssetCacheMiddleware
-from .models import ActiveUserSession, AIAccountMessageSettings, AIAPIAccess, AIAPIKey, AIGeneratedFile, AIBlock, AIConversation, AIMessage, AINote, AIReport, AIUserImage, GitHubConnection, Order, Payment, PWASettings, SiteCustomization, StoreProfile
+from .models import ActiveUserSession, AIAccountMessageSettings, DropboxSettings, AIAPIAccess, AIAPIKey, AIGeneratedFile, AIBlock, AIConversation, AIMessage, AINote, AIReport, AIUserImage, GitHubConnection, Order, Payment, PWASettings, SiteCustomization, StoreProfile
 from .views import (
     AI_CURRENT_CONVERSATION_SESSION_KEY, AI_FREE_MESSAGE_LIMIT,
     _ai_document_instruction,
@@ -2157,10 +2157,10 @@ class AIResponseReliabilityTests(TestCase):
              patch('myapp.ai_chat.time.sleep'):
             with self.assertRaises(TimeoutError):
                 list(ai_chat.stream_chat(
-                    [{'role': 'user', 'content': 'hello'}], model_key=ai_chat.GEMINI_36_FLASH_MODEL_KEY,
+                    [{'role': 'user', 'content': 'hello'}], model_key='quick',
                 ))
         models = {call.kwargs['model'] for call in create.call_args_list}
-        self.assertEqual(models, {ai_chat.MODELS[ai_chat.GEMINI_36_FLASH_MODEL_KEY]['id']})
+        self.assertEqual(models, {ai_chat.MODELS['quick']['id']})
 
     def test_long_form_request_gets_larger_token_budget_and_timeout(self):
         chunk = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='answer'))])
@@ -4929,195 +4929,6 @@ class LargeUploadTests(TestCase):
         ]), 150)
 
 
-class GeminiModelControlTests(TestCase):
-    """Dashboard panel for Gemini 3.6 Flash: save a key and verify it, switch
-    the model on/off, and count the requests it serves."""
-    KEY = ai_chat.GEMINI_36_FLASH_MODEL_KEY
-    URL = '/store/dashboard/api-settings/'
-
-    def setUp(self):
-        cache.clear()
-        self.staff = User.objects.create_user('gem-staff', password='pw', is_staff=True)
-        StoreProfile.objects.get_or_create(user=self.staff)
-        self.client.force_login(self.staff)
-
-    def _picker_keys(self):
-        # Staff have full model access, so Gemini is in their picker when on.
-        response = self.client.get('/')
-        return [m['key'] for m in response.context['ai_models']]
-
-    @patch('myapp.ai_chat._client_for_key')
-    def test_saving_a_key_stores_it_and_tests_it_live(self, client_for_key):
-        client_for_key.return_value.chat.completions.create.return_value = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content='OK'))],
-        )
-        response = self.client.post(self.URL, {
-            'panel': 'gemini', 'action': 'save', 'key__GEMINI_API_KEY': 'nvapi-test-key', 'enabled': 'on',
-        })
-        self.assertEqual(response.status_code, 200)
-        from .models import AIModelControl, ProviderAPICredential
-        self.assertEqual(ProviderAPICredential.objects.get(setting_name='GEMINI_API_KEY').value, 'nvapi-test-key')
-        self.assertEqual(client_for_key.call_args.args[0], 'nvapi-test-key')
-        control = AIModelControl.objects.get(model_key=self.KEY)
-        self.assertTrue(control.last_test_ok)
-        self.assertTrue(control.is_enabled)
-        self.assertContains(response, 'API key saved.')
-        self.assertNotContains(response, 'nvapi-test-key')
-
-    @patch('myapp.ai_chat._client_for_key')
-    def test_a_rejected_key_is_reported_as_not_working(self, client_for_key):
-        error = Exception('API key not valid. Please pass a valid API key.')
-        error.status_code = 400
-        client_for_key.return_value.chat.completions.create.side_effect = error
-        response = self.client.post(self.URL, {
-            'panel': 'gemini', 'action': 'save', 'key__GEMINI_API_KEY': 'bad-key', 'enabled': 'on',
-        })
-        from .models import AIModelControl
-        control = AIModelControl.objects.get(model_key=self.KEY)
-        self.assertFalse(control.last_test_ok)
-        self.assertContains(response, 'Test failed')
-
-    def test_unchecking_the_box_hides_and_blocks_the_model(self):
-        self.assertIn(self.KEY, self._picker_keys())
-        self.client.post(self.URL, {'panel': 'gemini', 'action': 'save'})  # checkbox absent = off
-        cache.clear()
-        self.assertFalse(ai_chat.is_model_enabled(self.KEY))
-        self.assertNotIn(self.KEY, self._picker_keys())
-
-        send = self.client.post(
-            '/AI/api/send/', data=json.dumps({'message': 'hello', 'model': self.KEY}),
-            content_type='application/json',
-        )
-        self.assertEqual(send.status_code, 403)
-        self.assertEqual(send.json()['status'], 'model_disabled')
-        with self.assertRaises(ai_chat.ModelDisabledError):
-            list(ai_chat.stream_chat([{'role': 'user', 'content': 'hi'}], model_key=self.KEY))
-
-        self.client.post(self.URL, {'panel': 'gemini', 'action': 'save', 'enabled': 'on'})
-        cache.clear()
-        self.assertIn(self.KEY, self._picker_keys())
-
-    def test_requests_are_counted_with_success_and_failure(self):
-        from .models import AIModelControl
-        with patch('myapp.ai_chat._stream_chat_impl', return_value=iter(['hi'])):
-            self.assertEqual(''.join(ai_chat.stream_chat([], model_key=self.KEY)), 'hi')
-
-        def failing(*args, **kwargs):
-            raise RuntimeError('upstream down')
-            yield  # pragma: no cover
-        with patch('myapp.ai_chat._stream_chat_impl', side_effect=failing):
-            with self.assertRaises(RuntimeError):
-                list(ai_chat.stream_chat([], model_key=self.KEY))
-        control = AIModelControl.objects.get(model_key=self.KEY)
-        self.assertEqual((control.request_count, control.success_count, control.error_count), (2, 1, 1))
-        self.assertIn('upstream down', control.last_error)
-
-        with patch('myapp.ai_chat._stream_chat_impl', return_value=iter(['x'])):
-            list(ai_chat.stream_chat([], model_key='quick'))
-        self.assertEqual(AIModelControl.objects.get(model_key=self.KEY).request_count, 2)
-
-    @patch('myapp.ai_chat._client_for_key')
-    def test_requests_go_to_nvidia_diffusiongemma_never_google(self, client_for_key):
-        client_for_key.return_value.chat.completions.create.return_value = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content='OK'))],
-        )
-        self.client.post(self.URL, {
-            'panel': 'gemini', 'action': 'save', 'key__GEMINI_API_KEY': 'any-key-value', 'enabled': 'on',
-        })
-        self.assertEqual(client_for_key.call_args.args[1], 'https://integrate.api.nvidia.com/v1')
-        self.assertEqual(
-            client_for_key.return_value.chat.completions.create.call_args.kwargs['model'],
-            'google/diffusiongemma-26b-a4b-it',
-        )
-
-    def test_missing_key_tells_everyone_to_contact_the_saved_support_email(self):
-        site = SiteCustomization.get_solo()
-        site.support_email = 'help@example.com'
-        site.save()
-        from .views import _ai_chat_failure_reply
-        error = ValueError('GEMINI_API_KEY is not configured.')
-        for is_staff in (True, False):
-            reply = _ai_chat_failure_reply(error, self.KEY, is_staff=is_staff)
-            self.assertEqual(
-                reply,
-                'Gemini 3.6 Flash text access is currently disconnected. '
-                'Please contact the administrator at help@example.com.',
-            )
-            self.assertNotIn('GEMINI_API_KEY', reply)
-
-    def test_identity_questions_get_the_gemini_answer_without_calling_the_model(self):
-        for question in ('who created you?', 'which model are you?', 'are you Gemma?', 'are you open source?'):
-            with patch('myapp.ai_chat._stream_chat_impl') as impl:
-                reply = ''.join(ai_chat.stream_chat([{'role': 'user', 'content': question}], model_key=self.KEY))
-            impl.assert_not_called()
-            self.assertIn('Gemini 3.6 Flash', reply)
-            self.assertNotIn('Gemma', reply)
-        with patch('myapp.ai_chat._stream_chat_impl', return_value=iter(['391'])) as impl:
-            ''.join(ai_chat.stream_chat([{'role': 'user', 'content': 'Explain which model of car suits a family'}], model_key=self.KEY))
-        impl.assert_called_once()
-
-    def test_backend_model_names_and_thinking_markers_never_reach_users(self):
-        from .views import _gemini_public_reply
-        shown = _gemini_public_reply(
-            '<|channel>thought <channel|>I am Gemma 4 (google/diffusiongemma-26b-a4b-it), '
-            'built by Google DeepMind. I am an open weights model.'
-        )
-        self.assertEqual(shown, 'I am Gemini 3.6 Flash (Gemini 3.6 Flash), built by Google. I am a Google model.')
-        for hidden in ('gemma', 'deepmind', 'channel', 'open weights'):
-            self.assertNotIn(hidden, shown.lower())
-        self.assertEqual(_gemini_public_reply('I like gems.'), 'I like gems.')
-
-    @patch('myapp.views.default_storage.url', return_value='/media/ai_generated/g.png')
-    @patch('myapp.views.default_storage.save', return_value='ai_generated/g.png')
-    @patch('myapp.views.image_generation.generate_image')
-    def test_an_auto_routed_image_is_labelled_with_the_selected_model(self, generate, save, storage_url):
-        buffer = io.BytesIO()
-        Image.new('RGB', (2, 2), 'white').save(buffer, 'PNG')
-        generate.return_value = image_generation.GeneratedImage(buffer.getvalue(), 'png')
-        for key in (self.KEY, 'quick', 'ultra'):
-            response = self.client.post(
-                '/AI/api/send/',
-                data=json.dumps({'message': 'create a image of a girl sitting in park', 'model': key}),
-                content_type='application/json',
-            )
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response['X-Model-Key'], key)
-            self.assertEqual(response['X-Request-Category'], 'image_generation')
-            self.assertEqual(AIMessage.objects.latest('id').model_key, key)
-
-    def test_name_and_description_can_be_changed_from_the_panel(self):
-        self.addCleanup(lambda: (cache.clear(), ai_chat.apply_model_text_overrides()))
-        response = self.client.post(self.URL, {
-            'panel': 'gemini', 'action': 'save', 'enabled': 'on',
-            'name__gemini-3-6-flash': 'Nova Flash', 'description__gemini-3-6-flash': 'Our fastest model.',
-        })
-        self.assertContains(response, 'Name and description saved.')
-        cfg = ai_chat.MODELS[self.KEY]
-        self.assertEqual((cfg['label'], cfg['description']), ('Nova Flash', 'Our fastest model.'))
-
-        picker = self.client.get('/').context['ai_models']
-        entry = next(m for m in picker if m['key'] == self.KEY)
-        self.assertEqual((entry['label'], entry['description']), ('Nova Flash', 'Our fastest model.'))
-        self.assertIn('Nova Flash', ai_chat.gemini_identity_reply([{'role': 'user', 'content': 'who are you?'}]))
-        from .views import _gemini_public_reply
-        self.assertEqual(_gemini_public_reply('I am Gemma 4.'), 'I am Nova Flash.')
-
-        # Blank fields restore the built-in defaults.
-        self.client.post(self.URL, {
-            'panel': 'gemini', 'action': 'save', 'enabled': 'on', 'name__gemini-3-6-flash': '', 'description__gemini-3-6-flash': '',
-        })
-        cfg = ai_chat.MODELS[self.KEY]
-        self.assertEqual(cfg['label'], 'Gemini 3.6 Flash')
-        self.assertIn('flagship', cfg['description'])
-
-    def test_non_staff_cannot_open_the_panel(self):
-        self.client.force_login(User.objects.create_user('plain', password='pw'))
-        response = self.client.post(self.URL, {'panel': 'gemini', 'action': 'save'})
-        self.assertEqual(response.status_code, 302)
-        from .models import AIModelControl
-        self.assertFalse(AIModelControl.objects.exists())
-
-
 class ApiSettingsPanelsTests(TestCase):
     """The other API Settings panels: ChatGPT models, image generation, search."""
     URL = '/store/dashboard/api-settings/'
@@ -5137,7 +4948,7 @@ class ApiSettingsPanelsTests(TestCase):
         response = self.client.get(self.URL)
         self.assertEqual(
             [p['id'] for p in response.context['panels']],
-            ['chat', 'luna', 'sol', 'terra', 'gpt55', 'gemini', 'coding', 'image', 'search'],
+            ['chat', 'luna', 'sol', 'terra', 'gpt55', 'coding', 'image', 'search'],
         )
 
     @patch('myapp.ai_chat._client_for_key')
@@ -5259,7 +5070,7 @@ class ApiSettingsPanelsTests(TestCase):
         self.client.post(self.URL, {'panel': 'image', 'action': 'save'})
         cache.clear()
         with patch('myapp.views.image_generation.generate_image') as generate:
-            for model in ('quick', ai_chat.GEMINI_36_FLASH_MODEL_KEY, ai_chat.FLUX_KLEIN_4B_MODEL_KEY):
+            for model in ('quick', ai_chat.SOL_MODEL_KEY, ai_chat.FLUX_KLEIN_4B_MODEL_KEY):
                 send = self.client.post(
                     '/AI/api/send/',
                     data=json.dumps({'message': 'create a image of a girl sitting in park', 'model': model}),
@@ -5450,14 +5261,14 @@ class GitHubReplyLabelTests(TestCase):
                                     content_type='application/json')
 
     def test_the_selected_model_is_what_the_reply_is_saved_and_shown_under(self):
-        for model in (ai_chat.TERRA_MODEL_KEY, ai_chat.SOL_MODEL_KEY, 'quick', ai_chat.GEMINI_36_FLASH_MODEL_KEY):
+        for model in (ai_chat.TERRA_MODEL_KEY, ai_chat.SOL_MODEL_KEY, 'quick', 'code'):
             body = self._send(model=model).json()
             self.assertEqual(body['model_key'], model)
             self.assertNotEqual(body['model_key'], 'github')
         self.assertFalse(AIMessage.objects.filter(model_key='github').exists())
         self.assertEqual(
             set(AIMessage.objects.filter(role=AIMessage.ROLE_ASSISTANT).values_list('model_key', flat=True)),
-            {ai_chat.TERRA_MODEL_KEY, ai_chat.SOL_MODEL_KEY, 'quick', ai_chat.GEMINI_36_FLASH_MODEL_KEY},
+            {ai_chat.TERRA_MODEL_KEY, ai_chat.SOL_MODEL_KEY, 'quick', 'code'},
         )
 
     def test_an_unknown_model_falls_back_to_the_users_default_not_a_github_name(self):
@@ -6256,7 +6067,8 @@ class VoiceCallTests(TestCase):
     def _send(self, **extra):
         payload = {'message': 'what is the weather', 'model': 'quick'}
         payload.update(extra)
-        with patch('myapp.views.ai_chat.stream_chat', return_value=iter(['Sunny.'])) as stream_chat:
+        with patch('myapp.views.ai_chat.stream_chat', return_value=iter(['Sunny.'])) as stream_chat, \
+             patch('myapp.views.web_search.build_context', return_value=None):
             response = self.client.post('/AI/api/send/', data=json.dumps(payload), content_type='application/json')
             b''.join(response.streaming_content)
         self.assertEqual(response.status_code, 200)
@@ -6279,3 +6091,239 @@ class VoiceCallTests(TestCase):
         self.assertNotIn('\n', instruction.split("caller's name is")[1].split(';')[0])
         self.assertNotIn('<', instruction)
         self.assertNotIn('{', instruction)
+
+
+def _fake_dropbox_account(email, name='Asha Rao', backups=(), used=2 * 1024 ** 3, allocated=10 * 1024 ** 3, scope_ok=True):
+    import dropbox
+    client = Mock()
+    if scope_ok:
+        client.users_get_current_account.return_value = SimpleNamespace(
+            name=SimpleNamespace(display_name=name), email=email)
+    else:
+        client.users_get_current_account.side_effect = RuntimeError("AuthError('missing_scope', ...)")
+    allocation = Mock()
+    allocation.is_individual.return_value = True
+    allocation.get_individual.return_value = SimpleNamespace(allocated=allocated)
+    client.users_get_space_usage.return_value = SimpleNamespace(used=used, allocation=allocation)
+    stamp = datetime.datetime(2026, 10, 3, 12, 0, 0)
+    entries = [
+        dropbox.files.FileMetadata(name=name_, id=f'id:{i}', client_modified=stamp, server_modified=stamp, rev='0123456789', size=10)
+        for i, name_ in enumerate(backups)
+    ]
+    client.files_list_folder.return_value = SimpleNamespace(entries=entries, has_more=False, cursor='c')
+    return client
+
+
+@override_settings(DROPBOX_APP_KEY='server-key', DROPBOX_APP_SECRET='server-secret', DROPBOX_REFRESH_TOKEN='server-token')
+class DropboxStoragePanelTests(TestCase):
+    """Backup & Restore shows which Dropbox account is connected and lets staff switch it."""
+    URL = '/store/dashboard/backup/'
+    SAVE = '/store/dashboard/backup/settings/'
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.addCleanup(dropbox_images.reset_credentials)
+        dropbox_images.reset_credentials()
+        self.staff = User.objects.create_user('dbx-staff', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=self.staff)
+        self.client.force_login(self.staff)
+        self.accounts = {
+            'server-token': _fake_dropbox_account('old@example.com', 'Old Owner', ['backup_20260101_000000_000001.zip']),
+            'new-token': _fake_dropbox_account('new@example.com', 'New Owner', ['backup_20260301_000000_000001.zip', 'backup_20260302_000000_000001.zip']),
+            'scopeless-token': _fake_dropbox_account('x', scope_ok=False),
+        }
+        patcher = patch('myapp.dropbox_backup._client', side_effect=self._client_for)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _client_for(self, settings_obj):
+        token = settings_obj.effective_refresh_token
+        if token not in self.accounts:
+            raise dropbox_backup.BackupError('Dropbox rejected the Refresh Token. Generate a new one.')
+        return self.accounts[token]
+
+    def _save(self, **fields):
+        return self.client.post(self.SAVE, {'action': 'save', **fields}, follow=True)
+
+    def test_page_shows_the_connected_account_email_folder_and_backups(self):
+        body = self.client.get(self.URL).content.decode()
+        self.assertIn('old@example.com', body)
+        self.assertIn('Old Owner', body)
+        self.assertIn('/EduTrellis Store/backups/', body)
+        self.assertIn('backup_20260101_000000_000001.zip', body)
+        self.assertIn('Connected', body)
+        self.assertIn('built-in credentials', body)
+
+    def test_saving_new_credentials_switches_the_account_and_the_backup_list(self):
+        response = self._save(app_key='new-key', app_secret='new-secret', refresh_token='new-token')
+        body = response.content.decode()
+        self.assertIn('Connected to new@example.com', body)
+        self.assertIn('backup_20260302_000000_000001.zip', body)
+        self.assertNotIn('backup_20260101_000000_000001.zip', body)
+        saved = DropboxSettings.get_solo()
+        self.assertEqual((saved.app_key, saved.app_secret, saved.refresh_token), ('new-key', 'new-secret', 'new-token'))
+        self.assertIn('Using the credentials saved here', body)
+
+    def test_credentials_that_do_not_connect_are_not_saved(self):
+        response = self._save(app_key='k', app_secret='s', refresh_token='wrong-token')
+        self.assertIn('Not saved', response.content.decode())
+        saved = DropboxSettings.get_solo()
+        self.assertEqual((saved.app_key, saved.app_secret, saved.refresh_token), ('', '', ''))
+        self.assertIn('old@example.com', response.content.decode())
+
+    def test_blank_secret_fields_keep_what_is_already_saved(self):
+        self._save(app_key='new-key', app_secret='new-secret', refresh_token='new-token')
+        self._save(app_key='renamed-key')
+        saved = DropboxSettings.get_solo()
+        self.assertEqual((saved.app_key, saved.app_secret, saved.refresh_token), ('renamed-key', 'new-secret', 'new-token'))
+
+    def test_saved_secrets_are_never_written_into_the_page(self):
+        self._save(app_key='new-key', app_secret='very-secret-value', refresh_token='new-token')
+        body = self.client.get(self.URL).content.decode()
+        self.assertNotIn('very-secret-value', body)
+        self.assertNotIn('new-token', body)
+
+    def test_resetting_goes_back_to_the_server_credentials(self):
+        self._save(app_key='new-key', app_secret='new-secret', refresh_token='new-token')
+        response = self.client.post(self.SAVE, {'action': 'reset'}, follow=True)
+        body = response.content.decode()
+        self.assertEqual(DropboxSettings.get_solo().refresh_token, '')
+        self.assertIn('old@example.com', body)
+        self.assertIn('backup_20260101_000000_000001.zip', body)
+
+    def test_an_app_without_the_account_permission_is_still_connected(self):
+        self.accounts['scopeless-token'].check_user = Mock()
+        response = self._save(app_key='k', app_secret='s', refresh_token='scopeless-token')
+        body = response.content.decode()
+        self.assertIn('Connected', body)
+        self.assertIn('shared by this Dropbox app', body)
+
+    def test_test_connection_reports_the_account(self):
+        response = self.client.post(self.SAVE, {'action': 'test'}, follow=True)
+        self.assertIn('Connection works', response.content.decode())
+
+    def test_account_details_are_cached_between_page_loads(self):
+        self.client.get(self.URL)
+        self.client.get(self.URL)
+        self.assertEqual(self.accounts['server-token'].users_get_current_account.call_count, 1)
+
+    def test_too_long_values_and_empty_forms_are_refused(self):
+        self.assertIn('too long', self._save(refresh_token='x' * 500).content.decode())
+        self.assertIn('at least one value', self._save().content.decode())
+
+    def test_only_staff_can_change_the_storage(self):
+        self.client.force_login(User.objects.create_user('plain-user', password='pw'))
+        response = self.client.post(self.SAVE, {'action': 'save', 'refresh_token': 'new-token', 'app_key': 'k', 'app_secret': 's'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(DropboxSettings.get_solo().refresh_token, '')
+
+    def test_the_old_settings_page_url_just_goes_back_to_backups(self):
+        response = self.client.get(self.SAVE)
+        self.assertRedirects(response, self.URL, fetch_redirect_response=False)
+
+
+@override_settings(DROPBOX_APP_KEY='server-key', DROPBOX_APP_SECRET='server-secret', DROPBOX_REFRESH_TOKEN='server-token',
+                   DROPBOX_IMAGE_ARCHIVE_ENABLED=True)
+class DropboxImageArchiveFollowsSavedCredentialsTests(TestCase):
+    def setUp(self):
+        self.addCleanup(dropbox_images.reset_credentials)
+        dropbox_images.reset_credentials()
+
+    def test_server_credentials_are_used_until_some_are_saved(self):
+        self.assertEqual(dropbox_images._credentials(), ('server-key', 'server-secret', 'server-token'))
+
+    def test_saved_credentials_win_and_server_ones_fill_the_gaps(self):
+        DropboxSettings.objects.update_or_create(pk=1, defaults={'refresh_token': 'saved-token'})
+        dropbox_images.reset_credentials()
+        self.assertEqual(dropbox_images._credentials(), ('server-key', 'server-secret', 'saved-token'))
+
+    def test_changing_the_account_builds_a_new_client_for_the_next_upload(self):
+        first, second = Mock(), Mock()
+        png = b'\x89PNG\r\n\x1a\n' + b'x' * 20
+        with patch('myapp.dropbox_images._build_client', side_effect=[first, second]) as build:
+            dropbox_images._upload(png, 'a@example.com', 'one.png')
+            DropboxSettings.objects.update_or_create(pk=1, defaults={'refresh_token': 'other-token'})
+            dropbox_images.reset_credentials()
+            dropbox_images._upload(png, 'a@example.com', 'two.png')
+        self.assertEqual(build.call_count, 2)
+        first.files_upload.assert_called_once()
+        second.files_upload.assert_called_once()
+
+
+class DeletedModelsAreGoneTests(TestCase):
+    REMOVED = (
+        'sdxl-lightning', 'flux-1-schnell', 'sdxl-base', 'dreamshaper-8-lcm',
+        'gemini-3-6-flash', 'openrouter-auto-free', 'laguna-s-2-1', 'cohere-north-mini-code',
+    )
+
+    def test_the_models_and_their_keys_no_longer_exist(self):
+        for key in self.REMOVED:
+            self.assertNotIn(key, ai_chat.MODELS)
+        for name in ('CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_GEMMA_API_KEY'):
+            self.assertFalse(hasattr(settings, name), name)
+
+    def test_the_admin_lists_do_not_offer_them(self):
+        staff = User.objects.create_user('lists-staff', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=staff)
+        self.client.force_login(staff)
+        management = self.client.get('/store/dashboard/api-management/').content.decode()
+        api_data = self.client.get('/store/dashboard/api-data/').content.decode()
+        for page in (management, api_data):
+            for label in ('SDXL', 'Schnell', 'DreamShaper', 'OpenRouter', 'Laguna', 'Cohere', 'Gemini', 'Cloudflare'):
+                self.assertNotIn(label, page)
+
+    def test_the_cleanup_migration_removes_leftover_rows(self):
+        import importlib
+        from django.apps import apps
+        from .models import AIModelControl, ProviderAPICredential
+        migration = importlib.import_module('myapp.migrations.0074_remove_deleted_models')
+        user = User.objects.create_user('grantee', password='pw')
+        AIAPIAccess.objects.create(user=user, model_keys='sol,gemini-3-6-flash,quick,sdxl-base')
+        AIModelControl.objects.create(model_key='gemini-3-6-flash')
+        AIModelControl.objects.create(model_key='sol')
+        ProviderAPICredential.objects.create(setting_name='OPENROUTER_API_KEY', value='x')
+        ProviderAPICredential.objects.create(setting_name='NVIDIA_API_KEY', value='y')
+        migration.remove_deleted_models(apps, None)
+        self.assertEqual(AIAPIAccess.objects.get(user=user).model_keys, 'sol,quick')
+        self.assertEqual(list(AIModelControl.objects.values_list('model_key', flat=True)), ['sol'])
+        self.assertEqual(list(ProviderAPICredential.objects.values_list('setting_name', flat=True)), ['NVIDIA_API_KEY'])
+
+
+class ApiDataMatchesApiSettingsTests(TestCase):
+    URL = '/store/dashboard/api-data/'
+
+    def setUp(self):
+        cache.clear()
+        self.staff = User.objects.create_user('data-staff', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=self.staff)
+        self.client.force_login(self.staff)
+
+    def test_only_models_that_have_an_api_settings_panel_are_listed(self):
+        shown = {m['key'] for m in self.client.get(self.URL).context['models']}
+        self.assertEqual(shown, {'chatgpt56', 'sol', 'terra', 'gpt-oss-20b', 'ultra', 'quick', 'code', 'flux-klein-4b'})
+
+    def test_legacy_providers_are_not_listed(self):
+        names = [a['name'] for a in self.client.get(self.URL).context['apis']]
+        for legacy in ('FLUX Edit NIM', 'NVIDIA FLUX Kontext', 'Qwen Image Edit'):
+            self.assertNotIn(legacy, names)
+        self.assertIn('NVIDIA Lightning (shared pool)', names)
+        self.assertIn('Tavily (web search)', names)
+
+
+class SuperuserIsNotAskedForProfileDetailsTests(TestCase):
+    def _context(self, user):
+        self.client.force_login(user)
+        return self.client.get('/').context
+
+    def test_a_superuser_gets_no_profile_wizard_or_location_prompt(self):
+        admin = User.objects.create_superuser('boss', 'boss@example.com', 'pw')
+        context = self._context(admin)
+        self.assertFalse(context['show_profile_wizard'])
+        self.assertFalse(context['show_location_prompt'])
+
+    def test_everyone_else_is_still_asked(self):
+        staff = User.objects.create_user('just-staff', password='pw', is_staff=True)
+        context = self._context(staff)
+        self.assertTrue(context['show_profile_wizard'])
+        self.assertTrue(context['show_location_prompt'])

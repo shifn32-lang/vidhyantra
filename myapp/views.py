@@ -36,7 +36,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime, timedelta, timezone as dt_timezone
-from myapp.forms import PhoneVerifyForm, AILoginForm, SignupEditForm, AIProfileEditForm, AIPasswordChangeForm, PaymentSettingsForm, DropboxSettingsForm, PWASettingsForm, GrantAISubscriptionForm, GrantAPIAccessForm, AddUserForm, SiteCustomizationForm, MAX_AMOUNT_PAID
+from myapp.forms import PhoneVerifyForm, AILoginForm, SignupEditForm, AIProfileEditForm, AIPasswordChangeForm, PaymentSettingsForm, PWASettingsForm, GrantAISubscriptionForm, GrantAPIAccessForm, AddUserForm, SiteCustomizationForm, MAX_AMOUNT_PAID
 from myapp.models import StoreProfile, Order, OrderItem, PaymentSettings, Payment, DropboxSettings, PhoneVerification, PWASettings, SiteCustomization, AIAccountMessageSettings, AIConversation, AIMessage, AIBlock, AINote, AIReport, AIGeneratedFile, AIUserImage, GitHubConnection, YouTubeDownloadJob, AIAPIAccess, AIAPIKey, ProviderAPICredential
 from myapp import dropbox_backup
 from myapp import dropbox_images
@@ -139,7 +139,7 @@ def _user_payload(user):
 
 
 def _location_prompt_needed(user):
-    if not user.is_authenticated:
+    if not user.is_authenticated or user.is_superuser:
         return False
     profile = getattr(user, 'store_profile', None)
     if not profile or profile.location_consent == StoreProfile.LOCATION_UNKNOWN:
@@ -164,7 +164,7 @@ def _profile_wizard_needed(user):
     optional). Fires whenever any one of those is still missing, not just
     when all are — unlike the old amount-and-location-only version of this
     check, this is meant to actually be mandatory."""
-    if not user.is_authenticated:
+    if not user.is_authenticated or user.is_superuser:
         return False
     profile = getattr(user, 'store_profile', None)
     if not profile:
@@ -717,8 +717,6 @@ def api_chat_completions(request):
         reply = _chatgpt_public_reply(reply, ai_chat.chatgpt_persona_name(model_key))
     else:
         reply = _vidhyora_public_reply(reply, ai_chat.MODELS[model_key]['label'])
-        if model_key == ai_chat.GEMINI_36_FLASH_MODEL_KEY:
-            reply = _gemini_public_reply(reply)
 
     AIAPIKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
     return JsonResponse({
@@ -1623,7 +1621,7 @@ def _ai_api_registry():
     return [
         {
             'name': 'NVIDIA Lightning (shared pool)',
-            'note': 'Backs Quick/Code/Ultra/Reasoning modes and Vidhyora Vision.',
+            'note': 'Backs the Ultra, Quick and Code modes and Vidhyora Vision.',
             'connected': bool(get_key('NVIDIA_API_KEY')),
             'model_keys': ['ultra', 'quick', 'code', 'reasoning', 'vision'],
             'fields': [('NVIDIA_API_KEY', 'API key', 'secret')],
@@ -1637,9 +1635,9 @@ def _ai_api_registry():
         },
         {
             'name': 'NVIDIA Nemotron Super (dedicated)',
-            'note': 'Backs ChatGPT 5.6 Sol and Nemotron 3 Super.',
+            'note': 'Backs ChatGPT 5.6 Sol.',
             'connected': bool(get_key('NVIDIA_NEMOTRON_SUPER_API_KEY')),
-            'model_keys': [ai_chat.SOL_MODEL_KEY, ai_chat.NEMOTRON_SUPER_MODEL_KEY],
+            'model_keys': [ai_chat.SOL_MODEL_KEY],
             'fields': [('NVIDIA_NEMOTRON_SUPER_API_KEY', 'API key', 'secret')],
         },
         {
@@ -1664,64 +1662,6 @@ def _ai_api_registry():
             'fields': [
                 ('NVIDIA_FLUX_API_KEY', 'API key', 'secret'),
             ],
-        },
-        {
-            'name': 'FLUX Edit NIM',
-            'note': 'Upload-capable FLUX server for real photo editing. Without it, uploads use described text-to-image regeneration.',
-            'connected': bool(get_key('FLUX_EDIT_API_URL')),
-            'model_keys': [],
-            'fields': [
-                ('FLUX_EDIT_API_URL', 'Server URL', 'text'),
-                ('FLUX_EDIT_API_KEY', 'API key (optional)', 'secret'),
-                ('NVIDIA_FLUX_EDIT_API_KEY', 'Hosted preview key (fallback)', 'secret'),
-            ],
-        },
-        {
-            'name': 'NVIDIA FLUX Kontext',
-            'note': 'Legacy image-editing endpoint, not currently offered in the model picker.',
-            'connected': bool(get_key('NVIDIA_FLUX_KONTEXT_API_KEY')),
-            'model_keys': [],
-            'fields': [('NVIDIA_FLUX_KONTEXT_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'Qwen Image Edit',
-            'note': 'Optional self-hosted image-editing server, not currently offered in the model picker.',
-            'connected': bool(get_key('QWEN_IMAGE_EDIT_API_URL')),
-            'model_keys': [],
-            'fields': [
-                ('QWEN_IMAGE_EDIT_API_URL', 'Server URL', 'text'),
-                ('QWEN_IMAGE_EDIT_ENDPOINT_KEY', 'API key (optional)', 'secret'),
-            ],
-        },
-        {
-            'name': 'Cloudflare Workers AI',
-            'note': 'Backs SDXL Lightning, Flux 1 Schnell, Stable Diffusion XL Base, and DreamShaper 8 LCM.',
-            'connected': bool(get_key('CLOUDFLARE_ACCOUNT_ID') and get_key('CLOUDFLARE_API_TOKEN')),
-            'model_keys': [
-                ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
-                ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
-            ],
-            'fields': [
-                ('CLOUDFLARE_ACCOUNT_ID', 'Account ID', 'secret'),
-                ('CLOUDFLARE_API_TOKEN', 'API token', 'secret'),
-            ],
-        },
-        {
-            'name': 'Gemini 3.6 Flash (NVIDIA Gemma)',
-            'note': 'Dedicated NVIDIA key for Gemini 3.6 Flash, served by DiffusionGemma on NVIDIA. Also managed on the API Settings page.',
-            'connected': bool(get_key('GEMINI_API_KEY')),
-            'model_keys': [ai_chat.GEMINI_36_FLASH_MODEL_KEY],
-            'fields': [('GEMINI_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'OpenRouter',
-            'note': 'Backs OpenRouter Auto Free, Laguna S 2.1, and Cohere North Mini Code.',
-            'connected': bool(get_key('OPENROUTER_API_KEY')),
-            'model_keys': [
-                ai_chat.OPENROUTER_AUTO_FREE_MODEL_KEY, ai_chat.LAGUNA_S_21_MODEL_KEY,
-                ai_chat.COHERE_NORTH_MINI_CODE_MODEL_KEY,
-            ],
-            'fields': [('OPENROUTER_API_KEY', 'API key', 'secret')],
         },
         {
             'name': '2Factor (phone OTP)',
@@ -1752,7 +1692,7 @@ def _mask_secret(value):
 @dashboard_staff_required
 def dashboard_api_settings(request):
     """Per-feature controls that go beyond a plain key — see myapp.api_controls:
-    each ChatGPT model, Gemini, image generation and web search get a key, a
+    each ChatGPT model, image generation and web search get a key, a
     live connection test, an on/off checkbox and request counters."""
     from myapp import api_controls
     message = None
@@ -1765,6 +1705,15 @@ def dashboard_api_settings(request):
         'panels': api_controls.panel_context(),
         'message': message,
     })
+
+
+def _api_settings_model_keys():
+    """The models that have a panel on API Settings: the same set API Data lists."""
+    from myapp import api_controls
+    keys = set()
+    for panel in api_controls.definitions():
+        keys.update(panel.get('text_models') or [panel['model_key']])
+    return keys & set(ai_chat.MODELS)
 
 
 @dashboard_staff_required
@@ -1886,8 +1835,11 @@ def dashboard_api_data(request):
     if model_sort not in ('most_requests', 'least_requests', 'az', 'recent'):
         model_sort = 'most_requests'
 
+    managed_model_keys = _api_settings_model_keys()
     models = []
     for key, cfg in ai_chat.MODELS.items():
+        if key not in managed_model_keys:
+            continue
         in_frontend = key != 'vision' and not cfg.get('hidden_from_picker', False)
         if model_scope == 'frontend' and not in_frontend:
             continue
@@ -2395,44 +2347,123 @@ def dashboard_payments(request):
     })
 
 
+DROPBOX_FIELD_LIMITS = (('app_key', 200), ('app_secret', 200), ('refresh_token', 400))
+
+
+def _dropbox_sources(settings_obj):
+    """For each credential: saved on this page, or taken from the server settings."""
+    return {
+        name: 'dashboard' if getattr(settings_obj, name) else ('server' if getattr(settings_obj, 'effective_' + name) else '')
+        for name in ('app_key', 'app_secret', 'refresh_token')
+    }
+
+
 @dashboard_staff_required
 def dashboard_backup(request):
     settings_obj = DropboxSettings.get_solo()
+    installed = dropbox_backup.dropbox is not None
     backups = []
     list_error = None
-    if settings_obj.is_configured:
+    account = None
+    account_error = None
+    if installed and settings_obj.is_configured:
         try:
-            # Dropbox's API always returns client_modified as a naive UTC
-            # datetime — Django's |date template filter only auto-converts
-            # timezone-*aware* values to the local (IST) timezone, so left
-            # naive this rendered as raw UTC clock time mislabeled as local.
-            backups = [
-                {'name': f.name, 'client_modified': timezone.localtime(f.client_modified.replace(tzinfo=dt_timezone.utc))}
-                for f in dropbox_backup.list_backups(settings_obj)
-            ]
+            account = dropbox_backup.account_info(settings_obj)
         except dropbox_backup.BackupError as exc:
-            list_error = str(exc)
+            account_error = str(exc)
+        if account_error:
+            list_error = 'Backups can be listed once the Dropbox connection above works.'
+        else:
+            try:
+                # Dropbox's API always returns client_modified as a naive UTC
+                # datetime — Django's |date template filter only auto-converts
+                # timezone-*aware* values to the local (IST) timezone, so left
+                # naive this rendered as raw UTC clock time mislabeled as local.
+                backups = [
+                    {'name': f.name, 'client_modified': timezone.localtime(f.client_modified.replace(tzinfo=dt_timezone.utc))}
+                    for f in dropbox_backup.list_backups(settings_obj)
+                ]
+            except dropbox_backup.BackupError as exc:
+                list_error = str(exc)
 
+    sources = _dropbox_sources(settings_obj)
     return render(request, 'dashboard/backup.html', {
         'active': 'backup', 'settings_obj': settings_obj, 'backups': backups,
-        'list_error': list_error, 'dropbox_installed': dropbox_backup.dropbox is not None,
+        'list_error': list_error, 'dropbox_installed': installed,
         'backup_folder': dropbox_backup.BACKUP_FOLDER,
+        'account': account, 'account_error': account_error,
+        'connected': bool(account),
+        'sources': sources,
+        'saved_here': any(value == 'dashboard' for value in sources.values()),
+        'effective_app_key': settings_obj.effective_app_key,
     })
 
 
 @dashboard_staff_required
 def dashboard_backup_settings(request):
+    """Save, test or reset the Dropbox credentials from the Backup & Restore page.
+
+    New credentials are checked against Dropbox first and only saved when they
+    connect, so a typo can't lock the dashboard out of the existing storage."""
+    if request.method != 'POST':
+        return redirect('dashboard_backup')
     settings_obj = DropboxSettings.get_solo()
-    form = DropboxSettingsForm(request.POST or None, instance=settings_obj)
-    saved = False
-    if request.method == 'POST' and form.is_valid():
-        form.save()
-        saved = True
-        form = DropboxSettingsForm(instance=settings_obj)
-    return render(request, 'dashboard/backup_settings.html', {
-        'active': 'backup', 'form': form, 'settings_obj': settings_obj, 'saved': saved,
-        'dropbox_installed': dropbox_backup.dropbox is not None,
-    })
+    action = request.POST.get('action', 'save')
+
+    if action == 'reset':
+        dropbox_backup.forget_account(settings_obj)
+        settings_obj.app_key = settings_obj.app_secret = settings_obj.refresh_token = ''
+        settings_obj.save()
+        dropbox_images.reset_credentials()
+        if settings_obj.is_configured:
+            messages.success(request, "Using this server's built-in Dropbox credentials again.")
+        else:
+            messages.success(request, 'Saved Dropbox credentials removed. Add new ones to connect.')
+        return redirect('dashboard_backup')
+
+    if action == 'test':
+        try:
+            info = dropbox_backup.account_info(settings_obj, refresh=True)
+            messages.success(request, f'Connection works — Dropbox account {info["email"] or info["name"] or "connected"}.')
+        except dropbox_backup.BackupError as exc:
+            messages.error(request, str(exc))
+        return redirect('dashboard_backup')
+
+    entered = {name: request.POST.get(name, '').strip() for name, _ in DROPBOX_FIELD_LIMITS}
+    for name, limit in DROPBOX_FIELD_LIMITS:
+        if len(entered[name]) > limit:
+            messages.error(request, f'That value is too long ({name.replace("_", " ")} can be at most {limit} characters).')
+            return redirect('dashboard_backup')
+    if not any(entered.values()):
+        messages.error(request, 'Enter at least one value to save, or use "Use server credentials" to remove the saved ones.')
+        return redirect('dashboard_backup')
+
+    candidate = DropboxSettings(
+        app_key=entered['app_key'] or settings_obj.app_key,
+        app_secret=entered['app_secret'] or settings_obj.app_secret,
+        refresh_token=entered['refresh_token'] or settings_obj.refresh_token,
+    )
+    if not candidate.is_configured:
+        messages.error(request, 'Dropbox needs all three: App Key, App Secret and Refresh Token.')
+        return redirect('dashboard_backup')
+    try:
+        info = dropbox_backup.account_info(candidate, refresh=True)
+    except dropbox_backup.BackupError as exc:
+        messages.error(request, f'Not saved — {exc}')
+        return redirect('dashboard_backup')
+
+    previous = dropbox_backup.credentials_fingerprint(settings_obj)
+    settings_obj.app_key = candidate.app_key
+    settings_obj.app_secret = candidate.app_secret
+    settings_obj.refresh_token = candidate.refresh_token
+    settings_obj.save()
+    dropbox_images.reset_credentials()
+    who = info['email'] or info['name'] or 'the new Dropbox account'
+    if previous != dropbox_backup.credentials_fingerprint(settings_obj):
+        messages.success(request, f'Connected to {who}. The backup list below now shows what is stored in this account.')
+    else:
+        messages.success(request, f'Saved. Still connected to {who}.')
+    return redirect('dashboard_backup')
 
 
 @dashboard_staff_required
@@ -2533,21 +2564,14 @@ AI_FREE_MESSAGE_LIMIT = 20        # free messages for a logged-in, non-staff, un
 AI_FREE_MODEL_KEYS = frozenset({
     'quick', 'code', ai_chat.FLUX_KLEIN_4B_MODEL_KEY,
     'flux-kontext-dev', 'qwen-image-edit',
-    ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
-    ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
 })
 # Accounts that already have full model access (staff or an active AI
-# subscription) keep seeing the ChatGPT-branded and Gemini picker entries as
+# subscription) keep seeing the ChatGPT-branded picker entries as
 # before. New/free accounts and signed-out guests never see them at all (not
 # even locked/greyed-out) — they get the Vidhyora-branded lineup only.
 AI_FULL_ACCESS_ONLY_MODEL_KEYS = frozenset({
     ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, 'gpt-oss-20b',
-    ai_chat.GEMINI_36_FLASH_MODEL_KEY,
 })
-_CLOUDFLARE_IMAGE_MODEL_KEYS = (
-    ai_chat.SDXL_LIGHTNING_MODEL_KEY, ai_chat.FLUX_1_SCHNELL_MODEL_KEY,
-    ai_chat.SDXL_BASE_MODEL_KEY, ai_chat.DREAMSHAPER_8_LCM_MODEL_KEY,
-)
 # ~1.5MB of raw image data as a base64 data: URI (~2M chars) — well under
 # Django's default 2.5MB DATA_UPLOAD_MAX_MEMORY_SIZE for the whole request
 # body, so an oversized image gets our own clean error instead of Django's
@@ -3955,34 +3979,9 @@ def _vidhyora_public_reply(reply, mode_label):
     return cleaned
 
 
-# "Gemini 3.6 Flash" is served by DiffusionGemma on NVIDIA behind the scenes,
-# but must only ever present as Gemini 3.6 Flash. The prompt tells the model
-# so; this rewrites whatever still slips through, anywhere in the reply.
-_GEMINI_HIDDEN_MODEL_RE = re.compile(
-    r"\b(?:google/)?(?:diffusion[\s-]?gemma|gemma)"
-    r"(?:[\s-]?\d(?:\.\d+)?(?![\d.]*b))?(?:[\s-]?\d+b)?(?:[\s-]?a\d+b)?(?:-it)?\b",
-    re.IGNORECASE,
-)
-_GEMINI_THINKING_MARKER_RE = re.compile(r"<\|?channel\|?>(?:\s*thought)?[ \t]*")
-_GEMINI_DEEPMIND_RE = re.compile(r"\bgoogle[\s-]?deep[\s-]?mind\b", re.IGNORECASE)
-_GEMINI_OPEN_WEIGHTS_RE = re.compile(
-    r"\ban?\s+open[\s-]?(?:weights?|source)(?:\s+large\s+language)?\s+(?:model|llm)\b",
-    re.IGNORECASE,
-)
-
-
-def _gemini_public_reply(reply):
-    cleaned = str(reply or '')
-    cleaned = _GEMINI_THINKING_MARKER_RE.sub('', cleaned)
-    cleaned = _GEMINI_OPEN_WEIGHTS_RE.sub('a Google model', cleaned)
-    cleaned = _GEMINI_DEEPMIND_RE.sub('Google', cleaned)
-    cleaned = _GEMINI_HIDDEN_MODEL_RE.sub(ai_chat.MODELS[ai_chat.GEMINI_36_FLASH_MODEL_KEY]['label'], cleaned)
-    return cleaned
-
-
 def _ai_public_routed_model_key(response_model_key, routed_model_key):
     """Never expose ChatGPT's private worker selection to the browser."""
-    if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, *_CLOUDFLARE_IMAGE_MODEL_KEYS, 'gpt-oss-20b', 'flux-kontext-dev', 'qwen-image-edit'):
+    if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, 'gpt-oss-20b', 'flux-kontext-dev', 'qwen-image-edit'):
         return response_model_key
     return routed_model_key
 
@@ -4027,12 +4026,12 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
     """Run a FLUX generation/editing turn and persist the real image URL."""
     display_model_key = response_model_key or ai_chat.FLUX_KLEIN_4B_MODEL_KEY
     # Only FLUX-drawn images count towards the image panel's request numbers.
-    counts_for_flux = display_model_key not in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS)
+    counts_for_flux = display_model_key not in ('flux-kontext-dev', 'qwen-image-edit')
     if counts_for_flux:
         model_controls.record_request(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     try:
         try:
-            if display_model_key in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS):
+            if display_model_key in ('flux-kontext-dev', 'qwen-image-edit'):
                 generated = image_generation.generate_image(prompt, source_image or None, model_key=display_model_key)
             else:
                 generated = image_generation.generate_image(prompt, source_image or None)
@@ -4526,7 +4525,7 @@ def _ai_chat_send(request):
     elif image_prompt_writing:
         model_key = 'vision' if image_data else 'quick'
         request_category = 'image' if image_data else 'writing'
-    elif selected_model_key in (ai_chat.FLUX_KLEIN_4B_MODEL_KEY, 'flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS):
+    elif selected_model_key in (ai_chat.FLUX_KLEIN_4B_MODEL_KEY, 'flux-kontext-dev', 'qwen-image-edit'):
         if source_image_data or (message and not ai_chat.is_image_capability_question(message)) or not message:
             # Once the user deliberately selects FLUX, descriptive prompts
             # such as "a robot in a futuristic classroom" are valid even
@@ -4620,7 +4619,7 @@ def _ai_chat_send(request):
     # would be drawn by FLUX, whichever model the user picked.
     if (
         model_key == ai_chat.FLUX_KLEIN_4B_MODEL_KEY
-        and response_model_key not in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS)
+        and response_model_key not in ('flux-kontext-dev', 'qwen-image-edit')
         and not ai_chat.is_model_enabled(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     ):
         return JsonResponse({
@@ -5023,8 +5022,6 @@ def _ai_chat_send(request):
                 text = _chatgpt_public_reply(text, ai_chat.chatgpt_persona_name(response_model_key))
             elif fix_wrong_persona_identity:
                 text = _vidhyora_public_reply(text, response_model_label)
-                if response_model_key == ai_chat.GEMINI_36_FLASH_MODEL_KEY:
-                    text = _gemini_public_reply(text)
             if generated_file_spec:
                 text = _strip_fake_download_links(text)
             return text

@@ -4,6 +4,7 @@ store owner's Dropbox App Key/Secret + a long-lived OAuth2 refresh token
 `dropbox` package isn't installed or credentials aren't set yet.
 """
 import datetime
+import hashlib
 import io
 import json
 import logging
@@ -15,6 +16,7 @@ from contextlib import closing
 from pathlib import Path
 
 from django.conf import settings as dj_settings
+from django.core.cache import cache
 
 try:
     import dropbox
@@ -81,6 +83,79 @@ def _client(settings_obj):
         max_retries_on_error=1,
         max_retries_on_rate_limit=0,
     )
+
+
+ACCOUNT_CACHE_SECONDS = 300
+
+
+def credentials_fingerprint(settings_obj):
+    """Identifies which Dropbox app/account a set of credentials points at."""
+    raw = '|'.join((
+        settings_obj.effective_app_key, settings_obj.effective_app_secret,
+        settings_obj.effective_refresh_token,
+    ))
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+def _describe_connection_error(exc):
+    text = str(exc)
+    lowered = text.lower()
+    if 'invalid_grant' in lowered or 'invalid_access_token' in lowered or 'expired' in lowered:
+        return ('Dropbox rejected the Refresh Token. Generate a new one for this app '
+                'with token_access_type=offline and paste it here.')
+    if 'invalid_client' in lowered or 'app key' in lowered or 'app secret' in lowered:
+        return 'Dropbox rejected the App Key or App Secret. Check both against your app in the Dropbox App Console.'
+    if 'timed out' in lowered or 'connection' in lowered or 'name resolution' in lowered:
+        return 'Could not reach Dropbox. Check the server\'s internet connection and try again.'
+    return f'Could not connect to Dropbox: {text[:200]}'
+
+
+def account_info(settings_obj, *, refresh=False):
+    """Who the credentials belong to: name, email, folder and space used.
+
+    Cached for a few minutes (keyed by the credentials) so opening the backup
+    page doesn't make extra Dropbox calls every time. Raises BackupError when
+    Dropbox rejects the credentials. An app without the account_info.read
+    permission still counts as connected, just without the name and email.
+    """
+    cache_key = f'dropbox-account-{credentials_fingerprint(settings_obj)}'
+    if not refresh:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+    dbx = _client(settings_obj)
+    info = {
+        'name': '', 'email': '', 'used': None, 'allocated': None,
+        'limited': False, 'folder': BACKUP_FOLDER,
+    }
+    try:
+        account = dbx.users_get_current_account()
+        info['name'] = account.name.display_name
+        info['email'] = account.email
+        try:
+            usage = dbx.users_get_space_usage()
+            info['used'] = usage.used
+            allocation = usage.allocation
+            if allocation.is_individual():
+                info['allocated'] = allocation.get_individual().allocated
+            elif allocation.is_team():
+                info['allocated'] = allocation.get_team().allocated
+        except Exception:
+            logger.info('Dropbox space usage unavailable', exc_info=True)
+    except Exception as exc:
+        if 'missing_scope' not in str(exc):
+            raise BackupError(_describe_connection_error(exc))
+        try:
+            dbx.check_user(query='ping')
+        except Exception as ping_exc:
+            raise BackupError(_describe_connection_error(ping_exc))
+        info['limited'] = True
+    cache.set(cache_key, info, ACCOUNT_CACHE_SECONDS)
+    return info
+
+
+def forget_account(settings_obj):
+    cache.delete(f'dropbox-account-{credentials_fingerprint(settings_obj)}')
 
 
 def _ensure_folder(dbx, path):

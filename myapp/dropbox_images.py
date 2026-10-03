@@ -41,6 +41,7 @@ import queue
 import re
 import secrets
 import threading
+import time
 
 from django.conf import settings
 from django.utils import timezone
@@ -79,10 +80,51 @@ _worker_lock = threading.Lock()
 
 # Touched only by the worker thread, so it needs no lock of its own.
 _client = None
+_client_credentials = None
+
+_CREDENTIAL_SETTINGS = ('DROPBOX_APP_KEY', 'DROPBOX_APP_SECRET', 'DROPBOX_REFRESH_TOKEN')
+_CREDENTIAL_TTL_SECONDS = 30
+_saved_credentials = (0.0, ('', '', ''))
 
 
 def _setting(name):
     return (getattr(settings, name, '') or '').strip()
+
+
+def _dashboard_credentials():
+    """The App Key/Secret/Refresh Token saved on the dashboard's Backup &
+    Restore page, re-read at most every 30 seconds (or right after a change
+    through reset_credentials) so this module never queries per image."""
+    global _saved_credentials
+    stamp, value = _saved_credentials
+    if stamp and time.monotonic() - stamp < _CREDENTIAL_TTL_SECONDS:
+        return value
+    value = ('', '', '')
+    try:
+        from .models import DropboxSettings
+        row = DropboxSettings.objects.filter(pk=1).values_list('app_key', 'app_secret', 'refresh_token').first()
+        if row:
+            value = tuple((part or '').strip() for part in row)
+    except Exception:
+        logger.debug('Could not read the saved Dropbox credentials', exc_info=True)
+    _saved_credentials = (time.monotonic(), value)
+    return value
+
+
+def _credentials():
+    """(app key, app secret, refresh token): what the dashboard saved wins,
+    and the server settings fill whatever it left blank."""
+    saved = _dashboard_credentials()
+    return tuple(saved[i] or _setting(name) for i, name in enumerate(_CREDENTIAL_SETTINGS))
+
+
+def reset_credentials():
+    """Called when the dashboard changes the Dropbox account: the next upload
+    reads the new credentials and builds a fresh client."""
+    global _client, _client_credentials, _saved_credentials
+    _saved_credentials = (0.0, ('', '', ''))
+    _client = None
+    _client_credentials = None
 
 
 def is_enabled():
@@ -96,10 +138,7 @@ def is_enabled():
 
 def is_configured():
     """True when all three Dropbox credentials are present."""
-    return all(
-        _setting(name)
-        for name in ('DROPBOX_APP_KEY', 'DROPBOX_APP_SECRET', 'DROPBOX_REFRESH_TOKEN')
-    )
+    return all(_credentials())
 
 
 def folder_for(email):
@@ -178,22 +217,25 @@ def _build_client():
         return None
     # A refresh token (not a short-lived access token) so the client renews
     # itself indefinitely without anyone re-authorising the app by hand.
+    app_key, app_secret, refresh_token = _credentials()
     return dropbox.Dropbox(
-        oauth2_refresh_token=_setting('DROPBOX_REFRESH_TOKEN'),
-        app_key=_setting('DROPBOX_APP_KEY'),
-        app_secret=_setting('DROPBOX_APP_SECRET'),
+        oauth2_refresh_token=refresh_token,
+        app_key=app_key,
+        app_secret=app_secret,
         timeout=UPLOAD_TIMEOUT_SECONDS,
     )
 
 
 def _upload(source, folder, filename):
-    global _client
+    global _client, _client_credentials
     content = _resolve_content(source)
     if not content:
         logger.warning('Skipped a Dropbox archive upload with no usable image data (%s)', filename)
         return None
-    if _client is None:
+    credentials = _credentials()
+    if _client is None or _client_credentials != credentials:
         _client = _build_client()
+        _client_credentials = credentials
     if _client is None:
         return None
 

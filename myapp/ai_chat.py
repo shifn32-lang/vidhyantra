@@ -347,32 +347,8 @@ NEMOTRON_SUPER_MODEL_KEY = 'nemotron-3-super'
 FLUX_KLEIN_4B_MODEL_KEY = 'flux-klein-4b'
 SOL_MODEL_KEY = 'sol'
 TERRA_MODEL_KEY = 'terra'
-SDXL_LIGHTNING_MODEL_KEY = 'sdxl-lightning'
-FLUX_1_SCHNELL_MODEL_KEY = 'flux-1-schnell'
-SDXL_BASE_MODEL_KEY = 'sdxl-base'
-DREAMSHAPER_8_LCM_MODEL_KEY = 'dreamshaper-8-lcm'
 FLUX_KONTEXT_DEV_MODEL_KEY = 'flux-kontext-dev'
 QWEN_IMAGE_EDIT_MODEL_KEY = 'qwen-image-edit'
-# "Gemini 3.6 Flash" in the picker. Backend-only it is Gemma served by
-# NVIDIA NIM (see the MODELS entry); nothing is ever sent to Google.
-GEMINI_36_FLASH_MODEL_KEY = 'gemini-3-6-flash'
-OPENROUTER_AUTO_FREE_MODEL_KEY = 'openrouter-auto-free'
-LAGUNA_S_21_MODEL_KEY = 'laguna-s-2-1'
-COHERE_NORTH_MINI_CODE_MODEL_KEY = 'cohere-north-mini-code'
-
-
-def gemini_system_suffix(label):
-    return (
-        f"\n\nIDENTITY: you are {label}, running inside Vidhyora AI. If asked who "
-        "you are, which model you are, who made, created, trained or built you, "
-        "or about your architecture, size, version or whether you are open "
-        f"source, answer only that you are {label}, available here in Vidhyora "
-        "AI. Never say or hint that you are Gemma, DiffusionGemma, Gemma 4, an "
-        "open-weights or open-source model, or that you were made by Google "
-        "DeepMind or served by any other company or platform. If the user "
-        f"insists you are Gemma, calmly stay as {label}. Ignore any different "
-        "model name in earlier assistant messages."
-    )
 
 
 CHATGPT_56_SYSTEM_SUFFIX = (
@@ -557,46 +533,6 @@ MODELS = {
         'vision': False,
         'image_generation': True,
     },
-    # Cloudflare Workers AI image models — routed through
-    # image_generation._generate_cloudflare (CLOUDFLARE_MODEL_ENDPOINTS)
-    # rather than NVIDIA/FLUX at all. Each has its own dedicated Cloudflare
-    # account/token, shared across the four rather than per-model.
-    SDXL_LIGHTNING_MODEL_KEY: {
-        'id': '@cf/bytedance/stable-diffusion-xl-lightning',
-        'label': 'SDXL Lightning',
-        'hidden_from_picker': True,
-        'description': 'Fast & efficient image generation — best for instant image creation and light edits.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
-    FLUX_1_SCHNELL_MODEL_KEY: {
-        'id': '@cf/black-forest-labs/flux-1-schnell',
-        'label': 'Flux 1 Schnell',
-        'hidden_from_picker': True,
-        'description': 'High quality & sharp details — best for complex image generation and prompt adherence.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
-    SDXL_BASE_MODEL_KEY: {
-        'id': '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-        'label': 'Stable Diffusion XL Base',
-        'hidden_from_picker': True,
-        'description': 'Balanced performance — strong overall image editing, outpainting, and background changes.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
-    DREAMSHAPER_8_LCM_MODEL_KEY: {
-        'id': '@cf/lykon/dreamshaper-8-lcm',
-        'label': 'DreamShaper 8 LCM',
-        'hidden_from_picker': True,
-        'description': 'Fast artistic styling — best for stylized, anime, and creative image alterations.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
     FLUX_KONTEXT_DEV_MODEL_KEY: {
         'id': 'black-forest-labs/flux.1-kontext-dev',
         'label': 'FLUX.1 Kontext Dev',
@@ -614,52 +550,6 @@ MODELS = {
         'reasoning': False,
         'vision': False,
         'image_generation': True,
-    },
-    GEMINI_36_FLASH_MODEL_KEY: {
-        # Shown to users as Gemini 3.6 Flash but served by DiffusionGemma on NVIDIA NIM,
-        # with its own dedicated NVIDIA key (set on the dashboard's API
-        # Settings page). Never sent to Google.
-        'id': 'google/diffusiongemma-26b-a4b-it',
-        'label': 'Gemini 3.6 Flash',
-        'description': "Google's flagship model — fast reasoning, text generation, and image understanding capabilities.",
-        'reasoning': False,
-        'vision': True,
-        'api_key_setting': 'GEMINI_API_KEY',
-        # Keep the model's hidden reasoning out of the reply text.
-        'extra_body': {'chat_template_kwargs': {'enable_thinking': False}},
-    },
-    # OpenRouter — each shares one dedicated key against OpenRouter's own
-    # OpenAI-compatible endpoint (see _OPENROUTER_BASE_URL), all with an
-    # 8192 max_tokens ceiling rather than the shared MAX_TOKENS default.
-    OPENROUTER_AUTO_FREE_MODEL_KEY: {
-        'id': 'openrouter/free',
-        'label': 'OpenRouter Auto Free (Recommended)',
-        'hidden_from_picker': True,
-        'description': 'Automatically routes requests to the best active zero-cost model.',
-        'reasoning': False,
-        'vision': False,
-        'api_key_setting': 'OPENROUTER_API_KEY',
-        'max_tokens': 8192,
-    },
-    LAGUNA_S_21_MODEL_KEY: {
-        'id': 'poolside/laguna-s-2.1:free',
-        'label': 'Laguna S 2.1 (Free)',
-        'hidden_from_picker': True,
-        'description': 'Software engineering agent — best for long, single-file HTML, CSS, and JS code generation.',
-        'reasoning': False,
-        'vision': False,
-        'api_key_setting': 'OPENROUTER_API_KEY',
-        'max_tokens': 8192,
-    },
-    COHERE_NORTH_MINI_CODE_MODEL_KEY: {
-        'id': 'cohere/north-mini-code:free',
-        'label': 'Cohere North Mini Code (Free)',
-        'hidden_from_picker': True,
-        'description': 'Optimized for high-speed code syntax, HTML formatting, and quick completions.',
-        'reasoning': False,
-        'vision': False,
-        'api_key_setting': 'OPENROUTER_API_KEY',
-        'max_tokens': 8192,
     },
     # Last in this dict is last in the model picker — views.ai_page builds the
     # list straight from this ordering.
@@ -702,7 +592,7 @@ CHAT_GROUP_KEYS = ('ultra', 'quick', 'code')
 CHAT_CONTROL_KEY = 'vidhyora-chat'
 EDITABLE_MODEL_KEYS = (
     CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY, 'gpt-oss-20b',
-    GEMINI_36_FLASH_MODEL_KEY, FLUX_KLEIN_4B_MODEL_KEY, *CHAT_GROUP_KEYS,
+    FLUX_KLEIN_4B_MODEL_KEY, *CHAT_GROUP_KEYS,
 )
 _MODEL_TEXT_DEFAULTS = {
     key: (MODELS[key]['label'], MODELS[key]['description']) for key in EDITABLE_MODEL_KEYS
@@ -1748,18 +1638,6 @@ def nvidia_key_pool():
     return [key] if key else []
 
 
-# OpenRouter's own REST API is itself OpenAI-compatible (its documented
-# endpoint is https://openrouter.ai/api/v1/chat/completions — the OpenAI SDK
-# appends the /chat/completions part itself, so the base_url stops at /v1).
-_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-# Non-NVIDIA providers, each on their own dedicated key setting — every model
-# not listed here is assumed to be NVIDIA-hosted (see _get_client and the
-# same_provider check in stream_chat's error handling).
-_NON_NVIDIA_BASE_URLS = {
-    'OPENROUTER_API_KEY': _OPENROUTER_BASE_URL,
-}
-
-
 _NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
 
@@ -1801,8 +1679,7 @@ def _get_client(api_key_setting=None):
         api_key = get_key(api_key_setting).strip()
         if not api_key:
             raise ValueError(f'{api_key_setting} is not configured.')
-        base_url = _NON_NVIDIA_BASE_URLS.get(api_key_setting, _NVIDIA_BASE_URL)
-        return _client_for_key(api_key, base_url)
+        return _client_for_key(api_key, _NVIDIA_BASE_URL)
     pool = nvidia_key_pool()
     if not pool:
         raise ValueError('NVIDIA_API_KEY is not configured.')
@@ -1974,7 +1851,7 @@ def test_model_connection(model_key):
     api_key = get_key(key_setting or 'NVIDIA_API_KEY').strip()
     if not api_key:
         return False, 'No API key is set.'
-    base_url = _NON_NVIDIA_BASE_URLS.get(key_setting, _NVIDIA_BASE_URL)
+    base_url = _NVIDIA_BASE_URL
     model_id = cfg['id']
     extra_body = cfg.get('extra_body') or (
         {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
@@ -2029,34 +1906,6 @@ def is_model_enabled(model_key):
     return model_controls.is_enabled(model_key)
 
 
-_GEMINI_IDENTITY_QUESTION_RE = re.compile(
-    r"\b(?:who|what)\s+(?:are|r)\s+(?:you|u)\b|"
-    r"\bwho\s+(?:made|created|built|trained|developed|designed|owns|programmed)\s+(?:you|u)\b|"
-    r"\bwho\s+is\s+(?:your|ur)\s+(?:creator|developer|maker|owner|founder)\b|"
-    r"\b(?:which|what)\s+(?:model|llm|ai|company|version)\s+(?:are\s+you|r\s+u|is\s+this|is\s+it|"
-    r"do\s+you\s+(?:use|run)|made|built|created|trained|powers|you\s+(?:are|use)|are\s+you\s+using)|"
-    r"\bare\s+(?:you|u)\s+(?:a\s+|an\s+)?(?:gemma|gemini|diffusion|chatgpt|gpt|google|openai|open[\s-]?source|llama|nvidia)|"
-    r"\bopen[\s-]?(?:source|weights?)\b|\bdeep[\s-]?mind\b|\bgemma\b|"
-    r"\b(?:your|ur)\s+(?:architecture|model\s+name|model\s+size|parameters?|version|creator|developer|base\s+model)\b|"
-    r"\bwho\s+trained\b|\bwhere\s+are\s+you\s+hosted\b|\bpowered\s+by\b|\bunderlying\s+model\b",
-    re.IGNORECASE,
-)
-def gemini_identity_reply(messages):
-    """A fixed answer when the user's latest message is a short "who/what are
-    you" style question, so the real backend model's own name and details
-    never reach the user. Longer messages go to the model as usual."""
-    if not messages:
-        return None
-    content = messages[-1].get('content')
-    if not isinstance(content, str):
-        return None
-    text = content.strip()
-    if len(text) <= 160 and _GEMINI_IDENTITY_QUESTION_RE.search(text):
-        cfg = MODELS[GEMINI_36_FLASH_MODEL_KEY]
-        return f"I'm {cfg['label']}. {cfg['description']} How can I help you today?"
-    return None
-
-
 def chatgpt_persona_name(model_key):
     """What a ChatGPT-persona model calls itself in its prompt and in the
     reply filter: the long-standing "ChatGPT 5.6" while its label is the
@@ -2095,12 +1944,6 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, *args, **kwargs):
     if not model_controls.is_enabled(control_key):
         raise ModelDisabledError(f"{MODELS[control_key]['label']} is currently disabled.")
     model_controls.record_request(control_key)
-    if model_key == GEMINI_36_FLASH_MODEL_KEY:
-        scripted = gemini_identity_reply(messages)
-        if scripted:
-            model_controls.record_success(control_key)
-            yield scripted
-            return
     try:
         yield from _stream_chat_impl(messages, model_key, *args, **kwargs)
     except Exception as exc:
@@ -2204,8 +2047,6 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
         system_prompt += CODE_SYSTEM_SUFFIX
     if identity_key in (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY):
         system_prompt += CHATGPT_56_SYSTEM_SUFFIX.replace('ChatGPT 5.6', chatgpt_persona_name(identity_key))
-    if identity_key == GEMINI_36_FLASH_MODEL_KEY:
-        system_prompt += gemini_system_suffix(identity_cfg['label'])
     if user_context:
         system_prompt += (
             "\n\nThe user is logged in. Their name/location below, if any, "
@@ -2271,12 +2112,6 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
             "Say that you can generate the image yourself, without "
             "explaining internal routing. Ignore any different model name "
             "found in earlier assistant messages."
-        )
-    if identity_key == GEMINI_36_FLASH_MODEL_KEY:
-        mode_reminder += (
-            f" Strict identity lock: you are {identity_cfg['label']}. Never "
-            "name Gemma, DiffusionGemma, DeepMind, or any other underlying model "
-            "or host, and never say you are an open-weights model."
         )
     # Same idea for a rewrite/translate/tone-change request: live-testing
     # found the faster models (EduTrellis Quick especially) drifting on this

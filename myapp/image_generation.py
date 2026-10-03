@@ -312,7 +312,7 @@ def _decode_artifact(payload):
 def _validate_image_bytes(content, *, service_name="The image service"):
     """Detect the format, fully decode, and reject a blank placeholder frame.
 
-    Shared by every backend (NVIDIA and Cloudflare): a matching file
+    Shared by every image backend: a matching file
     signature alone is not proof of a usable image — a truncated payload
     used to be stored and returned as a broken image (report #51 also saw
     all-white/all-black placeholder frames presented as a real generation).
@@ -342,94 +342,6 @@ def _validate_image_bytes(content, *, service_name="The image service"):
             "The image service returned a blank image. Please try again."
         )
     return GeneratedImage(content=content, extension=extension)
-
-
-# Cloudflare Workers AI text-to-image models, picked from the model picker
-# (myapp/ai_chat.py MODELS) rather than being NVIDIA/FLUX at all. Each key
-# here matches a MODELS dict key there.
-CLOUDFLARE_MODEL_ENDPOINTS = {
-    'sdxl-lightning': '@cf/bytedance/stable-diffusion-xl-lightning',
-    'flux-1-schnell': '@cf/black-forest-labs/flux-1-schnell',
-    'sdxl-base': '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-    'dreamshaper-8-lcm': '@cf/lykon/dreamshaper-8-lcm',
-}
-
-
-def _generate_cloudflare(prompt, source_image, model_key):
-    """Run a Cloudflare Workers AI text-to-image model.
-
-    Response shape from Workers AI for these models is normally raw image
-    bytes (the documented curl examples pipe straight to --output image.png),
-    but a failure comes back as JSON ({"success": false, "errors": [...]})
-    instead, so the content-type decides how to read the body.
-    """
-    account_id = _get_key('CLOUDFLARE_ACCOUNT_ID').strip()
-    token = _get_key('CLOUDFLARE_API_TOKEN').strip()
-    endpoint = CLOUDFLARE_MODEL_ENDPOINTS.get(model_key)
-    if not endpoint:
-        raise ImageGenerationError('That image model is not recognized.', status_code=400)
-    if not account_id or not token:
-        raise ImageGenerationError(
-            'Image generation is not configured yet. Set CLOUDFLARE_ACCOUNT_ID and '
-            'CLOUDFLARE_API_TOKEN on the server.',
-        )
-
-    body = {'prompt': prompt}
-    if source_image:
-        # Best-effort img2img: not every Workers AI model honours image_b64,
-        # but the ones that support editing (SDXL Base, DreamShaper) do, and
-        # a model that ignores it simply falls back to text-to-image.
-        data_uri = _normalize_source_image(source_image)
-        body['image_b64'] = data_uri.split(',', 1)[1]
-
-    url = f'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{endpoint}'
-    try:
-        response = requests.post(
-            url,
-            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-            json=body,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        raise ImageGenerationError('Could not reach the image service. Please try again.') from exc
-
-    content_type = response.headers.get('Content-Type', '')
-    if response.status_code == 200 and content_type.startswith('image/'):
-        return _validate_image_bytes(response.content)
-
-    # Anything else (an error, or a JSON success body carrying base64 instead
-    # of a raw stream) is read as JSON.
-    try:
-        payload = response.json()
-    except ValueError:
-        raise ImageGenerationError('The image service returned an invalid response. Please try again.')
-
-    if response.status_code == 429:
-        raise ImageGenerationError('The image-generation limit has been reached. Please wait and try again later.', status_code=429)
-    if response.status_code in (401, 403):
-        raise ImageGenerationError('Image generation is not configured correctly right now. Please contact support.')
-    if response.status_code == 404:
-        raise ImageGenerationError('This image model is not available on the connected account right now.')
-
-    result = payload.get('result') if isinstance(payload, dict) else None
-    encoded = None
-    if isinstance(result, dict):
-        encoded = result.get('image')
-    elif isinstance(result, str):
-        encoded = result
-    if isinstance(encoded, str) and encoded:
-        try:
-            content = base64.b64decode(encoded, validate=True)
-        except (ValueError, binascii.Error):
-            raise ImageGenerationError('The image service returned an unreadable image. Please try again.')
-        return _validate_image_bytes(content)
-
-    errors = payload.get('errors') if isinstance(payload, dict) else None
-    # Cloudflare's own error text sometimes names the model/provider — trim
-    # that off rather than surface it, since every backend here is meant to
-    # look like a single "the image service", not a specific vendor.
-    detail = '; '.join(str(e.get('message', e)) for e in errors) if errors else 'Please try again.'
-    raise ImageGenerationError(f'The image service could not generate that image. {detail}', blocked=True)
 
 
 def _generate_qwen_edit(prompt, source_image):
@@ -482,8 +394,6 @@ def generate_image(prompt, source_image=None, *, model_key=None):
 def _dispatch_generate(prompt, source_image, model_key):
     if model_key == 'qwen-image-edit':
         return _generate_qwen_edit(prompt, source_image)
-    if model_key in CLOUDFLARE_MODEL_ENDPOINTS:
-        return _generate_cloudflare(prompt, source_image, model_key)
 
     editing = bool(source_image)
     kontext = model_key == 'flux-kontext-dev'

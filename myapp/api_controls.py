@@ -1,5 +1,5 @@
-"""The panels on the dashboard's API Settings page: one per ChatGPT model, the
-Gemini model, image generation and web search. Each panel can hold its API
+"""The panels on the dashboard's API Settings page: one per ChatGPT model,
+image generation and web search. Each panel can hold its API
 key, run a live connection test, switch the feature on/off, show how many
 requests it has served, and (for models) rename it / change its description.
 
@@ -42,8 +42,6 @@ def definitions():
         {'id': 'gpt55', 'kind': KIND_TEXT, 'model_key': 'gpt-oss-20b',
          'note': 'Not shown in the model picker today; still used for direct and API access.',
          'keys': [('NVIDIA_GPT_OSS_API_KEY', nvidia)]},
-        {'id': 'gemini', 'kind': KIND_TEXT, 'model_key': ai_chat.GEMINI_36_FLASH_MODEL_KEY,
-         'note': '', 'keys': [('GEMINI_API_KEY', nvidia)]},
         {'id': 'coding', 'kind': KIND_TEXT, 'model_key': coding_api.CONTROL_KEY, 'test_model': 'code',
          'title': 'Start Coding (OpenCode CLI)', 'keys': [],
          'enable_text': 'let users connect the OpenCode terminal agent to Vidhyora Code (Start coding in the account menu)',

@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.utils.text import slugify
 
 from myapp import ai_chat
-from myapp.models import Order, StoreProfile, PaymentSettings, DropboxSettings, EmailSettings, PWASettings, SiteCustomization
+from myapp.models import Order, StoreProfile, PaymentSettings, EmailSettings, PWASettings, SiteCustomization
 
 
 # The only amounts staff are allowed to record as manually paid — a free-text
@@ -289,21 +289,6 @@ class PaymentSettingsForm(forms.ModelForm):
     class Meta:
         model = PaymentSettings
         fields = ['razorpay_key_id', 'razorpay_key_secret', 'is_razorpay_enabled', 'is_test_mode', 'cod_enabled']
-
-
-class DropboxSettingsForm(forms.ModelForm):
-    app_secret = forms.CharField(
-        required=False, widget=forms.PasswordInput(render_value=True, attrs={'autocomplete': 'new-password'}),
-        help_text='From your Dropbox App Console — kept secret, never exposed to the storefront.',
-    )
-    refresh_token = forms.CharField(
-        required=False, widget=forms.PasswordInput(render_value=True, attrs={'autocomplete': 'new-password'}),
-        help_text="A long-lived OAuth2 refresh token for your Dropbox app (doesn't expire like a short-lived access token).",
-    )
-
-    class Meta:
-        model = DropboxSettings
-        fields = ['app_key', 'app_secret', 'refresh_token']
 
 
 class PWASettingsForm(forms.ModelForm):

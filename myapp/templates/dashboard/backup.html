@@ -35,6 +35,39 @@
 .btn-danger{background:var(--red);color:#fff;white-space:nowrap}
 .btn-danger:hover{background:var(--red-dark)}
 @media(max-width:620px){.backup-danger-body{grid-template-columns:1fr}.backup-danger-copy{grid-column:auto}.btn-danger{width:100%;justify-content:center}}
+.dbx-head-title{display:flex;align-items:center;gap:.6rem}
+.dbx-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.74rem;font-weight:800;padding:.25rem .7rem;border-radius:50px}
+.dbx-badge.ok{background:#e8f8ee;color:#177245}
+.dbx-badge.bad{background:#fdeaea;color:var(--red)}
+.dbx-badge.idle{background:#fff7e6;color:#8a5a00}
+.dbx-body{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.15fr);gap:0}
+@media(max-width:900px){.dbx-body{grid-template-columns:1fr}}
+.dbx-account{padding:1.3rem 1.4rem;border-right:1px solid var(--line)}
+@media(max-width:900px){.dbx-account{border-right:none;border-bottom:1px solid var(--line)}}
+.dbx-who{display:flex;align-items:center;gap:.8rem;margin-bottom:1rem}
+.dbx-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#3b5bdb,#2b3fa8);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;flex:none}
+.dbx-avatar.off{background:#c9cfda}
+.dbx-who b{display:block;color:var(--head);font-size:.95rem;word-break:break-all}
+.dbx-who span{display:block;font-size:.8rem;color:var(--text);word-break:break-all}
+.dbx-facts{list-style:none;margin:0 0 1rem;padding:0}
+.dbx-facts li{display:flex;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--line);font-size:.82rem;color:var(--text);align-items:flex-start}
+.dbx-facts li:last-child{border-bottom:none}
+.dbx-facts i{width:16px;text-align:center;color:#3b5bdb;margin-top:.2rem}
+.dbx-facts b{color:var(--head)}
+.dbx-meter{height:6px;border-radius:50px;background:var(--line);overflow:hidden;margin-top:.35rem}
+.dbx-meter span{display:block;height:100%;background:#3b5bdb;border-radius:50px}
+.dbx-alert{border-radius:12px;padding:.8rem 1rem;font-size:.82rem;margin-bottom:1rem;background:#fdeaea;color:#a4162f;line-height:1.5}
+.dbx-form{padding:1.3rem 1.4rem}
+.dbx-form h4{font-size:.9rem;font-weight:800;color:var(--head);margin:0 0 .25rem}
+.dbx-form .dbx-lead{font-size:.8rem;color:var(--text);margin:0 0 1rem;line-height:1.5}
+.dbx-secret{position:relative}
+.dbx-secret input{padding-right:2.6rem!important}
+.dbx-secret button{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);border:none;background:none;color:#9aa3b0;cursor:pointer;padding:.4rem .5rem;font-size:.85rem}
+.dbx-secret button:hover{color:var(--head)}
+.dbx-source{font-weight:600;font-size:.7rem;color:#9aa3b0;margin-left:.35rem}
+.dbx-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:1rem}
+.dbx-inline-form{display:inline}
+.dbx-note{font-size:.74rem;color:#9aa3b0;margin-top:.9rem;line-height:1.5}
 </style>
 {% endblock %}
 
@@ -50,12 +83,89 @@
   <b><i class="fas fa-triangle-exclamation"></i> The <code>dropbox</code> Python package isn't installed.</b>
   <div style="margin-top:.3rem">Run <code>pip install dropbox</code> (already listed in requirements.txt) and restart the app.</div>
 </div>
-{% elif not settings_obj.is_configured %}
-<div class="not-configured">
-  <b><i class="fas fa-triangle-exclamation"></i> Dropbox isn't connected yet.</b>
-  <div style="margin-top:.3rem">Add your App Key, App Secret and Refresh Token in <a href="{% url 'dashboard_backup_settings' %}">Backup Settings</a> before you can back up or restore.</div>
-</div>
 {% endif %}
+
+<div class="panel" id="dropbox">
+  <div class="panel-head">
+    <h3 class="dbx-head-title"><i class="fab fa-dropbox" style="color:#3b5bdb"></i> Dropbox storage</h3>
+    {% if connected %}<span class="dbx-badge ok"><i class="fas fa-circle-check"></i> Connected</span>
+    {% elif account_error %}<span class="dbx-badge bad"><i class="fas fa-circle-xmark"></i> Connection failed</span>
+    {% else %}<span class="dbx-badge idle"><i class="fas fa-plug-circle-xmark"></i> Not connected</span>{% endif %}
+  </div>
+  <div class="dbx-body">
+    <div class="dbx-account">
+      {% if account_error %}<div class="dbx-alert"><i class="fas fa-triangle-exclamation"></i> {{ account_error }}</div>{% endif %}
+      <div class="dbx-who">
+        <div class="dbx-avatar{% if not connected %} off{% endif %}">{% if connected %}{{ account.name|default:account.email|default:"D"|slice:":1"|upper }}{% else %}<i class="fas fa-user-slash"></i>{% endif %}</div>
+        <div>
+          {% if connected %}
+            <b>{{ account.email|default:account.name|default:"Connected Dropbox account" }}</b>
+            <span>{% if account.email and account.name %}{{ account.name }}{% elif account.limited %}Email isn't shared by this Dropbox app{% else %}Connected account{% endif %}</span>
+          {% else %}
+            <b>No Dropbox account connected</b>
+            <span>Enter the three credentials to connect one.</span>
+          {% endif %}
+        </div>
+      </div>
+      <ul class="dbx-facts">
+        <li><i class="fas fa-folder-open"></i> <span>Backups folder: <b>{{ backup_folder }}/</b></span></li>
+        {% if connected and account.allocated and account.used is not None %}
+        <li><i class="fas fa-hard-drive"></i> <span>Space used: <b>{{ account.used|filesizeformat }}</b> of {{ account.allocated|filesizeformat }}
+          <div class="dbx-meter"><span style="width:{% widthratio account.used account.allocated 100 %}%"></span></div></span></li>
+        {% endif %}
+        {% if connected %}<li><i class="fas fa-clock-rotate-left"></i> <span><b>{{ backups|length }}</b> backup{{ backups|length|pluralize }} found in this account</span></li>{% endif %}
+        <li><i class="fas fa-key"></i> <span>{% if saved_here %}Using the credentials saved here{% elif settings_obj.is_configured %}Using this server's built-in credentials{% else %}No credentials set{% endif %}</span></li>
+      </ul>
+      {% if settings_obj.is_configured and dropbox_installed %}
+      <form method="post" action="{% url 'dashboard_backup_settings' %}" class="dbx-inline-form">
+        {% csrf_token %}<input type="hidden" name="action" value="test">
+        <button type="submit" class="btn btn-ghost"><i class="fas fa-plug-circle-check"></i> Test connection</button>
+      </form>
+      {% endif %}
+    </div>
+
+    <form class="dbx-form" method="post" action="{% url 'dashboard_backup_settings' %}" autocomplete="off">
+      {% csrf_token %}<input type="hidden" name="action" value="save">
+      <h4>{% if connected %}Change storage{% else %}Connect Dropbox{% endif %}</h4>
+      <p class="dbx-lead">Paste the credentials from your Dropbox app. They are checked with Dropbox first and saved only if they connect. After switching accounts the backup list below shows what that account holds.</p>
+      <div class="form-group">
+        <label for="dbxAppKey">DROPBOX_APP_KEY <span class="dbx-source">{% if sources.app_key == 'dashboard' %}saved here{% elif sources.app_key == 'server' %}server default{% endif %}</span></label>
+        <input type="text" id="dbxAppKey" name="app_key" value="{{ settings_obj.app_key }}" placeholder="{% if effective_app_key and not settings_obj.app_key %}Using the server default — type to replace{% else %}App key{% endif %}" autocomplete="off" spellcheck="false" maxlength="200">
+      </div>
+      <div class="form-group">
+        <label for="dbxAppSecret">DROPBOX_APP_SECRET <span class="dbx-source">{% if sources.app_secret == 'dashboard' %}saved here{% elif sources.app_secret == 'server' %}server default{% endif %}</span></label>
+        <div class="dbx-secret">
+          <input type="password" id="dbxAppSecret" name="app_secret" value="" placeholder="{% if sources.app_secret %}•••••••• saved — leave blank to keep{% else %}App secret{% endif %}" autocomplete="new-password" spellcheck="false" maxlength="200">
+          <button type="button" data-reveal="dbxAppSecret" aria-label="Show or hide the value"><i class="fas fa-eye"></i></button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="dbxRefreshToken">DROPBOX_REFRESH_TOKEN <span class="dbx-source">{% if sources.refresh_token == 'dashboard' %}saved here{% elif sources.refresh_token == 'server' %}server default{% endif %}</span></label>
+        <div class="dbx-secret">
+          <input type="password" id="dbxRefreshToken" name="refresh_token" value="" placeholder="{% if sources.refresh_token %}•••••••• saved — leave blank to keep{% else %}Refresh token{% endif %}" autocomplete="new-password" spellcheck="false" maxlength="400">
+          <button type="button" data-reveal="dbxRefreshToken" aria-label="Show or hide the value"><i class="fas fa-eye"></i></button>
+        </div>
+      </div>
+      <div class="dbx-actions">
+        <button type="submit" class="btn btn-blue"><i class="fas fa-link"></i> Save &amp; connect</button>
+        {% if saved_here %}
+        <button type="submit" name="action" value="reset" class="btn btn-ghost" formnovalidate onclick="return confirm('Remove the credentials saved here? The server\'s built-in credentials (if any) will be used instead.');"><i class="fas fa-rotate-left"></i> Use server credentials</button>
+        {% endif %}
+      </div>
+      <p class="dbx-note">A refresh token comes from your app's OAuth2 flow with <code>token_access_type=offline</code> and, unlike an access token, doesn't expire. Give the app the <code>account_info.read</code> permission to see the account email here, plus <code>files.content.write</code> and <code>files.content.read</code> for backups. The AI image archive uses the same Dropbox account.</p>
+    </form>
+  </div>
+</div>
+<script>
+document.querySelectorAll('[data-reveal]').forEach(function(button){
+  button.addEventListener('click', function(){
+    var field = document.getElementById(button.getAttribute('data-reveal'));
+    var show = field.type === 'password';
+    field.type = show ? 'text' : 'password';
+    button.firstElementChild.className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+  });
+});
+</script>
 
 <div class="backup-grid">
   <div class="backup-card">
@@ -98,7 +208,7 @@
 
 <div class="panel">
   <div class="panel-head">
-    <h3><i class="fas fa-clock-rotate-left"></i> Backup History ({{ backups|length }} backup{{ backups|length|pluralize }} on Dropbox)</h3>
+    <h3><i class="fas fa-clock-rotate-left"></i> Backup History ({{ backups|length }} backup{{ backups|length|pluralize }} on Dropbox{% if account.email %} · {{ account.email }}{% endif %})</h3>
   </div>
   {% if list_error %}
     <div style="padding:1.4rem" class="help">{{ list_error }}</div>

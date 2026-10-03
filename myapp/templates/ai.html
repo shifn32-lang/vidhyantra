@@ -581,14 +581,6 @@ main.wallpaper-on{background:transparent}
 .msg-avatar[data-m="reasoning"]{--m-hi:#818cf8;--m-a:#4f46e5;--m-b:#2e2789;--m-glow:rgba(79,70,229,.45)}
 .msg-avatar[data-m="vision"]{--m-hi:#4dd9ee;--m-a:#06b6d4;--m-b:#0b6480;--m-glow:rgba(6,182,212,.45)}
 .msg-avatar[data-m="flux-klein-4b"]{--m-hi:#f9a8d4;--m-a:#ec4899;--m-b:#8f13a0;--m-glow:rgba(236,72,153,.45)}
-.msg-avatar[data-m="sdxl-lightning"]{--m-hi:#fde047;--m-a:#eab308;--m-b:#854d0e;--m-glow:rgba(234,179,8,.45)}
-.msg-avatar[data-m="flux-1-schnell"]{--m-hi:#5eead4;--m-a:#14b8a6;--m-b:#0f766e;--m-glow:rgba(20,184,166,.45)}
-.msg-avatar[data-m="sdxl-base"]{--m-hi:#c4b5fd;--m-a:#8b5cf6;--m-b:#5b21b6;--m-glow:rgba(139,92,246,.45)}
-.msg-avatar[data-m="dreamshaper-8-lcm"]{--m-hi:#fda4af;--m-a:#fb7185;--m-b:#9f1239;--m-glow:rgba(251,113,133,.45)}
-.msg-avatar[data-m="openrouter-auto-free"]{--m-hi:#d8b4fe;--m-a:#a855f7;--m-b:#6b21a8;--m-glow:rgba(168,85,247,.45)}
-.msg-avatar[data-m="laguna-s-2-1"]{--m-hi:#7dd3fc;--m-a:#0ea5e9;--m-b:#075985;--m-glow:rgba(14,165,233,.45)}
-.msg-avatar[data-m="cohere-north-mini-code"]{--m-hi:#fdba74;--m-a:#f97316;--m-b:#9a3412;--m-glow:rgba(249,115,22,.45)}
-.msg-avatar[data-m="gemma-4-31b-it"],.msg-avatar[data-m="gemini-3-6-flash"]{--m-hi:#a8c7fa;--m-a:#4285f4;--m-b:#a142f4;--m-glow:rgba(66,133,244,.45)}
 
 /* ChatGPT 5.6 is the flagship, so its tile gets one extra touch the others
    don't: a faint ring of its own colour sitting just outside the edge. */
@@ -1808,7 +1800,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       <button type="button" class="call-act" id="callSkipBtn" hidden><span class="call-act-circle"><i class="fas fa-forward"></i></span><span class="call-act-label">Skip</span></button>
       <button type="button" class="call-act end" id="callEndBtn"><span class="call-act-circle"><i class="fas fa-phone"></i></span><span class="call-act-label">End call</span></button>
     </div>
-    <p class="call-note" id="callNote">Speak after the greeting. Your words are turned into text, answered, and read back to you. Headphones work best.</p>
+    <p class="call-note" id="callNote">Speak loudly and clearly. You can talk over the reply to interrupt it.</p>
   </div>
 </div>
 
@@ -2322,16 +2314,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     chatgpt56: ['Understanding your request', 'Crafting your answer', 'Almost ready'],
     sol: ['Understanding your request', 'Crafting your answer', 'Almost ready'],
     terra: ['Understanding your request', 'Crafting your answer', 'Almost ready'],
-    'gemini-3-6-flash': ['Thinking', 'Generating answer'],
-    'openrouter-auto-free': ['Thinking', 'Generating answer'],
-    'laguna-s-2-1': ['Reading your code', 'Generating answer'],
-    'cohere-north-mini-code': ['Reading your code', 'Generating answer'],
     vision: ['Looking at your image', 'Generating answer'],
     'flux-klein-4b': ['Creating your image', 'Rendering details'],
-    'sdxl-lightning': ['Creating your image', 'Rendering details'],
-    'flux-1-schnell': ['Creating your image', 'Rendering details'],
-    'sdxl-base': ['Creating your image', 'Rendering details'],
-    'dreamshaper-8-lcm': ['Creating your image', 'Rendering details'],
     code: ['Reading your code', 'Generating answer'],
     file_generation: ['Reading your request', 'Writing your file', 'Almost done'],
     github: ['Checking repository', 'Planning changes', 'Applying changes'],
@@ -2362,9 +2346,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var statusRecent = {};
   function typingPhrases(statusKey, prompt){
     var category = 'default';
-    if (/^(flux-|sdxl-|dreamshaper-)/.test(statusKey)) category = 'image';
+    if (/^flux-/.test(statusKey)) category = 'image';
     else if (STATUS_VARIANTS[statusKey]) category = statusKey;
-    else if (/^(laguna-|cohere-)/.test(statusKey)) category = 'code';
     if (category === 'default') {
       if (/\b(code|debug|function|script|html|css|javascript|python|sql|api|bug)\b/i.test(prompt || '')) category = 'code';
       else if (/\b(write|rewrite|draft|email|essay|story|caption|poem|translate)\b/i.test(prompt || '')) category = 'writing';
@@ -2383,9 +2366,6 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return {category: category, phrases: phrases};
   }
   var STATUS_ROTATE_MS = 3200;
-  // Cloudflare Workers AI image models — same "Creating your image" skeleton
-  // treatment as FLUX Klein, just a different backend behind the scenes.
-  var CLOUDFLARE_IMAGE_MODEL_KEYS = ['sdxl-lightning', 'flux-1-schnell', 'sdxl-base', 'dreamshaper-8-lcm'];
 
   function startTypingStatus(bubble, statusKey, prompt){
     stopBubbleTyping(bubble);
@@ -2731,13 +2711,6 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   // Inline SVG rather than icon-font glyphs or image files: no extra request,
   // no flash of a missing icon, and they inherit the avatar's own colours.
   var MODEL_GLYPHS = {
-    'gemma-4-31b-it': '<svg viewBox="0 0 24 24" fill="white"><path d="M12 2C13.5 8.5 15.5 10.5 22 12C15.5 13.5 13.5 15.5 12 22C10.5 15.5 8.5 13.5 2 12C8.5 10.5 10.5 8.5 12 2Z"/></svg>',
-    'gemini-3-6-flash': '<svg viewBox="0 0 24 24" fill="white"><path d="M12 2C13.5 8.5 15.5 10.5 22 12C15.5 13.5 13.5 15.5 12 22C10.5 15.5 8.5 13.5 2 12C8.5 10.5 10.5 8.5 12 2Z"/></svg>',
-    // Routing arrows — auto-picks a model, same idea as the ChatGPT 5.6 router mark but simpler.
-    'openrouter-auto-free': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h13M13 7l4 5-4 5"/><path d="M20 6H9M11 3 7 6l4 3" opacity=".6"/></svg>',
-    // Same angle-brackets mark as Vidhyora Code — both are code-focused engines.
-    'laguna-s-2-1': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m8.4 7.5-4.6 4.6 4.6 4.6M15.6 7.5l4.6 4.6-4.6 4.6"/></svg>',
-    'cohere-north-mini-code': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m8.4 7.5-4.6 4.6 4.6 4.6M15.6 7.5l4.6 4.6-4.6 4.6"/></svg>',
     // Compact neural-orbit mark: three precise paths plus a luminous core.
     // It stays crisp at toolbar size while the glass tile supplies depth.
     'chatgpt56':
@@ -2773,12 +2746,6 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     'vision': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.9 12S5.5 5.4 12 5.4 22.1 12 22.1 12 18.5 18.6 12 18.6 1.9 12 1.9 12z"/><circle cx="12" cy="12" r="2.6" fill="#fff" stroke="none"/></svg>',
     // Wand and sparkles — image generation.
     'flux-klein-4b': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.7 3.1 16 6.4l3.3 1.3-3.3 1.3-1.3 3.3-1.3-3.3L10.1 7.7l3.3-1.3 1.3-3.3z"/><path d="M4.6 20.8 3.2 19.4 12.3 10.3l1.4 1.4-9.1 9.1z"/><path d="M6.6 3.4 7.3 5.2l1.8.7-1.8.7-.7 1.8-.7-1.8L4.1 5.9l1.8-.7.7-1.8z" opacity=".85"/></svg>',
-    // Same wand-and-sparkles mark as FLUX Klein — all four Cloudflare
-    // entries are image generators too, just distinguished by avatar colour.
-    'sdxl-lightning': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.7 3.1 16 6.4l3.3 1.3-3.3 1.3-1.3 3.3-1.3-3.3L10.1 7.7l3.3-1.3 1.3-3.3z"/><path d="M4.6 20.8 3.2 19.4 12.3 10.3l1.4 1.4-9.1 9.1z"/><path d="M6.6 3.4 7.3 5.2l1.8.7-1.8.7-.7 1.8-.7-1.8L4.1 5.9l1.8-.7.7-1.8z" opacity=".85"/></svg>',
-    'flux-1-schnell': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.7 3.1 16 6.4l3.3 1.3-3.3 1.3-1.3 3.3-1.3-3.3L10.1 7.7l3.3-1.3 1.3-3.3z"/><path d="M4.6 20.8 3.2 19.4 12.3 10.3l1.4 1.4-9.1 9.1z"/><path d="M6.6 3.4 7.3 5.2l1.8.7-1.8.7-.7 1.8-.7-1.8L4.1 5.9l1.8-.7.7-1.8z" opacity=".85"/></svg>',
-    'sdxl-base': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.7 3.1 16 6.4l3.3 1.3-3.3 1.3-1.3 3.3-1.3-3.3L10.1 7.7l3.3-1.3 1.3-3.3z"/><path d="M4.6 20.8 3.2 19.4 12.3 10.3l1.4 1.4-9.1 9.1z"/><path d="M6.6 3.4 7.3 5.2l1.8.7-1.8.7-.7 1.8-.7-1.8L4.1 5.9l1.8-.7.7-1.8z" opacity=".85"/></svg>',
-    'dreamshaper-8-lcm': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.7 3.1 16 6.4l3.3 1.3-3.3 1.3-1.3 3.3-1.3-3.3L10.1 7.7l3.3-1.3 1.3-3.3z"/><path d="M4.6 20.8 3.2 19.4 12.3 10.3l1.4 1.4-9.1 9.1z"/><path d="M6.6 3.4 7.3 5.2l1.8.7-1.8.7-.7 1.8-.7-1.8L4.1 5.9l1.8-.7.7-1.8z" opacity=".85"/></svg>',
     _default: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M11 2.2c.3 3.9 1.1 6.5 2.7 8.1s4.2 2.4 8.1 2.7c-3.9.3-6.5 1.1-8.1 2.7S11.3 19.9 11 23.8c-.3-3.9-1.1-6.5-2.7-8.1S4.1 13.3.2 13c3.9-.3 6.5-1.1 8.1-2.7S11.7 6.1 11 2.2z"/><path d="M18.3 1c.13 1.15.44 1.9 1.02 2.48.58.58 1.33.89 2.48 1.02-1.15.13-1.9.44-2.48 1.02-.58.58-.89 1.33-1.02 2.48-.13-1.15-.44-1.9-1.02-2.48C16.7 4.94 15.95 4.63 14.8 4.5c1.15-.13 1.9-.44 2.48-1.02.58-.58.89-1.33 1.02-2.48z" opacity=".8"/></svg>'
   };
 
@@ -4563,6 +4530,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   //   chat and uses the selected model) -> speak the reply with the same
   //   text-to-speech as the Listen button -> listen again, until "bye",
   //   End call, or a long silence.
+  // The microphone stays open while a reply is being read: if the caller
+  // starts talking, the reply stops at once and what they say is answered next.
   // Everything runs in the browser's own speech engines (Chrome/Edge), same
   // as voice typing and Listen, so the button is removed where they're missing.
   var CALL_RECOGNITION = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4578,15 +4547,24 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var callEndBtn = document.getElementById('callEndBtn');
   var CALL_NOTE_TEXT = callNoteEl ? callNoteEl.textContent : '';
   var CALL_MAX_SILENCES = 4;
+  var CALL_SETTLE_MS = 1100;
 
   if (callBtn && !(CALL_RECOGNITION && SPEECH_SYNTH_SUPPORTED && callOverlay)) {
     callBtn.remove();
     callBtn = null;
   }
 
+  // The greeting follows Indian Standard Time (UTC+5:30, no daylight saving),
+  // whatever time zone the caller's device is set to.
+  function callIndiaHour(){
+    return new Date(Date.now() + 330 * 60000).getUTCHours();
+  }
   function callGreeting(){
-    var hour = new Date().getHours();
-    return hour < 12 ? 'Good morning' : (hour < 17 ? 'Good afternoon' : 'Good evening');
+    var hour = callIndiaHour();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17) return 'Good evening';
+    return 'Hello';
   }
   function callSpeechLang(){ return SPEECH_LANG_MAP[currentLanguage] || 'en-IN'; }
   function callSetState(kind, status, caption){
@@ -4631,10 +4609,33 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return chunks;
   }
 
+  // While a reply is read aloud, the speakers can feed back into the
+  // microphone. Whatever the microphone hears that is mostly the words being
+  // read is treated as that echo, not as the caller talking.
+  function callWords(text){
+    return (text || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  }
+  function callIsEcho(heard, spoken){
+    var words = callWords(heard);
+    if (!words.length) return true;
+    var known = {};
+    callWords(spoken).forEach(function(word){ known[word] = true; });
+    var matching = words.filter(function(word){ return known[word]; }).length;
+    return matching / words.length >= 0.6;
+  }
+  var CALL_SHORT_INTERRUPTIONS = /^(?:stop|wait|hold on|hey|sorry|no|okay|ok|yes|bye|goodbye|skip|hello|excuse me)$/;
+  function callIsInterruption(heard, spoken){
+    var words = callWords(heard);
+    if (!words.length) return false;
+    var plausible = words.length >= 2 || words[0].length >= 4 || CALL_SHORT_INTERRUPTIONS.test(words[0]);
+    return plausible && !callIsEcho(heard, spoken);
+  }
+
   // Speaks `text` with the same cleanup and voice choice as the Listen
-  // button, then calls done() — unless the call moved on (ended, skipped)
-  // in the meantime, which the token check catches.
-  function callSay(text, done, lang){
+  // button, then calls done(). When onHeard is given the microphone stays on
+  // meanwhile: if the caller starts talking, speech stops immediately and
+  // onHeard(what they said) runs instead of done().
+  function callSay(text, done, lang, onHeard){
     var token = callNewToken();
     callStopRecognition();
     voiceCall.waiting = null;
@@ -4646,16 +4647,72 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var index = 0;
     var finished = false;
     var watchdog = null;
-    function finish(){
-      if (finished) return;
+    var restarts = 0;
+    function current(){ return !finished && token === voiceCall.token && voiceCall.active; }
+    function stopSpeech(){
       finished = true;
       clearTimeout(watchdog);
       voiceCall.skip = null;
+      window.speechSynthesis.cancel();
+    }
+    function finish(){
+      if (finished) return;
+      stopSpeech();
+      callStopRecognition();
       if (token === voiceCall.token && voiceCall.active && done) done();
     }
-    voiceCall.skip = function(){ window.speechSynthesis.cancel(); finish(); };
+    voiceCall.skip = finish;
+
+    function watchForCaller(){
+      if (!onHeard || voiceCall.muted || !current()) return;
+      var rec = new CALL_RECOGNITION();
+      voiceCall.recognition = rec;
+      rec.lang = lang || callSpeechLang();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      var interrupted = false;
+      var firstSegment = 0;
+      var heard = '';
+      var settle = null;
+      var blocked = false;
+      rec.onresult = function(e){
+        if (token !== voiceCall.token || !voiceCall.active) return;
+        var last = e.results.length - 1;
+        if (!interrupted) {
+          if (finished || !callIsInterruption(e.results[last][0].transcript, spoken)) return;
+          interrupted = true;
+          firstSegment = last;
+          stopSpeech();
+          callSetState('listening', 'Listening…', '');
+        }
+        var parts = [];
+        for (var i = firstSegment; i < e.results.length; i++) parts.push(e.results[i][0].transcript);
+        heard = parts.join(' ').trim();
+        clearTimeout(settle);
+        settle = setTimeout(function(){ try { rec.stop(); } catch (err) {} }, CALL_SETTLE_MS);
+      };
+      rec.onerror = function(e){
+        var code = e && e.error;
+        if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') blocked = true;
+      };
+      rec.onend = function(){
+        clearTimeout(settle);
+        if (token !== voiceCall.token || !voiceCall.active) return;
+        voiceCall.recognition = null;
+        if (interrupted) {
+          if (heard) { voiceCall.silence = 0; onHeard(heard); } else { callListenAgain(); }
+          return;
+        }
+        if (finished || blocked) return;
+        restarts += 1;
+        if (restarts <= 30) setTimeout(watchForCaller, 200);
+      };
+      try { rec.start(); } catch (err) { voiceCall.recognition = null; }
+    }
+
     function next(){
-      if (finished || token !== voiceCall.token) return;
+      if (!current()) return;
       if (index >= chunks.length) { finish(); return; }
       var utterance = new SpeechSynthesisUtterance(chunks[index]);
       index += 1;
@@ -4665,7 +4722,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       var started = false;
       utterance.onstart = function(){ started = true; clearTimeout(watchdog); };
       utterance.onend = next;
-      utterance.onerror = function(){ if (!finished && token === voiceCall.token) next(); };
+      utterance.onerror = function(){ if (current()) next(); };
       // If the browser never starts speaking (no voices, blocked), move on
       // instead of leaving the caller in silence.
       clearTimeout(watchdog);
@@ -4673,10 +4730,12 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       window.speechSynthesis.speak(utterance);
     }
     next();
+    watchForCaller();
   }
 
   // Listens for one utterance. onFinal(text) gets the final transcript;
-  // onSilence() runs when nothing was heard.
+  // onSilence() runs when nothing was heard. Nothing the caller says is shown
+  // on screen — the screen only tells them to speak up.
   function callListen(onFinal, onSilence, lang){
     if (!voiceCall.active) return;
     if (voiceCall.muted) {
@@ -4694,12 +4753,11 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     rec.maxAlternatives = 1;
     var heard = '';
     var fatal = '';
-    callSetState('listening', 'Listening…', '');
+    callSetState('listening', 'Listening…', 'Speak loudly and clearly.');
     rec.onresult = function(e){
       var text = '';
       for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
       heard = text.trim();
-      if (heard) callCaptionEl.textContent = heard;
     };
     rec.onerror = function(e){
       var code = e && e.error;
@@ -4748,6 +4806,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return /\b(?:bye|goodbye|good bye|hang up|end (?:the |this )?call|disconnect|alvida|that'?s all|that is all|cut the call)\b/.test(t);
   }
 
+  function callListenAgain(){
+    if (voiceCall.phase === 'name') callAskName(); else callListenChat();
+  }
   function callAskName(){
     voiceCall.phase = 'name';
     callListen(callGotName, function(){
@@ -4757,7 +4818,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         return;
       }
       if (voiceCall.nameTries === 2) callNameForm.hidden = false;
-      callSay('I could not hear you. May I know your name, please?', callAskName, 'en-IN');
+      callSay('I could not hear you. May I know your name, please?', callAskName, 'en-IN', callGotName);
     }, 'en-IN');
   }
   function callGotName(raw){
@@ -4772,7 +4833,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         }, 'en-IN');
         return;
       }
-      callSay('Sorry, I did not catch your name. Could you say it again?', callAskName, 'en-IN');
+      callSay('Sorry, I did not catch your name. Could you say it again?', callAskName, 'en-IN', callGotName);
       return;
     }
     callAcceptName(name);
@@ -4783,7 +4844,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     voiceCall.silence = 0;
     callNameForm.hidden = true;
     callStatusEl.textContent = '';
-    callSay('Nice to meet you, ' + name + '! How can I help you today?', callListenChat, 'en-IN');
+    callSay('Nice to meet you, ' + name + '! How can I help you today?', callListenChat, 'en-IN', callHeard);
   }
 
   function callListenChat(){
@@ -4793,7 +4854,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       if (voiceCall.silence >= CALL_MAX_SILENCES) {
         callSay('I have not heard anything, so I will end the call now. Goodbye!', function(){ callEnd(); });
       } else if (voiceCall.silence === 2) {
-        callSay('Are you still there?', callListenChat);
+        callSay('Are you still there?', callListenChat, undefined, callHeard);
       } else {
         callListenChat();
       }
@@ -4805,12 +4866,12 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       callSay('Goodbye ' + voiceCall.name + '! Have a great day.', function(){ callEnd(); });
       return;
     }
-    callSetState('thinking', 'Thinking…', text);
+    callSetState('thinking', 'Thinking…', '');
     send(text);
     // send() returns without starting when the chat is gated/locked.
     if (!state.streaming) {
       if (state.gated || state.conversationEnded) { callEnd(); return; }
-      callSay('Sorry, I could not send that. Please try again.', callListenChat);
+      callSay('Sorry, I could not send that. Please try again.', callListenChat, undefined, callHeard);
     }
   }
 
@@ -4825,13 +4886,13 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       return;
     }
     if (opts.error) {
-      callSay('Sorry, something went wrong. Please say that again.', callListenChat);
+      callSay('Sorry, something went wrong. Please say that again.', callListenChat, undefined, callHeard);
       return;
     }
     if (!sanitizeForSpeech(spoken)) {
       spoken = opts.image ? 'Done. You can see it on your screen.' : 'Sorry, I do not have an answer for that. Could you say it another way?';
     }
-    callSay(spoken, callListenChat);
+    callSay(spoken, callListenChat, undefined, callHeard);
   }
 
   function callStart(){
@@ -4861,7 +4922,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     callOverlay.hidden = false;
     callSetState('thinking', 'Calling…', '');
     voiceCall.phase = 'greeting';
-    callSay(callGreeting() + '! This is ' + AI_BRAND_NAME + ' AI. May I know your name, please?', callAskName, 'en-IN');
+    callSay(callGreeting() + '! This is ' + AI_BRAND_NAME + ' AI. May I know your name, please?', callAskName, 'en-IN', callGotName);
   }
 
   function callEnd(){
@@ -4889,13 +4950,15 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       callMuteBtn.querySelector('.call-act-label').textContent = voiceCall.muted ? 'Unmute' : 'Mute';
       callMuteBtn.querySelector('i').className = voiceCall.muted ? 'fas fa-microphone-slash' : 'fas fa-microphone';
       if (voiceCall.muted) {
-        // Muting while it is listening stops the microphone; it resumes on unmute.
-        if (voiceCall.recognition) {
-          var resume = voiceCall.phase === 'name' ? callAskName : callListenChat;
+        if (callOverlay.dataset.state === 'listening') {
+          // Muting while it is listening stops the microphone; it resumes on unmute.
           callNewToken();
           callStopRecognition();
-          voiceCall.waiting = resume;
+          voiceCall.waiting = voiceCall.phase === 'name' ? callAskName : callListenChat;
           callSetState('muted', 'Microphone muted', 'Tap Unmute to keep talking.');
+        } else if (callOverlay.dataset.state === 'speaking') {
+          // The reply keeps playing; only the interrupt-listening is switched off.
+          callStopRecognition();
         }
       } else if (voiceCall.waiting) {
         var waiting = voiceCall.waiting;
@@ -6590,7 +6653,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var assistantMessageId = null;
     // FLUX uses an attachment for editing. Other selected models still
     // auto-route an attached image to Vision for image understanding.
-    var imageCreation = currentModel === 'flux-klein-4b' || CLOUDFLARE_IMAGE_MODEL_KEYS.indexOf(currentModel) !== -1 ||
+    var imageCreation = currentModel === 'flux-klein-4b' ||
       (!/\b(?:how|can you|are you able|write a prompt)\b/i.test(text) && (
         /\b(?:generate|create|draw|design|make)\b.{0,70}\b(?:image|picture|photo|logo|poster|wallpaper|illustration|banner)\b/i.test(text) ||
         (imageToSend && /\b(?:change|edit|replace|remove|redesign|convert|add|rename)\b/i.test(text))
