@@ -1,0 +1,65 @@
+{% extends "dashboard/base.html" %}
+{% block title %}OpenCode session #{{ session.pk }}{% endblock %}
+{% block page_title %}OpenCode session #{{ session.pk }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem}
+.conv-meta{display:flex;flex-wrap:wrap;gap:1.6rem;padding:1.2rem 1.4rem;font-size:.85rem}
+.conv-meta b{display:block;color:var(--head);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.2rem}
+.conv-actions{display:flex;gap:.7rem;padding:0 1.4rem 1.2rem;flex-wrap:wrap}
+.transcript{padding:0 1.4rem 1.4rem}
+.oc-turn{padding:1rem 0;border-bottom:1px solid var(--line)}
+.oc-turn:last-child{border-bottom:none}
+.msg-role{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--red);margin-bottom:.3rem}
+.msg-role.assistant{color:#3b5bdb;margin-top:.8rem}
+.msg-role.tool{color:#8a5a00}
+.msg-content{font-size:.86rem;color:var(--head);white-space:pre-wrap;word-break:break-word}
+.msg-content.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem;background:var(--bg-alt);border:1px solid var(--line);border-radius:10px;padding:.65rem .8rem}
+.msg-time{font-size:.72rem;color:#9aa3b0;margin-top:.35rem}
+.oc-tool{margin-top:.5rem;font-size:.78rem}
+.oc-tool b{color:var(--head)}
+.badge.oc-err{background:var(--red-soft);color:var(--red)}
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'dashboard_opencode_user' target.pk %}" class="panel-link"><i class="fas fa-arrow-left"></i> Back to {{ name }}</a>
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-head"><h3>{{ session.title }}</h3></div>
+  <div class="conv-meta">
+    <div><b>User</b>{{ name }} <span class="mono">{{ target.email|default:target.username }}</span></div>
+    <div><b>Computer</b>{{ session.machine|default:"Manual key" }}</div>
+    <div><b>Started</b>{{ session.created_at|date:"d M Y, h:i A" }}</div>
+    <div><b>Last active</b>{{ session.last_request_at|date:"d M Y, h:i A" }}</div>
+    <div><b>Requests</b>{{ request_total }}</div>
+  </div>
+  <div class="conv-actions">
+    <form method="post" action="{% url 'dashboard_opencode_session_delete' session.pk %}" onsubmit="return confirm('Delete this session and everything recorded in it? This cannot be undone.')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost"><i class="fas fa-trash"></i> Delete this session</button>
+    </form>
+  </div>
+  <div class="transcript">
+    {% if clipped %}<p class="empty-row">Showing the first {{ requests|length }} of {{ request_total }} requests.</p>{% endif %}
+    {% for r in requests %}
+    <div class="oc-turn">
+      <div class="msg-role {{ r.trigger }}">{% if r.trigger == 'tool' %}Tool result sent back{% else %}User{% endif %}</div>
+      <div class="msg-content{% if r.trigger == 'tool' %} code{% endif %}">{{ r.user_text|default:"(no text)" }}</div>
+      <div class="msg-role assistant">{{ SITE_AI_BRAND_NAME }} Code{% if r.status == 'error' %} <span class="badge oc-err">failed</span>{% elif r.status == 'cancelled' %} · cancelled by the client{% endif %}</div>
+      {% if r.reply_text %}<div class="msg-content">{{ r.reply_text }}</div>{% endif %}
+      {% for call in r.tool_calls %}
+      <div class="oc-tool"><b><i class="fas fa-wrench"></i> {{ call.name }}</b>
+        <div class="msg-content code">{{ call.arguments }}</div></div>
+      {% endfor %}
+      {% if not r.reply_text and not r.tool_calls and r.status != 'error' %}<div class="msg-content">(no text)</div>{% endif %}
+      {% if r.error %}<div class="msg-content">{{ r.error }}</div>{% endif %}
+      <div class="msg-time">{{ r.created_at|date:"d M Y, h:i:s A" }} · {{ r.duration_ms }} ms{% if r.prompt_tokens or r.completion_tokens %} · {{ r.prompt_tokens|default:0 }} in / {{ r.completion_tokens|default:0 }} out tokens{% endif %}</div>
+    </div>
+    {% empty %}
+    <p class="empty-row">Nothing recorded in this session</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

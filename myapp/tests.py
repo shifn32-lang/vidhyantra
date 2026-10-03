@@ -6,6 +6,7 @@ import time
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
@@ -6140,8 +6141,13 @@ class DropboxStoragePanelTests(TestCase):
     def _client_for(self, settings_obj):
         token = settings_obj.effective_refresh_token
         if token not in self.accounts:
-            raise dropbox_backup.BackupError('Dropbox rejected the Refresh Token. Generate a new one.')
+            kind, message = dropbox_backup.classify_error(Exception('invalid_access_token'))
+            raise dropbox_backup.BackupError(message, kind)
         return self.accounts[token]
+
+    @staticmethod
+    def _dropbox_reply(status=200, **body):
+        return Mock(ok=status == 200, status_code=status, json=Mock(return_value=body))
 
     def _save(self, **fields):
         return self.client.post(self.SAVE, {'action': 'save', **fields}, follow=True)
@@ -6166,8 +6172,9 @@ class DropboxStoragePanelTests(TestCase):
         self.assertIn('Using the credentials saved here', body)
 
     def test_credentials_that_do_not_connect_are_not_saved(self):
-        response = self._save(app_key='k', app_secret='s', refresh_token='wrong-token')
-        self.assertIn('Not saved', response.content.decode())
+        with patch('requests.post', return_value=self._dropbox_reply(400, error='invalid_grant')):
+            response = self._save(app_key='k', app_secret='s', refresh_token='wrong-token')
+        self.assertIn('nothing was saved', response.content.decode())
         saved = DropboxSettings.get_solo()
         self.assertEqual((saved.app_key, saved.app_secret, saved.refresh_token), ('', '', ''))
         self.assertIn('old@example.com', response.content.decode())
@@ -6210,7 +6217,7 @@ class DropboxStoragePanelTests(TestCase):
 
     def test_too_long_values_and_empty_forms_are_refused(self):
         self.assertIn('too long', self._save(refresh_token='x' * 500).content.decode())
-        self.assertIn('at least one value', self._save().content.decode())
+        self.assertIn('at least one box', self._save().content.decode())
 
     def test_only_staff_can_change_the_storage(self):
         self.client.force_login(User.objects.create_user('plain-user', password='pw'))
@@ -6221,6 +6228,75 @@ class DropboxStoragePanelTests(TestCase):
     def test_the_old_settings_page_url_just_goes_back_to_backups(self):
         response = self.client.get(self.SAVE)
         self.assertRedirects(response, self.URL, fetch_redirect_response=False)
+
+    def test_a_one_time_code_pasted_in_the_token_box_is_turned_into_the_refresh_token(self):
+        with patch('requests.post', return_value=self._dropbox_reply(200, refresh_token='new-token', access_token='short')) as post:
+            response = self._save(app_key='new-key', app_secret='new-secret', refresh_token='ONE-TIME-CODE')
+        body = response.content.decode()
+        self.assertIn('Connected to new@example.com', body)
+        self.assertIn('turned into a permanent connection', body)
+        sent = post.call_args.kwargs['data']
+        self.assertEqual((sent['grant_type'], sent['code'], sent['client_id'], sent['client_secret']),
+                         ('authorization_code', 'ONE-TIME-CODE', 'new-key', 'new-secret'))
+        saved = DropboxSettings.get_solo()
+        self.assertEqual(saved.refresh_token, 'new-token')
+        self.assertNotIn('ONE-TIME-CODE', body)
+
+    def test_a_real_refresh_token_is_not_sent_to_the_code_exchange(self):
+        with patch('requests.post') as post:
+            self._save(app_key='new-key', app_secret='new-secret', refresh_token='new-token')
+        post.assert_not_called()
+
+    def test_an_expired_code_gets_a_plain_explanation_and_saves_nothing(self):
+        with patch('requests.post', return_value=self._dropbox_reply(400, error='invalid_grant', error_description='code has expired')):
+            body = self._save(app_key='k', app_secret='s', refresh_token='OLD-CODE').content.decode()
+        self.assertIn("Couldn&#x27;t connect, so nothing was saved", body)
+        self.assertIn('works only once', body)
+        self.assertIn('Get Dropbox code', body)
+        self.assertNotIn('invalid_grant', body)
+        self.assertNotIn('AuthError', body)
+        self.assertEqual(DropboxSettings.get_solo().refresh_token, '')
+
+    def test_a_wrong_app_secret_is_explained_in_plain_words(self):
+        with patch('requests.post', return_value=self._dropbox_reply(401, error='invalid_client')):
+            body = self._save(app_key='k', app_secret='wrong', refresh_token='A-CODE').content.decode()
+        self.assertIn('recognise this App Key and App Secret', body)
+        self.assertEqual(DropboxSettings.get_solo().app_secret, '')
+
+    def test_no_internet_while_checking_the_code_is_explained(self):
+        import requests
+        with patch('requests.post', side_effect=requests.ConnectionError('Max retries exceeded with url: /oauth2/token')):
+            body = self._save(app_key='k', app_secret='s', refresh_token='A-CODE').content.decode()
+        self.assertIn('Could not reach Dropbox', body)
+
+    def test_a_short_lived_access_token_is_turned_down_with_the_fix(self):
+        with patch('requests.post') as post:
+            body = self._save(app_key='k', app_secret='s', refresh_token='sl.B1234567890').content.decode()
+        post.assert_not_called()
+        self.assertIn('short-lived access token', body)
+        self.assertIn('Get Dropbox code', body)
+
+    @override_settings(DROPBOX_APP_SECRET='')
+    def test_a_missing_box_is_named(self):
+        body = self._save(app_key='k', refresh_token='new-token').content.decode()
+        self.assertIn('still missing: App Secret', body)
+
+    def test_the_page_offers_a_get_code_link_for_the_app_key(self):
+        body = self.client.get(self.URL).content.decode()
+        self.assertIn('Get Dropbox code', body)
+        self.assertIn('https://www.dropbox.com/oauth2/authorize?client_id=server-key&amp;response_type=code&amp;token_access_type=offline', body)
+        self.assertNotIn('server-secret', body)
+
+    def test_errors_are_translated_for_people_who_are_not_developers(self):
+        kind, message = dropbox_backup.classify_error(Exception("AuthError('missing_scope', TokenScopeError(required_scope='files.content.write'))"))
+        self.assertEqual(kind, 'scope')
+        self.assertIn('files.content.write', message)
+        self.assertIn('Permissions tab', message)
+        self.assertEqual(dropbox_backup.classify_error(Exception('insufficient_space'))[0], 'full')
+        self.assertEqual(dropbox_backup.classify_error(Exception('Read timed out'))[0], 'network')
+        kind, message = dropbox_backup.classify_error(Exception('something odd'))
+        self.assertEqual(kind, '')
+        self.assertIn('Details for support: something odd', message)
 
 
 @override_settings(DROPBOX_APP_KEY='server-key', DROPBOX_APP_SECRET='server-secret', DROPBOX_REFRESH_TOKEN='server-token',
@@ -6303,12 +6379,19 @@ class ApiDataMatchesApiSettingsTests(TestCase):
         shown = {m['key'] for m in self.client.get(self.URL).context['models']}
         self.assertEqual(shown, {'chatgpt56', 'sol', 'terra', 'gpt-oss-20b', 'ultra', 'quick', 'code', 'flux-klein-4b'})
 
-    def test_legacy_providers_are_not_listed(self):
-        names = [a['name'] for a in self.client.get(self.URL).context['apis']]
-        for legacy in ('FLUX Edit NIM', 'NVIDIA FLUX Kontext', 'Qwen Image Edit'):
-            self.assertNotIn(legacy, names)
-        self.assertIn('NVIDIA Lightning (shared pool)', names)
-        self.assertIn('Tavily (web search)', names)
+    def test_the_apis_section_is_gone(self):
+        response = self.client.get(self.URL)
+        body = response.content.decode()
+        self.assertNotIn('APIs connected', body)
+        self.assertNotIn('Search API name', body)
+        self.assertNotIn('api-card', body)
+        self.assertNotIn('apis', response.context)
+        self.assertContains(response, 'API Settings page')
+
+    def test_the_page_no_longer_accepts_key_changes(self):
+        self.client.post(self.URL, {'NVIDIA_API_KEY': 'should-not-be-saved'})
+        from .models import ProviderAPICredential
+        self.assertFalse(ProviderAPICredential.objects.filter(setting_name='NVIDIA_API_KEY', value='should-not-be-saved').exists())
 
 
 class SuperuserIsNotAskedForProfileDetailsTests(TestCase):
@@ -6327,3 +6410,535 @@ class SuperuserIsNotAskedForProfileDetailsTests(TestCase):
         context = self._context(staff)
         self.assertTrue(context['show_profile_wizard'])
         self.assertTrue(context['show_location_prompt'])
+
+
+class VoiceCallSavingTests(TestCase):
+    """Voice calls are saved to the account: transcript, and the caller's recording."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media.cleanup)
+        self.enterContext(override_settings(MEDIA_ROOT=self.media.name))
+        self.user = User.objects.create_user('caller', password='pw')
+        self.client.force_login(self.user)
+
+    def _start(self):
+        return self.client.post('/AI/api/calls/start/', data=json.dumps({'language': 'en'}), content_type='application/json').json()['id']
+
+    def _save(self, call_id, **extra):
+        body = {'transcript': [
+            {'who': 'ai', 'text': 'Good morning! May I know your name, please?', 'at': '2026-10-04T05:00:00Z', 'step': 'greeting'},
+            {'who': 'you', 'text': 'Asha', 'at': '2026-10-04T05:00:08Z', 'step': 'name'},
+            {'who': 'you', 'text': 'what is the weather', 'at': '2026-10-04T05:00:20Z', 'step': 'chat'},
+            {'who': 'ai', 'text': 'It is sunny today.', 'at': '2026-10-04T05:00:24Z', 'step': 'chat', 'interrupted': True},
+        ], 'caller_name': 'Asha', 'final': True}
+        body.update(extra)
+        return self.client.post(f'/AI/api/calls/{call_id}/save/', data=json.dumps(body), content_type='application/json')
+
+    def _chunk(self, call_id, seq, data, mime='audio/webm;codecs=opus'):
+        return self.client.post(f'/AI/api/calls/{call_id}/audio/', {
+            'chunk': SimpleUploadedFile('part', data), 'seq': str(seq), 'mime': mime,
+        })
+
+    def test_only_signed_in_people_can_save_calls(self):
+        self.client.logout()
+        self.assertEqual(self.client.post('/AI/api/calls/start/', data='{}', content_type='application/json').status_code, 401)
+        self.assertEqual(self.client.get('/AI/api/calls/1/').status_code, 401)
+
+    def test_a_call_is_saved_with_its_transcript_and_length(self):
+        from .models import AICall
+        call_id = self._start()
+        response = self._save(call_id)
+        self.assertEqual(response.status_code, 200)
+        call = AICall.objects.get(pk=call_id)
+        self.assertEqual(call.caller_name, 'Asha')
+        self.assertEqual(call.turn_count, 2)
+        self.assertIsNotNone(call.ended_at)
+        self.assertEqual(len(call.transcript), 4)
+        self.assertTrue(call.transcript[3]['interrupted'])
+        summary = response.json()['call']
+        self.assertEqual(summary['preview'], 'what is the weather')    # the question, not the name
+        self.assertTrue(summary['ended'])
+
+    def test_the_transcript_is_cleaned(self):
+        from .models import AICall
+        call_id = self._start()
+        self._save(call_id, transcript=[
+            {'who': 'robot', 'text': 'x'}, {'who': 'you', 'text': '   '}, 'junk',
+            {'who': 'you', 'text': 'y' * 9000, 'at': 'not a date', 'step': 'hacked'},
+        ])
+        turns = AICall.objects.get(pk=call_id).transcript
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(len(turns[0]['text']), 4000)
+        self.assertNotIn('at', turns[0])
+        self.assertNotIn('step', turns[0])
+
+    def test_a_call_can_be_saved_again_as_it_goes_and_stays_open_until_finished(self):
+        from .models import AICall
+        call_id = self._start()
+        self._save(call_id, final=False)
+        self.assertIsNone(AICall.objects.get(pk=call_id).ended_at)
+        self._save(call_id, final=True)
+        self.assertIsNotNone(AICall.objects.get(pk=call_id).ended_at)
+
+    def test_the_chat_is_linked_only_if_it_is_the_callers_own(self):
+        from .models import AICall
+        mine = AIConversation.objects.create(user=self.user, title='mine')
+        theirs = AIConversation.objects.create(user=User.objects.create_user('other', password='pw'), title='theirs')
+        call_id = self._start()
+        self._save(call_id, conversation_id=theirs.pk)
+        self.assertIsNone(AICall.objects.get(pk=call_id).conversation)
+        self._save(call_id, conversation_id=mine.pk)
+        self.assertEqual(AICall.objects.get(pk=call_id).conversation, mine)
+
+    def test_the_beacon_form_works_too(self):
+        from .models import AICall
+        call_id = self._start()
+        payload = json.dumps({'transcript': [{'who': 'you', 'text': 'hello there'}], 'final': True})
+        response = self.client.post(f'/AI/api/calls/{call_id}/save/', {'payload': payload})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(AICall.objects.get(pk=call_id).turn_count, 1)
+
+    def test_nobody_else_can_see_change_or_delete_a_call(self):
+        call_id = self._start()
+        self._save(call_id)
+        self.client.force_login(User.objects.create_user('nosy', password='pw'))
+        for method, url in (
+            ('get', f'/AI/api/calls/{call_id}/'), ('post', f'/AI/api/calls/{call_id}/save/'),
+            ('get', f'/AI/api/calls/{call_id}/download/txt/'), ('get', f'/AI/api/calls/{call_id}/audio/'),
+            ('post', f'/AI/api/calls/{call_id}/delete/'), ('post', f'/AI/api/calls/{call_id}/audio/'),
+        ):
+            self.assertEqual(getattr(self.client, method)(url).status_code, 404, url)
+
+    def test_the_recording_arrives_in_pieces_and_plays_back_whole(self):
+        call_id = self._start()
+        self.assertEqual(self._chunk(call_id, 0, b'abcde').status_code, 200)
+        self.assertEqual(self._chunk(call_id, 1, b'fghij').status_code, 200)
+        self.assertTrue(self._chunk(call_id, 1, b'fghij').json().get('duplicate'))      # a retry changes nothing
+        self.assertEqual(self._chunk(call_id, 5, b'zz').status_code, 409)                # a piece is missing
+        self._save(call_id)
+        audio = self.client.get(f'/AI/api/calls/{call_id}/audio/')
+        self.assertEqual(audio.status_code, 200)
+        self.assertEqual(b''.join(audio.streaming_content), b'abcdefghij')
+        self.assertEqual(audio['Accept-Ranges'], 'bytes')
+        self.assertTrue(self.client.get(f'/AI/api/calls/{call_id}/').json()['has_audio'])
+
+    def test_the_player_can_seek(self):
+        call_id = self._start()
+        self._chunk(call_id, 0, b'abcdefghij')
+        part = self.client.get(f'/AI/api/calls/{call_id}/audio/', HTTP_RANGE='bytes=2-4')
+        self.assertEqual(part.status_code, 206)
+        self.assertEqual(b''.join(part.streaming_content), b'cde')
+        self.assertEqual(part['Content-Range'], 'bytes 2-4/10')
+        tail = self.client.get(f'/AI/api/calls/{call_id}/audio/', HTTP_RANGE='bytes=-3')
+        self.assertEqual(b''.join(tail.streaming_content), b'hij')
+        self.assertEqual(self.client.get(f'/AI/api/calls/{call_id}/audio/', HTTP_RANGE='bytes=50-60').status_code, 416)
+
+    def test_the_recording_can_be_downloaded(self):
+        call_id = self._start()
+        self._chunk(call_id, 0, b'abc')
+        response = self.client.get(f'/AI/api/calls/{call_id}/audio/?download=1')
+        self.assertTrue(response['Content-Disposition'].startswith('attachment'))
+        self.assertTrue(response['Content-Disposition'].rstrip('"').endswith('.webm'))
+
+    def test_bad_recordings_are_refused(self):
+        call_id = self._start()
+        self.assertEqual(self._chunk(call_id, 0, b'abc', mime='text/html').status_code, 400)
+        self.assertEqual(self.client.post(f'/AI/api/calls/{call_id}/audio/', {'seq': '0', 'mime': 'audio/webm'}).status_code, 400)
+        with patch('myapp.ai_calls.MAX_AUDIO_BYTES', 8):
+            self.assertEqual(self._chunk(call_id, 0, b'123456').status_code, 200)
+            self.assertEqual(self._chunk(call_id, 1, b'7890ab').status_code, 413)
+        with patch('myapp.ai_calls.MAX_CHUNK_BYTES', 4):
+            self.assertEqual(self._chunk(call_id, 1, b'12345').status_code, 413)
+
+    def test_a_call_without_a_recording_has_no_audio(self):
+        call_id = self._start()
+        self.assertEqual(self.client.get(f'/AI/api/calls/{call_id}/audio/').status_code, 404)
+        self.assertFalse(self.client.get(f'/AI/api/calls/{call_id}/').json()['has_audio'])
+
+    def test_the_chat_can_be_downloaded_as_text_and_pdf(self):
+        call_id = self._start()
+        self._save(call_id)
+        text = self.client.get(f'/AI/api/calls/{call_id}/download/txt/')
+        self.assertEqual(text.status_code, 200)
+        body = text.content.decode('utf-8-sig')
+        self.assertIn('voice call', body)
+        self.assertIn('Caller    : Asha', body)
+        self.assertIn('Asha', body)
+        self.assertIn('what is the weather', body)
+        self.assertIn('[interrupted by the caller]', body)
+        self.assertTrue(text['Content-Disposition'].startswith('attachment; filename="voice-call-'))
+        pdf = self.client.get(f'/AI/api/calls/{call_id}/download/pdf/')
+        self.assertEqual(pdf.status_code, 200)
+        self.assertTrue(pdf.content.startswith(b'%PDF'))
+        self.assertEqual(self.client.get(f'/AI/api/calls/{call_id}/download/docx/').status_code, 400)
+
+    def test_calls_are_listed_on_the_account_newest_first(self):
+        first, second = self._start(), self._start()
+        self._save(first)
+        listed = self.client.get('/AI/api/account/').json()['calls']
+        self.assertEqual([c['id'] for c in listed], [second, first])
+        self.assertEqual(listed[1]['caller_name'], 'Asha')
+
+    def test_deleting_a_call_removes_its_recording_file(self):
+        from .models import AICall
+        call_id = self._start()
+        self._chunk(call_id, 0, b'abc')
+        path = Path(self.media.name) / AICall.objects.get(pk=call_id).audio.name
+        self.assertTrue(path.exists())
+        self.assertEqual(self.client.post(f'/AI/api/calls/{call_id}/delete/').status_code, 200)
+        self.assertFalse(path.exists())
+        self.assertFalse(AICall.objects.filter(pk=call_id).exists())
+
+    def test_delete_all_only_touches_the_callers_calls(self):
+        from .models import AICall
+        mine = self._start()
+        other_user = User.objects.create_user('someone', password='pw')
+        AICall.objects.create(user=other_user)
+        self.assertEqual(self.client.post('/AI/api/calls/delete-all/').json()['calls'], [])
+        self.assertFalse(AICall.objects.filter(user=self.user).exists())
+        self.assertEqual(AICall.objects.filter(user=other_user).count(), 1)
+        self.assertIsNotNone(mine)
+
+    def test_too_many_calls_in_an_hour_are_refused(self):
+        with patch('myapp.ai_calls.CALLS_PER_HOUR', 2):
+            codes = [self.client.post('/AI/api/calls/start/', data='{}', content_type='application/json').status_code for _ in range(3)]
+        self.assertEqual(codes, [200, 200, 429])
+
+    def test_the_voice_instruction_still_reaches_the_model(self):
+        with patch('myapp.views.ai_chat.stream_chat', return_value=iter(['Sunny.'])) as stream_chat, \
+             patch('myapp.views.web_search.build_context', return_value=None):
+            response = self.client.post('/AI/api/send/', data=json.dumps({
+                'message': 'hello', 'model': 'quick', 'voice_call': True, 'caller_name': 'Asha',
+            }), content_type='application/json')
+            b''.join(response.streaming_content)
+        self.assertIn('live voice call', stream_chat.call_args.kwargs['document_instruction'])
+
+
+class ImagesZipTests(TestCase):
+    URL = '/AI/api/images/download-all/'
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media.cleanup)
+        self.enterContext(override_settings(MEDIA_ROOT=self.media.name, MEDIA_URL='/media/'))
+        self.user = User.objects.create_user('painter', password='pw')
+        self.client.force_login(self.user)
+
+    def _image(self, user, name, prompt, model='flux-klein-4b', content=b'\x89PNG\r\n\x1a\nfake'):
+        from .models import AIUserImage
+        target = Path(self.media.name) / 'ai_generated' / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return AIUserImage.objects.create(user=user, url=f'/media/ai_generated/{name}', prompt=prompt, model_key=model)
+
+    def test_every_image_comes_back_in_one_zip_with_its_prompt(self):
+        import zipfile
+        first = self._image(self.user, 'a.png', 'a red fox in snow')
+        second = self._image(self.user, 'b.jpg', 'a blue door', content=b'\xff\xd8\xff\xe0jpegdata')
+        response = self.client.get(self.URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+        self.assertTrue(response['Content-Disposition'].startswith('attachment; filename='))
+        archive = zipfile.ZipFile(io.BytesIO(b''.join(response.streaming_content)))
+        names = archive.namelist()
+        self.assertEqual(len(names), 3)
+        self.assertTrue(any(n.endswith(f'_{first.pk}.png') for n in names))
+        self.assertTrue(any(n.endswith(f'_{second.pk}.jpg') for n in names))
+        prompts = archive.read('prompts.txt').decode('utf-8-sig')
+        self.assertIn('a red fox in snow', prompts)
+        self.assertIn('FLUX.2 Klein 4B', prompts)
+        self.assertEqual(archive.read([n for n in names if n.endswith('.png')][0]), b'\x89PNG\r\n\x1a\nfake')
+
+    def test_other_peoples_images_are_not_included(self):
+        import zipfile
+        self._image(self.user, 'mine.png', 'mine')
+        self._image(User.objects.create_user('neighbour', password='pw'), 'theirs.png', 'secret prompt')
+        archive = zipfile.ZipFile(io.BytesIO(b''.join(self.client.get(self.URL).streaming_content)))
+        self.assertEqual(len(archive.namelist()), 2)
+        self.assertNotIn('secret prompt', archive.read('prompts.txt').decode('utf-8-sig'))
+
+    def test_no_images_is_a_clear_404(self):
+        response = self.client.get(self.URL)
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('no images', response.json()['detail'])
+
+    def test_files_that_are_gone_are_skipped_and_counted(self):
+        import zipfile
+        self._image(self.user, 'here.png', 'still here')
+        gone = self._image(self.user, 'gone.png', 'lost')
+        (Path(self.media.name) / 'ai_generated' / 'gone.png').unlink()
+        archive = zipfile.ZipFile(io.BytesIO(b''.join(self.client.get(self.URL).streaming_content)))
+        self.assertEqual(len(archive.namelist()), 2)
+        self.assertIn('1 could not be included', archive.read('prompts.txt').decode('utf-8-sig'))
+        self.assertIsNotNone(gone)
+
+    def test_it_needs_a_login_and_is_rate_limited(self):
+        self._image(self.user, 'x.png', 'x')
+        with patch('myapp.views.AI_IMAGES_ZIP_PER_HOUR', 1):
+            self.assertEqual(self.client.get(self.URL).status_code, 200)
+            self.assertEqual(self.client.get(self.URL).status_code, 429)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+
+class OpenCodeActivityTests(TestCase):
+    """Every OpenCode request is recorded for the dashboard's OpenCode Data page."""
+    CHAT = '/api/v1/code/chat/completions'
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user('coder', email='coder@example.com', password='pw', first_name='Dev')
+        StoreProfile.objects.update_or_create(
+            user=self.user, defaults={'ai_subscription_until': timezone.now() + timedelta(days=30)},
+        )
+        from .models import AICodingKey
+        self.raw_key = AICodingKey.generate_for(self.user, label='work-laptop')
+        self.auth = {'HTTP_AUTHORIZATION': f'Bearer {self.raw_key}'}
+
+    def _post(self, payload, auth=None):
+        return self.client.post(self.CHAT, data=json.dumps(payload), content_type='application/json', **(auth or self.auth))
+
+    @staticmethod
+    def _completion(content='Hello', tool_calls=None):
+        data = {
+            'id': 'c', 'object': 'chat.completion', 'model': 'x',
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': content, 'tool_calls': tool_calls}}],
+            'usage': {'prompt_tokens': 30, 'completion_tokens': 12, 'total_tokens': 42},
+        }
+        return SimpleNamespace(model_dump=lambda mode='json': json.loads(json.dumps(data)))
+
+    @staticmethod
+    def _chunk(delta, finish=None, usage=None):
+        data = {'id': 'c', 'object': 'chat.completion.chunk', 'model': 'x',
+                'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
+        if usage:
+            data['usage'] = usage
+        return SimpleNamespace(model_dump=lambda mode='json', d=data: json.loads(json.dumps(d)))
+
+    @patch('myapp.ai_chat._get_client')
+    def test_a_request_and_its_reply_are_recorded_under_a_session(self, get_client):
+        from .models import AICodingRequest, AICodingSession
+        get_client.return_value.chat.completions.create.return_value = self._completion('Here is a parser.')
+        self._post({'messages': [
+            {'role': 'system', 'content': 'You are OpenCode.'},
+            {'role': 'user', 'content': 'build me a csv parser'},
+        ]})
+        session = AICodingSession.objects.get()
+        self.assertEqual((session.user, session.machine, session.request_count), (self.user, 'work-laptop', 1))
+        self.assertEqual(session.title, 'build me a csv parser')
+        request = AICodingRequest.objects.get()
+        self.assertEqual((request.user_text, request.reply_text, request.status), ('build me a csv parser', 'Here is a parser.', 'ok'))
+        self.assertEqual((request.trigger, request.stream, request.prompt_tokens, request.completion_tokens), ('user', False, 30, 12))
+        self.assertNotIn('Never mention', request.user_text)       # our identity note is not the user's text
+
+    @patch('myapp.ai_chat._get_client')
+    def test_requests_of_one_conversation_share_a_session_and_others_do_not(self, get_client):
+        from .models import AICodingSession
+        get_client.return_value.chat.completions.create.return_value = self._completion('ok')
+        first = [{'role': 'user', 'content': 'fix the login bug'}]
+        self._post({'messages': first})
+        self._post({'messages': first + [{'role': 'assistant', 'content': 'ok'}, {'role': 'user', 'content': 'and add a test'}]})
+        self._post({'messages': [{'role': 'user', 'content': 'a different task'}]})
+        sessions = {s.title: s.request_count for s in AICodingSession.objects.all()}
+        self.assertEqual(sessions, {'fix the login bug': 2, 'a different task': 1})
+
+    @patch('myapp.ai_chat._get_client')
+    def test_the_same_first_message_on_another_computer_is_its_own_session(self, get_client):
+        from .models import AICodingKey, AICodingSession
+        get_client.return_value.chat.completions.create.return_value = self._completion('ok')
+        other = AICodingKey.generate_for(self.user, label='home-pc')
+        messages = [{'role': 'user', 'content': 'same words'}]
+        self._post({'messages': messages})
+        self._post({'messages': messages}, auth={'HTTP_AUTHORIZATION': f'Bearer {other}'})
+        self.assertEqual(sorted(AICodingSession.objects.values_list('machine', flat=True)), ['home-pc', 'work-laptop'])
+
+    @patch('myapp.ai_chat._get_client')
+    def test_tool_results_and_tool_calls_are_recorded(self, get_client):
+        from .models import AICodingRequest
+        calls = [{'id': 'c9', 'type': 'function', 'function': {'name': 'write_file', 'arguments': '{"path": "a.py"}'}}]
+        get_client.return_value.chat.completions.create.return_value = self._completion('', tool_calls=calls)
+        self._post({'messages': [
+            {'role': 'user', 'content': 'make a.py'},
+            {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {'name': 'read_file', 'arguments': '{}'}}]},
+            {'role': 'tool', 'tool_call_id': 'c1', 'content': 'file contents here'},
+        ]})
+        request = AICodingRequest.objects.get()
+        self.assertEqual((request.trigger, request.user_text), ('tool', 'file contents here'))
+        self.assertEqual(request.tool_calls, [{'name': 'write_file', 'arguments': '{"path": "a.py"}'}])
+
+    @patch('myapp.ai_chat._get_client')
+    def test_a_streamed_reply_is_collected(self, get_client):
+        from .models import AICodingRequest
+        get_client.return_value.chat.completions.create.return_value = iter([
+            self._chunk({'role': 'assistant', 'content': 'He'}), self._chunk({'content': 'llo'}),
+            self._chunk({'tool_calls': [{'index': 0, 'id': 'c1', 'function': {'name': 'run', 'arguments': '{"cmd":'}}]}),
+            self._chunk({'tool_calls': [{'index': 0, 'function': {'arguments': ' "ls"}'}}]}),
+            self._chunk({}, 'stop', usage={'prompt_tokens': 7, 'completion_tokens': 3}),
+        ])
+        response = self._post({'stream': True, 'messages': [{'role': 'user', 'content': 'list files'}]})
+        b''.join(response.streaming_content)
+        request = AICodingRequest.objects.get()
+        self.assertEqual((request.status, request.stream, request.reply_text), ('ok', True, 'Hello'))
+        self.assertEqual(request.tool_calls, [{'name': 'run', 'arguments': '{"cmd": "ls"}'}])
+        self.assertEqual((request.prompt_tokens, request.completion_tokens), (7, 3))
+
+    @patch('myapp.ai_chat._get_client')
+    def test_a_stream_the_client_walks_away_from_is_marked_cancelled(self, get_client):
+        from .models import AICodingRequest
+        get_client.return_value.chat.completions.create.return_value = iter([
+            self._chunk({'content': 'partial'}), self._chunk({'content': ' more'}),
+        ])
+        response = self._post({'stream': True, 'messages': [{'role': 'user', 'content': 'go'}]})
+        stream = iter(response.streaming_content)
+        next(stream)
+        response.close()
+        request = AICodingRequest.objects.get()
+        self.assertEqual((request.status, request.reply_text), ('cancelled', 'partial'))
+
+    @patch('myapp.ai_chat._get_client')
+    def test_a_failure_is_recorded_without_the_vendor_name(self, get_client):
+        from .models import AICodingRequest
+        get_client.return_value.chat.completions.create.side_effect = RuntimeError('nvidia exploded')
+        self._post({'messages': [{'role': 'user', 'content': 'hello'}]})
+        request = AICodingRequest.objects.get()
+        self.assertEqual(request.status, 'error')
+        self.assertNotIn('nvidia', request.error.lower())
+
+    @patch('myapp.ai_chat._get_client')
+    def test_long_texts_are_trimmed(self, get_client):
+        from .models import AICodingRequest
+        get_client.return_value.chat.completions.create.return_value = self._completion('r' * 50000)
+        self._post({'messages': [{'role': 'user', 'content': 'u' * 30000}]})
+        request = AICodingRequest.objects.get()
+        self.assertLess(len(request.user_text), 8200)
+        self.assertLess(len(request.reply_text), 20200)
+        self.assertIn('more characters not kept', request.reply_text)
+        self.assertEqual(request.reply_chars, 50000)
+
+    @patch('myapp.ai_chat._get_client')
+    def test_a_logging_failure_never_breaks_the_answer(self, get_client):
+        get_client.return_value.chat.completions.create.return_value = self._completion('still answered')
+        with patch('myapp.coding_api._session_for', side_effect=RuntimeError('db down')):
+            response = self._post({'messages': [{'role': 'user', 'content': 'hi'}]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['choices'][0]['message']['content'], 'still answered')
+
+
+class OpenCodeDashboardTests(TestCase):
+    """Dashboard → OpenCode Data."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        from .models import AICodingKey, AICodingRequest, AICodingSession
+        self.staff = User.objects.create_user('opencode-staff', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=self.staff)
+        self.dev = User.objects.create_user('dev', email='dev@example.com', password='pw', first_name='Dev', last_name='Eloper')
+        self.idle = User.objects.create_user('idle', email='idle@example.com', password='pw')
+        key = AICodingKey.objects.create(user=self.dev, label='work-laptop', key_hash='h1', key_prefix='vdc_aaaaaaa')
+        AICodingKey.objects.create(user=self.idle, label='', key_hash='h2', key_prefix='vdc_bbbbbbb')
+        self.session = AICodingSession.objects.create(user=self.dev, key=key, machine='work-laptop', fingerprint='f1', title='build a parser', request_count=2)
+        AICodingRequest.objects.create(session=self.session, user=self.dev, user_text='please build a parser', reply_text='Sure, here it is', prompt_tokens=10, completion_tokens=5)
+        AICodingRequest.objects.create(
+            session=self.session, user=self.dev, trigger='tool', user_text='tool output text', status='error', error='upstream failed',
+            tool_calls=[{'name': 'write_file', 'arguments': '{"path": "p.py"}'}],
+        )
+        self.client.force_login(self.staff)
+
+    def test_the_page_lists_who_uses_opencode_and_how_much(self):
+        response = self.client.get('/store/dashboard/opencode/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('dev@example.com', body)
+        self.assertIn('Dev Eloper', body)
+        self.assertIn('work-laptop', body)
+        self.assertIn('idle@example.com', body)           # connected but never used
+        rows = {r['user'].username: r for r in response.context['rows']}
+        self.assertEqual((rows['dev']['requests'], rows['dev']['sessions'], rows['dev']['errors'], rows['dev']['tokens']), (2, 1, 1, 15))
+        self.assertEqual(rows['idle']['requests'], 0)
+        self.assertEqual(response.context['stats']['requests_total'], 2)
+
+    def test_it_is_in_the_admin_menu(self):
+        self.assertContains(self.client.get('/store/dashboard/'), 'OpenCode Data')
+
+    def test_search_and_filters(self):
+        rows = lambda **q: [r['user'].username for r in self.client.get('/store/dashboard/opencode/', q).context['rows']]
+        self.assertEqual(rows(q='eloper'), ['dev'])
+        self.assertEqual(rows(q='nobody'), [])
+        self.assertEqual(rows(when='today'), ['dev'])               # only people active today
+        self.assertEqual(rows(sort='most_requests')[0], 'dev')
+
+    def test_a_user_page_shows_computers_and_sessions(self):
+        body = self.client.get(f'/store/dashboard/opencode/user/{self.dev.pk}/').content.decode()
+        self.assertIn('work-laptop', body)
+        self.assertIn('vdc_aaaaaaa', body)
+        self.assertIn('build a parser', body)
+
+    def test_a_session_page_shows_the_conversation(self):
+        body = self.client.get(f'/store/dashboard/opencode/session/{self.session.pk}/').content.decode()
+        for expected in ('please build a parser', 'Sure, here it is', 'tool output text', 'write_file', 'upstream failed'):
+            self.assertIn(expected, body)
+
+    def test_a_session_can_be_deleted(self):
+        from .models import AICodingRequest, AICodingSession
+        response = self.client.post(f'/store/dashboard/opencode/session/{self.session.pk}/delete/')
+        self.assertRedirects(response, f'/store/dashboard/opencode/user/{self.dev.pk}/', fetch_redirect_response=False)
+        self.assertFalse(AICodingSession.objects.exists())
+        self.assertFalse(AICodingRequest.objects.exists())
+
+    def test_only_staff_can_open_these_pages(self):
+        self.client.force_login(self.dev)
+        for url in ('/store/dashboard/opencode/', f'/store/dashboard/opencode/user/{self.dev.pk}/', f'/store/dashboard/opencode/session/{self.session.pk}/'):
+            self.assertEqual(self.client.get(url).status_code, 302, url)
+        self.assertEqual(self.client.post(f'/store/dashboard/opencode/session/{self.session.pk}/delete/').status_code, 302)
+        from .models import AICodingSession
+        self.assertTrue(AICodingSession.objects.exists())
+
+
+class BrandNameFollowsTheAdminSettingTests(TestCase):
+    """The AI name set on the Customize page is used on the call screen and in the admin panel."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.media = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media.cleanup)
+        self.enterContext(override_settings(MEDIA_ROOT=self.media.name))
+        site = SiteCustomization.get_solo()
+        site.ai_brand_name = 'Nova'
+        site.save()
+        self.staff = User.objects.create_user('brand-staff', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=self.staff)
+        self.client.force_login(self.staff)
+
+    def test_the_admin_logo_and_tab_title_use_the_name(self):
+        for url in ('/store/dashboard/', '/store/dashboard/backup/', '/store/dashboard/opencode/'):
+            body = self.client.get(url).content.decode()
+            self.assertIn('>Nova <span>AI</span></a>', body, url)
+            self.assertIn('| Nova Dashboard</title>', body, url)
+            self.assertNotIn('Vidhyora', body.split('<div class="dash-logo-sub">')[0].split('<aside')[-1], url)
+
+    def test_the_call_screen_and_spoken_greeting_use_the_name(self):
+        body = self.client.get('/').content.decode()
+        self.assertIn('<p class="call-brand">Nova AI</p>', body)
+        self.assertIn("var AI_BRAND_NAME = 'Nova';", body)
+        self.assertIn("'! This is ' + AI_BRAND_NAME + ' AI.", body)
+
+    def test_a_saved_calls_download_uses_the_name(self):
+        from .models import AICall
+        call = AICall.objects.create(user=self.staff, caller_name='Asha', transcript=[{'who': 'you', 'text': 'hello there', 'at': '2026-10-04T05:00:00Z'}])
+        body = self.client.get(f'/AI/api/calls/{call.pk}/download/txt/').content.decode('utf-8-sig')
+        self.assertIn('Nova AI — voice call', body)
+
+    def test_changing_the_name_changes_the_pages_straight_away(self):
+        site = SiteCustomization.get_solo()
+        site.ai_brand_name = 'Orbit'
+        site.save()
+        self.assertIn('>Orbit <span>AI</span></a>', self.client.get('/store/dashboard/').content.decode())
+        self.assertIn('<p class="call-brand">Orbit AI</p>', self.client.get('/').content.decode())

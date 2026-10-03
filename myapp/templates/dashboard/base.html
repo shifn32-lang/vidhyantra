@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}Overview{% endblock %} | Vidhyora Dashboard</title>
+<title>{% block title %}Overview{% endblock %} | {{ SITE_AI_BRAND_NAME }} Dashboard</title>
 <meta name="robots" content="noindex, nofollow">
 <script>
 // Mirrors the accent color chosen on /AI/ (account menu → Customize) onto
@@ -52,7 +52,7 @@ a{color:inherit;text-decoration:none}
 .dash-sidebar{width:250px;flex:none;background:var(--dark);color:rgba(255,255,255,.75);display:flex;flex-direction:column;padding:1.6rem 1.1rem;position:sticky;top:0;height:100vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
 .dash-sidebar::-webkit-scrollbar{width:6px}
 .dash-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:10px}
-.dash-logo{font-size:1.3rem;font-weight:900;color:#fff;letter-spacing:-.02em}
+.dash-logo{font-size:1.3rem;font-weight:900;color:#fff;letter-spacing:-.02em;max-width:100%;overflow-wrap:anywhere}
 .dash-logo span{color:var(--red)}
 .dash-logo-sub{font-size:.66rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-top:.15rem}
 .dash-nav{margin-top:2.2rem;display:flex;flex-direction:column;gap:.3rem;flex:1}
@@ -242,7 +242,7 @@ tbody tr:hover{background:var(--bg-alt)}
   <div class="dash-scrim" id="dashScrim"></div>
   <aside class="dash-sidebar" id="dashSidebar">
     <div>
-      <a href="{% url 'home' %}" class="dash-logo" style="display:inline-block" aria-label="Go to homepage">Vidhyora <span>AI</span></a>
+      <a href="{% url 'home' %}" class="dash-logo" style="display:inline-block" aria-label="Go to homepage">{{ SITE_AI_BRAND_NAME }} <span>AI</span></a>
       <div class="dash-logo-sub">A Fun, Powerful AI</div>
     </div>
     <nav class="dash-nav">
@@ -251,6 +251,7 @@ tbody tr:hover{background:var(--bg-alt)}
       <a href="{% url 'dashboard_user_data' %}" class="{% if active == 'user_data' %}active{% endif %}"><i class="fas fa-address-card" aria-hidden="true"></i> User Data</a>
       <a href="{% url 'dashboard_ai_management' %}" class="{% if active == 'ai_management' %}active{% endif %}"><i class="fas fa-robot"></i> AI Management</a>
       <a href="{% url 'dashboard_ai_activity' %}" class="{% if active == 'ai_activity' %}active{% endif %}"><i class="fas fa-shield-halved"></i> AI Activity</a>
+      <a href="{% url 'dashboard_opencode' %}" class="{% if active == 'opencode' %}active{% endif %}"><i class="fas fa-terminal"></i> OpenCode Data</a>
       <a href="{% url 'dashboard_ai_reports' %}" class="{% if active == 'ai_reports' %}active{% endif %}"><i class="fas fa-flag"></i> AI Reports</a>
       <a href="{% url 'dashboard_api_data' %}" class="{% if active == 'api_data' %}active{% endif %}"><i class="fas fa-plug"></i> API Data</a>
       <a href="{% url 'dashboard_api_settings' %}" class="{% if active == 'api_settings' %}active{% endif %}"><i class="fas fa-sliders"></i> API Settings</a>

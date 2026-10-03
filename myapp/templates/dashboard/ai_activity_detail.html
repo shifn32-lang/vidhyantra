@@ -51,7 +51,7 @@
     </form>
     {% endif %}
     {% if conversation.user_id and not is_user_blocked %}
-    <form method="post" action="{% url 'dashboard_ai_block' %}" onsubmit="return confirm('Block the account {{ conversation.user.email|default:conversation.user.username|escapejs }} from Vidhyora AI?')">
+    <form method="post" action="{% url 'dashboard_ai_block' %}" onsubmit="return confirm('Block the account {{ conversation.user.email|default:conversation.user.username|escapejs }} from {{ SITE_AI_BRAND_NAME|escapejs }} AI?')">
       {% csrf_token %}
       <input type="hidden" name="user_id" value="{{ conversation.user_id }}">
       <input type="hidden" name="conversation_id" value="{{ conversation.pk }}">

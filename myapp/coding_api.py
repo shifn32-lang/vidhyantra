@@ -13,6 +13,7 @@ vendor and model names never reach the client — it only ever sees
 Like every other model here there is no fallback: when the backend is down or
 not configured the caller gets a plain "contact the administrator" error.
 """
+import hashlib
 import json
 import logging
 import re
@@ -322,6 +323,80 @@ def _record_use(key):
     )
 
 
+# --------------------------------------------------------- activity logging
+#
+# Every request is recorded for the dashboard's OpenCode Data page: who made
+# it, what was asked (the newest message only — OpenCode resends the whole
+# conversation each time, so earlier turns are already in earlier requests)
+# and what came back. Long texts are trimmed. Logging must never get in the
+# way of an answer, so any failure here is swallowed.
+
+LOG_USER_CHARS = 8000
+LOG_TOOL_RESULT_CHARS = 1500
+LOG_REPLY_CHARS = 20000
+LOG_TOOL_ARGUMENT_CHARS = 1000
+LOG_MAX_TOOL_CALLS = 30
+
+
+def _trim(text, limit):
+    text = text or ''
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + f'\n… ({len(text) - limit:,} more characters not kept)'
+
+
+def _session_for(key, messages):
+    """The session this request belongs to: requests from one key that begin
+    with the same first message are one working session."""
+    from django.db import IntegrityError
+    from myapp.models import AICodingSession
+    first = next((m['content'] for m in messages if m['role'] == 'user'), '')
+    fingerprint = hashlib.sha256(f'{key.pk}|{first[:2000]}'.encode('utf-8')).hexdigest()
+    title = ' '.join(first.split())[:120] or 'Untitled session'
+    lookup = {'user': key.user, 'fingerprint': fingerprint}
+    defaults = {'key': key, 'machine': key.label, 'title': title}
+    try:
+        session, _ = AICodingSession.objects.get_or_create(defaults=defaults, **lookup)
+    except IntegrityError:
+        session = AICodingSession.objects.get(**lookup)
+    return session
+
+
+def _log_request(key, messages, *, stream, started, status, reply='', tool_calls=None, usage=None, error=''):
+    """Record one request. Never raises."""
+    try:
+        from myapp.models import AICodingRequest, AICodingSession
+        session = _session_for(key, messages)
+        last = messages[-1] if messages else {'role': 'user', 'content': ''}
+        if last['role'] == 'tool':
+            user_text = _trim(last['content'], LOG_TOOL_RESULT_CHARS)
+        else:
+            user_text = _trim(last['content'], LOG_USER_CHARS)
+        calls = []
+        for call in (tool_calls or [])[:LOG_MAX_TOOL_CALLS]:
+            function = call.get('function') or {}
+            calls.append({
+                'name': str(function.get('name') or '')[:80],
+                'arguments': _trim(str(function.get('arguments') or ''), LOG_TOOL_ARGUMENT_CHARS),
+            })
+        usage = usage if isinstance(usage, dict) else {}
+        AICodingRequest.objects.create(
+            session=session, user=key.user, status=status, error=(error or '')[:300], stream=stream,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            trigger='tool' if last['role'] == 'tool' else 'user',
+            user_text=user_text, reply_text=_trim(reply, LOG_REPLY_CHARS), tool_calls=calls,
+            message_count=len(messages),
+            prompt_chars=sum(len(m['content']) for m in messages), reply_chars=len(reply or ''),
+            prompt_tokens=usage.get('prompt_tokens') if isinstance(usage.get('prompt_tokens'), int) else None,
+            completion_tokens=usage.get('completion_tokens') if isinstance(usage.get('completion_tokens'), int) else None,
+        )
+        AICodingSession.objects.filter(pk=session.pk).update(
+            last_request_at=timezone.now(), request_count=F('request_count') + 1,
+        )
+    except Exception:
+        logger.exception('Could not record the OpenCode request for user %s', getattr(key, 'user_id', '?'))
+
+
 @csrf_exempt
 def models_list(request):
     if request.method != 'GET':
@@ -367,6 +442,8 @@ def chat_completions(request):
         return _error(str(exc), 400)
 
     streaming = kwargs['stream']
+    started = time.monotonic()
+    logged_messages = clean_messages(payload.get('messages'))
     model_controls.record_request(CONTROL_KEY)
     _record_use(key)
     try:
@@ -375,32 +452,63 @@ def chat_completions(request):
     except Exception as exc:
         logger.warning('Coding API upstream call failed for user %s: %s', key.user_id, exc)
         model_controls.record_error(CONTROL_KEY, f'{exc.__class__.__name__}: {_scrub(exc)}')
+        _log_request(key, logged_messages, stream=streaming, started=started, status='error', error=_scrub(exc))
         return upstream_error_response(exc)
 
     if not streaming:
         data = _lean(upstream.model_dump(mode='json'))
         data['model'] = MODEL_ID
         model_controls.record_success(CONTROL_KEY)
+        reply_message = ((data.get('choices') or [{}])[0].get('message')) or {}
+        _log_request(
+            key, logged_messages, stream=False, started=started, status='ok',
+            reply=reply_message.get('content') or '', tool_calls=reply_message.get('tool_calls'), usage=data.get('usage'),
+        )
         response = JsonResponse(data)
         response['Cache-Control'] = 'no-store'
         return response
 
     def events():
+        pieces = []
+        calls = {}
+        usage = None
+        status, error = 'cancelled', ''
         try:
             for chunk in upstream:
                 data = _lean(chunk.model_dump(mode='json'))
                 data['model'] = MODEL_ID
+                for choice in data.get('choices') or []:
+                    delta = choice.get('delta') or {}
+                    if delta.get('content'):
+                        pieces.append(delta['content'])
+                    for part in delta.get('tool_calls') or []:
+                        slot = calls.setdefault(part.get('index', 0), {'function': {'name': '', 'arguments': ''}})
+                        function = part.get('function') or {}
+                        slot['function']['name'] += function.get('name') or ''
+                        slot['function']['arguments'] += function.get('arguments') or ''
+                if isinstance(data.get('usage'), dict):
+                    usage = data['usage']
                 yield _sse(data)
+        except GeneratorExit:
+            raise
         except Exception as exc:
             logger.warning('Coding API stream broke for user %s: %s', key.user_id, exc)
             model_controls.record_error(CONTROL_KEY, f'{exc.__class__.__name__}: {_scrub(exc)}')
+            status, error = 'error', _scrub(exc)
             yield _sse({'error': {
                 'message': f'{_label()} stopped responding mid-reply. {_contact()}',
                 'type': 'server_error', 'code': 'stream_interrupted',
             }})
             return
-        model_controls.record_success(CONTROL_KEY)
-        yield 'data: [DONE]\n\n'
+        else:
+            status = 'ok'
+            model_controls.record_success(CONTROL_KEY)
+            yield 'data: [DONE]\n\n'
+        finally:
+            _log_request(
+                key, logged_messages, stream=True, started=started, status=status, error=error,
+                reply=''.join(pieces), tool_calls=[calls[i] for i in sorted(calls)], usage=usage,
+            )
 
     response = StreamingHttpResponse(events(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache, no-store'

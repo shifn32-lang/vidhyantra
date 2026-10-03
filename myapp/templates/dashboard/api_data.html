@@ -5,49 +5,18 @@
 {% block extra_head %}
 <style>
 .panel-note{padding:0 1.4rem 1.1rem;font-size:.8rem;color:var(--text)}
-.badge.api-connected{background:#e8fbf0;color:#1da851}
-.badge.api-disconnected{background:var(--red-soft);color:var(--red)}
 .badge.model-frontend{background:#e8f3fb;color:#1a6fb0}
 .badge.model-internal{background:var(--bg-alt);color:var(--text)}
-.api-cards-form{padding:0 1.4rem 1.4rem;min-width:0}
-.api-cards{display:flex;flex-direction:column;gap:0;min-width:0}
-.api-card{border-bottom:1px solid var(--line);padding:1rem 0;min-width:0}
-.api-card:last-child{border-bottom:none}
-.api-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem .9rem;flex-wrap:wrap;margin-bottom:.2rem}
-.api-card-title{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;min-width:0}
-.api-card-head strong{font-size:.92rem}
-.api-card-note{color:var(--text);opacity:.75;font-size:.8rem;margin:0 0 .7rem}
-.api-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.6rem .9rem}
-.api-field label{display:block;font-size:.72rem;font-weight:700;color:var(--text);opacity:.75;margin-bottom:.25rem}
-.api-field-row{display:flex;gap:.4rem;align-items:center}
-.api-field-row input[type=text],.api-field-row input[type=password]{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.6rem .85rem;font-family:inherit;font-size:.85rem;background:var(--bg-alt);color:var(--head)}
-.api-field-row input[type=password]{padding-right:2.6rem}
-.api-field-row input[type=text]:focus,.api-field-row input[type=password]:focus{outline:none;border-color:var(--red)}
-/* base.html's shared password-eye-toggle script wraps every input[type=password]
-   in a .pw-toggle-wrap div after the page loads, which becomes the actual flex
-   child here instead of the input itself — sizing has to target the wrapper. */
-.api-field-row input[type=text],.api-field-row .pw-toggle-wrap{flex:1;min-width:0}
-.api-field-meta{font-size:.68rem;color:var(--text);opacity:.6;margin-top:.25rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-.api-field-clear{flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;font-size:.68rem;cursor:pointer;color:var(--text)}
-.api-field-clear:hover{background:var(--bg-alt)}
-.api-save-bar{display:flex;justify-content:flex-end;margin-top:1rem}
 .panel-filters{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .panel-filters select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 .7rem;font-family:inherit;font-size:.82rem;background:var(--bg-alt);color:var(--head)}
 .panel-filters select:focus{outline:none;border-color:var(--red)}
-.api-card-meta{display:flex;align-items:center;gap:.4rem .9rem;flex-wrap:wrap;justify-content:flex-end}
-.api-card-requests,.api-card-last-used{font-size:.75rem;color:var(--text);opacity:.7;white-space:nowrap}
 .model-share{display:block;font-size:.72rem;color:var(--text);opacity:.65;margin-top:.15rem}
 .model-last-used{white-space:nowrap}
 </style>
 {% endblock %}
 
 {% block content %}
-{% if saved %}<div class="save-msg"><i class="fas fa-circle-check"></i> {{ saved_message }}</div>{% endif %}
 <div class="stat-grid">
-  <div class="stat-card">
-    <div class="stat-ico"><i class="fas fa-plug"></i></div>
-    <div><div class="stat-num">{{ connected_apis_count }}/{{ total_apis }}</div><div class="stat-lbl">APIs connected</div></div>
-  </div>
   <div class="stat-card">
     <div class="stat-ico"><i class="fas fa-robot"></i></div>
     <div><div class="stat-num">{{ frontend_model_count }}</div><div class="stat-lbl">Models shown in the frontend picker</div></div>
@@ -56,77 +25,6 @@
     <div class="stat-ico"><i class="fas fa-paper-plane"></i></div>
     <div><div class="stat-num">{{ total_requests }}</div><div class="stat-lbl">Total AI requests served</div></div>
   </div>
-</div>
-
-<div class="panel">
-  <div class="panel-head">
-    <h3>{{ apis|length }} of {{ total_apis }} API{{ total_apis|pluralize }}</h3>
-    <form class="panel-filters" method="get">
-      <span class="panel-search">
-        <i class="fas fa-magnifying-glass"></i>
-        <input type="search" name="api_q" value="{{ api_q }}" placeholder="Search API name…">
-      </span>
-      <select name="api_status" onchange="this.form.submit()" aria-label="Filter by connection status">
-        <option value="all" {% if api_status == 'all' %}selected{% endif %}>All statuses</option>
-        <option value="connected" {% if api_status == 'connected' %}selected{% endif %}>Connected only</option>
-        <option value="disconnected" {% if api_status == 'disconnected' %}selected{% endif %}>Not connected only</option>
-      </select>
-      <input type="hidden" name="model_q" value="{{ model_q }}">
-      <input type="hidden" name="model_scope" value="{{ model_scope }}">
-      <input type="hidden" name="model_sort" value="{{ model_sort }}">
-    </form>
-  </div>
-  <form method="post" class="api-cards-form">
-    {% csrf_token %}
-    <div class="api-cards">
-      {% for api in apis %}
-      <div class="api-card">
-        <div class="api-card-head">
-          <div class="api-card-title">
-            <strong>{{ api.name }}</strong>
-            {% if api.connected %}<span class="badge api-connected">Connected</span>
-            {% else %}<span class="badge api-disconnected">Not connected</span>{% endif %}
-          </div>
-          <div class="api-card-meta">
-            <span class="api-card-requests">{{ api.requests }} request{{ api.requests|pluralize }} served</span>
-            <span class="api-card-last-used">{% if api.last_used %}Last used {{ api.last_used|timesince }} ago{% else %}Never used{% endif %}</span>
-          </div>
-        </div>
-        <p class="api-card-note">{{ api.note }}</p>
-        <div class="api-fields">
-          {% for field in api.fields %}
-          <div class="api-field">
-            <label for="id_{{ field.setting_name }}">{{ field.label }}</label>
-            <div class="api-field-row">
-              <input type="{% if field.is_secret %}password{% else %}text{% endif %}" id="id_{{ field.setting_name }}" name="{{ field.setting_name }}" value="" autocomplete="new-password" placeholder="{% if field.configured %}{{ field.preview }}{% else %}Not set{% endif %}">
-              {% if field.overridden %}
-              <button type="submit" form="clear-{{ field.setting_name }}" class="api-field-clear" title="Revert to the server default">Clear</button>
-              {% endif %}
-            </div>
-            <div class="api-field-meta">
-              {% if field.overridden %}Custom value{% if field.updated_at %}, saved {{ field.updated_at|date:"d M Y, h:i A" }}{% endif %}
-              {% elif field.configured %}Using server default
-              {% else %}Not configured anywhere{% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% empty %}
-      <p class="empty-row">No APIs match these filters</p>
-      {% endfor %}
-    </div>
-    <div class="api-save-bar">
-      <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Save changes</button>
-    </div>
-  </form>
-  {% for api in apis %}{% for field in api.fields %}{% if field.overridden %}
-  <form method="post" id="clear-{{ field.setting_name }}" style="display:none">
-    {% csrf_token %}
-    <input type="hidden" name="clear_field" value="{{ field.setting_name }}">
-  </form>
-  {% endif %}{% endfor %}{% endfor %}
-  <p class="panel-note">Leave a field blank to keep its current value. "Requests served" sums every chat reply and generated image recorded against the models each API backs.</p>
 </div>
 
 <div class="panel">
@@ -148,8 +46,6 @@
         <option value="recent" {% if model_sort == 'recent' %}selected{% endif %}>Most recently used</option>
         <option value="az" {% if model_sort == 'az' %}selected{% endif %}>A–Z</option>
       </select>
-      <input type="hidden" name="api_q" value="{{ api_q }}">
-      <input type="hidden" name="api_status" value="{{ api_status }}">
     </form>
   </div>
   <div class="table-scroll">
@@ -172,6 +68,6 @@
       </tbody>
     </table>
   </div>
-  <p class="panel-note">Vidhyora Vision runs automatically whenever a photo is attached, so it is not a separate frontend picker option but still logs its own request count.</p>
+  <p class="panel-note">API keys, connection tests and on/off switches for these models are on the API Settings page.</p>
 </div>
 {% endblock %}

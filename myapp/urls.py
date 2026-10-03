@@ -1,6 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from myapp import coding_api, views
+from myapp import ai_calls, coding_api, coding_dashboard, views
 
 urlpatterns = [
     path('', views.ai_page, name='home'),
@@ -31,6 +31,10 @@ urlpatterns = [
     path('store/dashboard/ai/<int:pk>/revoke/', views.dashboard_ai_revoke, name='dashboard_ai_revoke'),
     path('store/dashboard/ai/activity/', views.dashboard_ai_activity, name='dashboard_ai_activity'),
     path('store/dashboard/ai/activity/<int:pk>/', views.dashboard_ai_activity_detail, name='dashboard_ai_activity_detail'),
+    path('store/dashboard/opencode/', coding_dashboard.dashboard_opencode, name='dashboard_opencode'),
+    path('store/dashboard/opencode/user/<int:user_id>/', coding_dashboard.dashboard_opencode_user, name='dashboard_opencode_user'),
+    path('store/dashboard/opencode/session/<int:pk>/', coding_dashboard.dashboard_opencode_session, name='dashboard_opencode_session'),
+    path('store/dashboard/opencode/session/<int:pk>/delete/', coding_dashboard.dashboard_opencode_session_delete, name='dashboard_opencode_session_delete'),
     path('store/dashboard/ai/activity/message/<int:pk>/image/', views.dashboard_ai_message_image, name='dashboard_ai_message_image'),
     path('store/dashboard/ai/activity/block/', views.dashboard_ai_block, name='dashboard_ai_block'),
     path('store/dashboard/ai/activity/unblock/<int:pk>/', views.dashboard_ai_unblock, name='dashboard_ai_unblock'),
@@ -86,6 +90,14 @@ urlpatterns = [
     path('AI/api/notes/<int:note_id>/delete/', views.ai_note_delete, name='ai_note_delete'),
     path('AI/api/account/', views.ai_account_details, name='ai_account_details'),
     path('AI/api/images/delete-all/', views.ai_images_delete_all, name='ai_images_delete_all'),
+    path('AI/api/images/download-all/', views.ai_images_download_all, name='ai_images_download_all'),
+    path('AI/api/calls/start/', ai_calls.start, name='ai_call_start'),
+    path('AI/api/calls/delete-all/', ai_calls.delete_all, name='ai_calls_delete_all'),
+    path('AI/api/calls/<int:pk>/', ai_calls.detail, name='ai_call_detail'),
+    path('AI/api/calls/<int:pk>/save/', ai_calls.save, name='ai_call_save'),
+    path('AI/api/calls/<int:pk>/audio/', ai_calls.recording, name='ai_call_audio'),
+    path('AI/api/calls/<int:pk>/download/<str:file_format>/', ai_calls.download, name='ai_call_download'),
+    path('AI/api/calls/<int:pk>/delete/', ai_calls.delete, name='ai_call_delete'),
     path('AI/api/report/', views.ai_report_submit, name='ai_report_submit'),
     path('AI/api/developer-key/generate/', views.ai_developer_key_generate, name='ai_developer_key_generate'),
 

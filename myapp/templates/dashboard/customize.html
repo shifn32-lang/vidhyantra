@@ -70,7 +70,7 @@
       <div class="form-group">
         <label for="{{ form.ai_brand_name.id_for_label }}">AI name</label>
         {{ form.ai_brand_name }}
-        <div class="help">Shown across the chat UI (header, page title, model picker) and used in the AI's own replies — e.g. "I'm an AI model built by the {{ settings_obj.ai_brand_name|default:"Vidhyora" }} team". Takes effect immediately, no restart needed.</div>
+        <div class="help">Shown across the chat UI (header, page title, model picker), on the voice-call screen and in its spoken greeting, and at the top of this admin panel, and used in the AI's own replies — e.g. "I'm an AI model built by the {{ settings_obj.ai_brand_name|default:"Vidhyora" }} team". Takes effect immediately, no restart needed.</div>
         {{ form.ai_brand_name.errors }}
       </div>
     </div>

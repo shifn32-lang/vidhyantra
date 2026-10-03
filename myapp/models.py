@@ -1142,3 +1142,94 @@ class AIModelControl(models.Model):
 
     def __str__(self):
         return f"{self.model_key} ({'on' if self.is_enabled else 'off'})"
+
+
+class AICall(models.Model):
+    """One voice call on the /AI/ page (the phone button), kept for the
+    account's "My calls" list. The words of both sides are saved as a
+    transcript; the audio is the caller's own microphone only, because the
+    browser's text-to-speech voice cannot be captured. Audio is uploaded in
+    pieces while the call is running (see myapp.ai_calls) so a closed tab
+    keeps everything said so far."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_calls')
+    conversation = models.ForeignKey(AIConversation, on_delete=models.SET_NULL, null=True, blank=True, related_name='calls')
+    caller_name = models.CharField(max_length=60, blank=True)
+    language = models.CharField(max_length=12, blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    turn_count = models.PositiveIntegerField(default=0, help_text='How many things the caller said.')
+    transcript = models.JSONField(default=list, blank=True)
+    audio = models.FileField(upload_to='ai_calls/', blank=True, max_length=200)
+    audio_mime = models.CharField(max_length=60, blank=True)
+    audio_bytes = models.PositiveBigIntegerField(default=0)
+    audio_chunks = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-started_at']
+        verbose_name = 'AI Voice Call'
+        verbose_name_plural = 'AI Voice Calls'
+        indexes = [models.Index(fields=['user', '-started_at'])]
+
+    def __str__(self):
+        return f'Call #{self.pk} ({self.user})'
+
+
+class AICodingSession(models.Model):
+    """One OpenCode working session, found by grouping requests: OpenCode
+    resends the whole conversation each time, so requests that start with the
+    same first message from the same key belong together."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_coding_sessions')
+    key = models.ForeignKey(AICodingKey, on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions')
+    machine = models.CharField(max_length=60, blank=True, help_text='The computer the key was set up on; empty for the manual key.')
+    fingerprint = models.CharField(max_length=64, db_index=True)
+    title = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_request_at = models.DateTimeField(default=timezone.now)
+    request_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-last_request_at']
+        verbose_name = 'OpenCode Session'
+        verbose_name_plural = 'OpenCode Sessions'
+        indexes = [models.Index(fields=['user', '-last_request_at'])]
+        constraints = [models.UniqueConstraint(fields=['user', 'fingerprint'], name='uniq_coding_session_per_user_fingerprint')]
+
+    def __str__(self):
+        return f'{self.title or "OpenCode session"} ({self.user})'
+
+
+class AICodingRequest(models.Model):
+    """One request OpenCode made to /api/v1/code/chat/completions: what was
+    asked (the newest message only — earlier ones are in earlier requests)
+    and what came back, trimmed to a sensible size."""
+    STATUS_OK = 'ok'
+    STATUS_ERROR = 'error'
+    STATUS_CANCELLED = 'cancelled'
+
+    session = models.ForeignKey(AICodingSession, on_delete=models.CASCADE, related_name='requests')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_coding_requests')
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    duration_ms = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=10, default=STATUS_OK)
+    error = models.CharField(max_length=300, blank=True)
+    stream = models.BooleanField(default=False)
+    trigger = models.CharField(max_length=10, default='user', help_text='Role of the newest message: user, or tool for a tool result.')
+    user_text = models.TextField(blank=True)
+    reply_text = models.TextField(blank=True)
+    tool_calls = models.JSONField(default=list, blank=True)
+    message_count = models.PositiveIntegerField(default=0)
+    prompt_chars = models.PositiveIntegerField(default=0)
+    reply_chars = models.PositiveIntegerField(default=0)
+    prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
+    completion_tokens = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'OpenCode Request'
+        verbose_name_plural = 'OpenCode Requests'
+        indexes = [models.Index(fields=['user', '-created_at'])]
+
+    def __str__(self):
+        return f'OpenCode request #{self.pk}'

@@ -8,7 +8,9 @@ import mimetypes
 import os
 import re
 import secrets
+import tempfile
 import time
+import zipfile
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -42,6 +44,7 @@ from myapp import dropbox_backup
 from myapp import dropbox_images
 from myapp import ai_chat
 from myapp import chat_export
+from myapp import ai_calls
 from myapp import coding_api
 from myapp import github_ops
 from myapp import doc_extract
@@ -582,6 +585,7 @@ def ai_account_details(request):
         'coding': coding_api.account_summary(
             request.user, allowed=bool(is_staff or is_subscribed), purchase_url=_ai_purchase_url(),
         ),
+        'calls': ai_calls.summaries(request.user),
         'subscription': {
             'plan_name': plan_name,
             'active': bool(is_staff or is_subscribed),
@@ -1607,88 +1611,6 @@ def dashboard_ai_activity_detail(request, pk):
     return render(request, 'dashboard/ai_activity_detail.html', context)
 
 
-# Every external AI/image provider this app can call, and which model_keys
-# (as stored on AIMessage.model_key / AIUserImage.model_key) route through
-# it. Kept as one static registry here rather than scattered checks so the
-# "API Data" dashboard page can show connection status, request volume, and
-# an editable credential per provider without guessing at ai_chat/
-# image_generation internals. 'fields' lists the ProviderAPICredential
-# setting_name(s) each provider actually reads (see myapp.provider_keys) —
-# 'secret' fields are masked in the dashboard, 'text' fields (server URLs)
-# are shown in full since they are not sensitive the same way.
-def _ai_api_registry():
-    from myapp.provider_keys import get_key
-    return [
-        {
-            'name': 'NVIDIA Lightning (shared pool)',
-            'note': 'Backs the Ultra, Quick and Code modes and Vidhyora Vision.',
-            'connected': bool(get_key('NVIDIA_API_KEY')),
-            'model_keys': ['ultra', 'quick', 'code', 'reasoning', 'vision'],
-            'fields': [('NVIDIA_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'NVIDIA Luna (dedicated)',
-            'note': 'Dedicated text credential for ChatGPT 5.6 Luna and its automatic routing.',
-            'connected': bool(get_key('NVIDIA_LUNA_API_KEY')),
-            'model_keys': [ai_chat.CHATGPT_56_MODEL_KEY],
-            'fields': [('NVIDIA_LUNA_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'NVIDIA Nemotron Super (dedicated)',
-            'note': 'Backs ChatGPT 5.6 Sol.',
-            'connected': bool(get_key('NVIDIA_NEMOTRON_SUPER_API_KEY')),
-            'model_keys': [ai_chat.SOL_MODEL_KEY],
-            'fields': [('NVIDIA_NEMOTRON_SUPER_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'NVIDIA Terra (dedicated)',
-            'note': 'Backs ChatGPT 5.6 Terra.',
-            'connected': bool(get_key('NVIDIA_TERRA_API_KEY')),
-            'model_keys': [ai_chat.TERRA_MODEL_KEY],
-            'fields': [('NVIDIA_TERRA_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'NVIDIA GPT-OSS (dedicated)',
-            'note': 'Backs ChatGPT 5.5.',
-            'connected': bool(get_key('NVIDIA_GPT_OSS_API_KEY')),
-            'model_keys': ['gpt-oss-20b'],
-            'fields': [('NVIDIA_GPT_OSS_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'NVIDIA FLUX (image generation)',
-            'note': 'Backs FLUX.2 Klein 4B text-to-image generation.',
-            'connected': bool(get_key('NVIDIA_FLUX_API_KEY')),
-            'model_keys': [ai_chat.FLUX_KLEIN_4B_MODEL_KEY],
-            'fields': [
-                ('NVIDIA_FLUX_API_KEY', 'API key', 'secret'),
-            ],
-        },
-        {
-            'name': '2Factor (phone OTP)',
-            'note': 'Sends and verifies the SMS OTP used for phone verification.',
-            'connected': bool(get_key('TWO_FACTOR_API_KEY')),
-            'model_keys': [],
-            'fields': [('TWO_FACTOR_API_KEY', 'API key', 'secret')],
-        },
-        {
-            'name': 'Tavily (web search)',
-            'note': 'Live web search results the AI can pull into its replies.',
-            'connected': bool(get_key('TAVILY_API_KEY')),
-            'model_keys': [],
-            'fields': [('TAVILY_API_KEY', 'API key', 'secret')],
-        },
-    ]
-
-
-def _mask_secret(value):
-    value = (value or '').strip()
-    if not value:
-        return ''
-    if len(value) <= 8:
-        return '•' * len(value)
-    return value[:4] + '…' + value[-4:]
-
-
 @dashboard_staff_required
 def dashboard_api_settings(request):
     """Per-feature controls that go beyond a plain key — see myapp.api_controls:
@@ -1718,45 +1640,8 @@ def _api_settings_model_keys():
 
 @dashboard_staff_required
 def dashboard_api_data(request):
-    """How many AI/image provider APIs are connected, how many models that
-    resolves to in the frontend picker, and how many requests each API and
-    each model has actually served — so staff can see provider health and
-    usage split at a glance instead of reading ai_chat.MODELS source. Also
-    handles saving/clearing a ProviderAPICredential override from this same
-    page, so a key can be rotated without touching the server's env vars."""
-    from myapp.provider_keys import get_key, invalidate
-
-    registry = _ai_api_registry()
-    all_fields = {}
-    for entry in registry:
-        for setting_name, label, kind in entry['fields']:
-            all_fields[setting_name] = (label, kind)
-
-    saved = False
-    saved_message = ''
-    if request.method == 'POST':
-        clear_name = request.POST.get('clear_field', '').strip()
-        if clear_name and clear_name in all_fields:
-            ProviderAPICredential.objects.filter(setting_name=clear_name).delete()
-            invalidate(clear_name)
-            saved = True
-            saved_message = f'{all_fields[clear_name][0]} reverted to its default.'
-        else:
-            changed_labels = []
-            for setting_name, (label, _kind) in all_fields.items():
-                value = request.POST.get(setting_name, '').strip()
-                if not value:
-                    continue
-                ProviderAPICredential.objects.update_or_create(
-                    setting_name=setting_name,
-                    defaults={'value': value, 'updated_by': request.user},
-                )
-                invalidate(setting_name)
-                changed_labels.append(label)
-            if changed_labels:
-                saved = True
-                saved_message = f"Saved: {', '.join(changed_labels)}."
-
+    """How many requests each model has served. The models are the ones that
+    have a panel on API Settings, where the keys are managed."""
     text_counts = dict(
         AIMessage.objects.filter(role=AIMessage.ROLE_ASSISTANT)
         .exclude(model_key='').values('model_key')
@@ -1770,62 +1655,20 @@ def dashboard_api_data(request):
     for key, count in image_counts.items():
         request_counts[key] = request_counts.get(key, 0) + count
 
-    text_last_used = dict(
+    last_used = dict(
         AIMessage.objects.filter(role=AIMessage.ROLE_ASSISTANT)
         .exclude(model_key='').values('model_key')
         .annotate(last=Max('created_at')).values_list('model_key', 'last')
     )
-    image_last_used = dict(
+    for key, when in (
         AIUserImage.objects.exclude(model_key='').values('model_key')
         .annotate(last=Max('created_at')).values_list('model_key', 'last')
-    )
-    last_used = dict(text_last_used)
-    for key, when in image_last_used.items():
+    ):
         if key not in last_used or when > last_used[key]:
             last_used[key] = when
 
     total_requests = sum(request_counts.values())
-    overrides = {row.setting_name: row for row in ProviderAPICredential.objects.all()}
-
-    api_q = request.GET.get('api_q', '').strip()
-    api_status = request.GET.get('api_status', '').strip()
-    if api_status not in ('connected', 'disconnected'):
-        api_status = 'all'
-
-    apis = []
-    for entry in registry:
-        if api_status == 'connected' and not entry['connected']:
-            continue
-        if api_status == 'disconnected' and entry['connected']:
-            continue
-        if api_q and api_q.lower() not in entry['name'].lower() and api_q.lower() not in entry['note'].lower():
-            continue
-        field_rows = []
-        for setting_name, label, kind in entry['fields']:
-            current_value = get_key(setting_name)
-            override = overrides.get(setting_name)
-            field_rows.append({
-                'setting_name': setting_name,
-                'label': label,
-                'is_secret': kind == 'secret',
-                'preview': _mask_secret(current_value) if kind == 'secret' else current_value,
-                'configured': bool(current_value),
-                'overridden': override is not None,
-                'updated_at': override.updated_at if override else None,
-            })
-        api_last_used = None
-        for model_key in entry['model_keys']:
-            when = last_used.get(model_key)
-            if when and (api_last_used is None or when > api_last_used):
-                api_last_used = when
-        apis.append({
-            'name': entry['name'],
-            'note': entry['note'],
-            'connected': entry['connected'],
-            'requests': sum(request_counts.get(k, 0) for k in entry['model_keys']),
-            'last_used': api_last_used,
-            'fields': field_rows,
-        })
+    managed_model_keys = _api_settings_model_keys()
 
     model_q = request.GET.get('model_q', '').strip()
     model_scope = request.GET.get('model_scope', '').strip()
@@ -1835,7 +1678,6 @@ def dashboard_api_data(request):
     if model_sort not in ('most_requests', 'least_requests', 'az', 'recent'):
         model_sort = 'most_requests'
 
-    managed_model_keys = _api_settings_model_keys()
     models = []
     for key, cfg in ai_chat.MODELS.items():
         if key not in managed_model_keys:
@@ -1867,20 +1709,13 @@ def dashboard_api_data(request):
 
     context = {
         'active': 'api_data',
-        'saved': saved,
-        'saved_message': saved_message,
-        'apis': apis,
-        'api_q': api_q,
-        'api_status': api_status,
-        'total_apis': len(registry),
-        'connected_apis_count': sum(1 for a in registry if a['connected']),
         'models': models,
         'model_q': model_q,
         'model_scope': model_scope,
         'model_sort': model_sort,
         'frontend_model_count': sum(
             1 for key, cfg in ai_chat.MODELS.items()
-            if key != 'vision' and not cfg.get('hidden_from_picker', False)
+            if key in managed_model_keys and key != 'vision' and not cfg.get('hidden_from_picker', False)
         ),
         'total_requests': total_requests,
     }
@@ -2396,7 +2231,11 @@ def dashboard_backup(request):
         'sources': sources,
         'saved_here': any(value == 'dashboard' for value in sources.values()),
         'effective_app_key': settings_obj.effective_app_key,
+        'authorize_url': dropbox_backup.authorize_url(settings_obj.effective_app_key),
     })
+
+
+DROPBOX_FIELD_LABELS = {'app_key': 'App Key', 'app_secret': 'App Secret', 'refresh_token': 'Dropbox code or Refresh Token'}
 
 
 @dashboard_staff_required
@@ -2404,7 +2243,9 @@ def dashboard_backup_settings(request):
     """Save, test or reset the Dropbox credentials from the Backup & Restore page.
 
     New credentials are checked against Dropbox first and only saved when they
-    connect, so a typo can't lock the dashboard out of the existing storage."""
+    connect, so a typo can't lock the dashboard out of the existing storage.
+    The third box takes a Refresh Token or the one-time code Dropbox shows after
+    "Allow": a code is exchanged for the permanent Refresh Token before saving."""
     if request.method != 'POST':
         return redirect('dashboard_backup')
     settings_obj = DropboxSettings.get_solo()
@@ -2432,10 +2273,10 @@ def dashboard_backup_settings(request):
     entered = {name: request.POST.get(name, '').strip() for name, _ in DROPBOX_FIELD_LIMITS}
     for name, limit in DROPBOX_FIELD_LIMITS:
         if len(entered[name]) > limit:
-            messages.error(request, f'That value is too long ({name.replace("_", " ")} can be at most {limit} characters).')
+            messages.error(request, f'That value is too long — the {DROPBOX_FIELD_LABELS[name]} box takes at most {limit} characters. Check that you copied the right thing.')
             return redirect('dashboard_backup')
     if not any(entered.values()):
-        messages.error(request, 'Enter at least one value to save, or use "Use server credentials" to remove the saved ones.')
+        messages.error(request, 'Nothing to save — fill in at least one box, or use "Use server credentials" to remove the saved ones.')
         return redirect('dashboard_backup')
 
     candidate = DropboxSettings(
@@ -2444,13 +2285,29 @@ def dashboard_backup_settings(request):
         refresh_token=entered['refresh_token'] or settings_obj.refresh_token,
     )
     if not candidate.is_configured:
-        messages.error(request, 'Dropbox needs all three: App Key, App Secret and Refresh Token.')
+        missing = [DROPBOX_FIELD_LABELS[name] for name, _ in DROPBOX_FIELD_LIMITS if not getattr(candidate, 'effective_' + name)]
+        messages.error(request, f'Nothing was saved. Dropbox needs all three boxes filled in — still missing: {", ".join(missing)}.')
         return redirect('dashboard_backup')
+    if dropbox_backup.looks_like_access_token(entered['refresh_token']):
+        messages.error(request, f'Nothing was saved. {dropbox_backup.ACCESS_TOKEN_HELP}')
+        return redirect('dashboard_backup')
+    converted = False
     try:
         info = dropbox_backup.account_info(candidate, refresh=True)
     except dropbox_backup.BackupError as exc:
-        messages.error(request, f'Not saved — {exc}')
-        return redirect('dashboard_backup')
+        failure = exc
+        if exc.code == 'bad_token' and entered['refresh_token']:
+            try:
+                candidate.refresh_token = dropbox_backup.exchange_access_code(
+                    candidate.effective_app_key, candidate.effective_app_secret, entered['refresh_token'])
+                converted = True
+                info = dropbox_backup.account_info(candidate, refresh=True)
+                failure = None
+            except dropbox_backup.BackupError as second:
+                failure = second
+        if failure:
+            messages.error(request, f"Couldn't connect, so nothing was saved. {failure}")
+            return redirect('dashboard_backup')
 
     previous = dropbox_backup.credentials_fingerprint(settings_obj)
     settings_obj.app_key = candidate.app_key
@@ -2461,6 +2318,8 @@ def dashboard_backup_settings(request):
     who = info['email'] or info['name'] or 'the new Dropbox account'
     if previous != dropbox_backup.credentials_fingerprint(settings_obj):
         messages.success(request, f'Connected to {who}. The backup list below now shows what is stored in this account.')
+        if converted:
+            messages.success(request, 'The code from Dropbox was turned into a permanent connection and saved — you do not need to paste another one.')
     else:
         messages.success(request, f'Saved. Still connected to {who}.')
     return redirect('dashboard_backup')
@@ -5683,6 +5542,70 @@ def ai_images_delete_all(request):
         return JsonResponse({'status': 'error', 'detail': 'You need to be logged in.'}, status=401)
     AIUserImage.objects.filter(user=request.user).delete()
     response = JsonResponse({'status': 'ok', 'images': []})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+AI_IMAGES_ZIP_PER_HOUR = 10
+_AI_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
+
+
+def ai_images_download_all(request):
+    """Every image in the caller's "My Images" gallery as one .zip, with a
+    prompts.txt listing what each picture was made from. Images already are
+    compressed files, so they are stored as they are."""
+    if request.method != 'GET':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'detail': 'You need to be logged in.'}, status=401)
+    throttle_key = f'ai-images-zip:{request.user.pk}'
+    cache.add(throttle_key, 0, 3600)
+    try:
+        if cache.incr(throttle_key) > AI_IMAGES_ZIP_PER_HOUR:
+            return JsonResponse({'status': 'error', 'detail': 'Please wait a little before downloading your images again.'}, status=429)
+    except ValueError:
+        cache.set(throttle_key, 1, 3600)
+
+    ai_chat.get_ai_brand_name()  # refresh model labels before they are listed
+    archive_file = tempfile.TemporaryFile()
+    saved = 0
+    missing = 0
+    notes = []
+    with zipfile.ZipFile(archive_file, 'w', zipfile.ZIP_STORED) as archive:
+        for image in AIUserImage.objects.filter(user=request.user).order_by('created_at', 'pk').iterator():
+            storage_name = _ai_storage_name_from_url(image.url)
+            extension = Path(storage_name).suffix.lower() if storage_name else ''
+            if not storage_name or extension not in _AI_IMAGE_EXTENSIONS:
+                missing += 1
+                continue
+            try:
+                with default_storage.open(storage_name, 'rb') as stored:
+                    data = stored.read()
+            except Exception:
+                missing += 1
+                continue
+            stamp = timezone.localtime(image.created_at).strftime('%Y-%m-%d_%H%M%S')
+            filename = f'{stamp}_{image.pk}{extension}'
+            archive.writestr(filename, data)
+            saved += 1
+            model_label = ai_chat.MODELS.get(image.model_key, {}).get('label', image.model_key)
+            prompt = ' '.join((image.prompt or '').split()) or '(no prompt saved)'
+            notes.append(f'{filename}\n    Made with: {model_label or "AI"}\n    Prompt: {prompt}\n')
+        if saved:
+            header = f'{ai_chat.get_ai_brand_name()} AI — your generated images\nDownloaded {timezone.localtime():%d %b %Y, %I:%M %p}\n{saved} image{"" if saved == 1 else "s"}'
+            if missing:
+                header += f' ({missing} could not be included — the file is no longer available)'
+            archive.writestr('prompts.txt', (header + '\n\n' + '\n'.join(notes)).encode('utf-8-sig'))
+    if not saved:
+        archive_file.close()
+        detail = 'You have no images to download yet.' if not missing else 'Your images are no longer available to download.'
+        return JsonResponse({'status': 'error', 'detail': detail}, status=404)
+    archive_file.seek(0)
+    response = FileResponse(
+        archive_file, as_attachment=True, content_type='application/zip',
+        filename=_ai_download_name(f'{ai_chat.get_ai_brand_name()}-images-{timezone.localdate():%Y-%m-%d}', 'zip'),
+    )
+    response['X-Content-Type-Options'] = 'nosniff'
     response['Cache-Control'] = 'private, no-store'
     return response
 

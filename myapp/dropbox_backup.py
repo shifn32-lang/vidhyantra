@@ -8,12 +8,14 @@ import hashlib
 import io
 import json
 import logging
+import re
 import time
 import sqlite3
 import tempfile
 import zipfile
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings as dj_settings
 from django.core.cache import cache
@@ -63,7 +65,14 @@ def _upload(dbx, content, remote_path, mode):
 
 
 class BackupError(Exception):
-    """Raised for any Dropbox/backup failure with a message safe to show the admin."""
+    """Raised for any Dropbox/backup failure with a message safe to show the admin.
+
+    `code` names the kind of failure so callers can react to it: 'bad_token',
+    'bad_code', 'bad_client', 'scope', 'network', or '' for anything else."""
+
+    def __init__(self, message, code=''):
+        super().__init__(message)
+        self.code = code
 
 
 def db_path():
@@ -74,7 +83,7 @@ def _client(settings_obj):
     if dropbox is None:
         raise BackupError("The 'dropbox' Python package isn't installed on this server.")
     if not settings_obj.is_configured:
-        raise BackupError('Dropbox is not configured yet — add your App Key, App Secret and Refresh Token first.')
+        raise BackupError('Dropbox is not connected yet. Add the App Key, App Secret and Dropbox code on this page first.', 'not_connected')
     return dropbox.Dropbox(
         oauth2_refresh_token=settings_obj.effective_refresh_token,
         app_key=settings_obj.effective_app_key,
@@ -97,17 +106,96 @@ def credentials_fingerprint(settings_obj):
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
-def _describe_connection_error(exc):
+GET_CODE_HELP = (
+    'Click “Get Dropbox code”, press Allow in the Dropbox window, then copy the code '
+    'it shows and paste it into the third box.'
+)
+CLIENT_HELP = (
+    "Dropbox doesn't recognise this App Key and App Secret. Copy both again from the Settings tab of your "
+    'app at dropbox.com/developers/apps, with no spaces before or after.'
+)
+ACCESS_TOKEN_HELP = 'That is a short-lived access token, which stops working after about four hours. ' + GET_CODE_HELP
+TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token'
+
+
+def classify_error(exc):
+    """Turns whatever Dropbox or the network raised into (kind, plain-English message)."""
     text = str(exc)
     lowered = text.lower()
+    if 'missing_scope' in lowered:
+        scope = re.search(r"required_scope='([\w.]+)'", text)
+        needed = f' ({scope.group(1)})' if scope else ''
+        return 'scope', (
+            f"Your Dropbox app doesn't have a permission it needs{needed}. Open your app at "
+            'dropbox.com/developers/apps, go to the Permissions tab, tick files.content.write, '
+            'files.content.read and account_info.read, press Submit. Then connect again: ' + GET_CODE_HELP[0].lower() + GET_CODE_HELP[1:])
     if 'invalid_grant' in lowered or 'invalid_access_token' in lowered or 'expired' in lowered:
-        return ('Dropbox rejected the Refresh Token. Generate a new one for this app '
-                'with token_access_type=offline and paste it here.')
-    if 'invalid_client' in lowered or 'app key' in lowered or 'app secret' in lowered:
-        return 'Dropbox rejected the App Key or App Secret. Check both against your app in the Dropbox App Console.'
-    if 'timed out' in lowered or 'connection' in lowered or 'name resolution' in lowered:
-        return 'Could not reach Dropbox. Check the server\'s internet connection and try again.'
-    return f'Could not connect to Dropbox: {text[:200]}'
+        return 'bad_token', (
+            'Dropbox no longer accepts the saved connection key (the Refresh Token). It may be incomplete, '
+            'revoked, or made for a different Dropbox app. ' + GET_CODE_HELP)
+    if 'invalid_client' in lowered or '401 client error' in lowered or 'app key' in lowered or 'app secret' in lowered:
+        return 'bad_client', CLIENT_HELP
+    if 'insufficient_space' in lowered:
+        return 'full', 'Your Dropbox is full. Free up some space or upgrade the Dropbox plan, then try again.'
+    if 'too_many_requests' in lowered or 'rate_limit' in lowered or '429' in lowered:
+        return 'busy', 'Dropbox asked us to slow down. Wait a minute and try again.'
+    if 'timed out' in lowered or 'timeout' in lowered or 'connection' in lowered or 'max retries' in lowered or 'name resolution' in lowered:
+        return 'network', "Could not reach Dropbox. Check the server's internet connection and try again."
+    return '', f"Dropbox sent back an error we don't recognise. Details for support: {text[:200]}"
+
+
+def _connection_error(exc, intro=''):
+    kind, message = classify_error(exc)
+    return BackupError(f'{intro} {message}'.strip(), kind)
+
+
+def looks_like_access_token(value):
+    return (value or '').startswith('sl.')
+
+
+def authorize_url(app_key):
+    """The Dropbox page where the owner presses Allow and is shown a one-time code."""
+    if not app_key:
+        return ''
+    return 'https://www.dropbox.com/oauth2/authorize?' + urlencode({
+        'client_id': app_key, 'response_type': 'code', 'token_access_type': 'offline',
+    })
+
+
+def exchange_access_code(app_key, app_secret, code):
+    """Turns the one-time code Dropbox shows after "Allow" into a Refresh Token.
+
+    A code works once and only for a few minutes, so this runs the moment it is
+    pasted. The permanent Refresh Token it returns is what gets saved."""
+    try:
+        import requests
+        response = requests.post(TOKEN_URL, data={
+            'grant_type': 'authorization_code', 'code': code,
+            'client_id': app_key, 'client_secret': app_secret,
+        }, timeout=20)
+    except Exception as exc:
+        raise _connection_error(exc, 'Could not check the code with Dropbox.')
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    if response.ok and body.get('refresh_token'):
+        return body['refresh_token']
+    if response.ok:
+        raise BackupError(
+            'Dropbox accepted the code but did not give a permanent connection. Use the “Get Dropbox code” '
+            'button, which asks Dropbox for permanent access, instead of a code from somewhere else.', 'bad_code')
+    error = body.get('error')
+    if error == 'invalid_client' or response.status_code == 401:
+        raise BackupError(CLIENT_HELP, 'bad_client')
+    if error == 'invalid_grant':
+        raise BackupError(
+            'Dropbox did not accept that code. A code works only once, stops working after a few minutes, '
+            'and must come from the same App Key as the one above. ' + GET_CODE_HELP, 'bad_code')
+    detail = str(body.get('error_description') or error or response.status_code)[:120]
+    raise BackupError(f'Dropbox refused the code ({detail}). ' + GET_CODE_HELP, 'bad_code')
 
 
 def account_info(settings_obj, *, refresh=False):
@@ -144,11 +232,11 @@ def account_info(settings_obj, *, refresh=False):
             logger.info('Dropbox space usage unavailable', exc_info=True)
     except Exception as exc:
         if 'missing_scope' not in str(exc):
-            raise BackupError(_describe_connection_error(exc))
+            raise _connection_error(exc)
         try:
             dbx.check_user(query='ping')
         except Exception as ping_exc:
-            raise BackupError(_describe_connection_error(ping_exc))
+            raise _connection_error(ping_exc)
         info['limited'] = True
     cache.set(cache_key, info, ACCOUNT_CACHE_SECONDS)
     return info
@@ -163,7 +251,7 @@ def _ensure_folder(dbx, path):
         dbx.files_create_folder_v2(path)
     except Exception as exc:
         if 'conflict' not in str(exc).lower():  # folder already exists — fine
-            raise BackupError(f"Could not create the Dropbox folder '{path}': {exc}")
+            raise _connection_error(exc, f"Could not create the Dropbox folder '{path}'.")
 
 
 def create_backup(settings_obj, *, missing_images=None):
@@ -217,7 +305,7 @@ def create_backup(settings_obj, *, missing_images=None):
     except BackupError:
         raise
     except Exception as exc:
-        raise BackupError(f'Backup to Dropbox failed: {exc}')
+        raise _connection_error(exc, 'The backup was not saved to Dropbox.')
 
 
 def list_backups(settings_obj):
@@ -242,7 +330,7 @@ def list_backups(settings_obj):
     except BackupError:
         raise
     except Exception as exc:
-        raise BackupError(f'Could not list Dropbox backups: {exc}')
+        raise _connection_error(exc, 'Could not list the backups on Dropbox.')
 
 
 def delete_all_backups(settings_obj):
@@ -280,7 +368,7 @@ def delete_all_backups(settings_obj):
     except BackupError:
         raise
     except Exception as exc:
-        raise BackupError(f'Could not delete Dropbox backups: {exc}')
+        raise _connection_error(exc, 'Could not delete the backups on Dropbox.')
 
 
 def restore_backup(settings_obj, filename):
@@ -295,7 +383,7 @@ def restore_backup(settings_obj, filename):
     except BackupError:
         raise
     except Exception as exc:
-        raise BackupError(f'Could not download that backup from Dropbox: {exc}')
+        raise _connection_error(exc, 'Could not download that backup from Dropbox.')
 
     media_files = []
     if filename.endswith('.zip'):

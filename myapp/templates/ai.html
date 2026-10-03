@@ -242,7 +242,43 @@ header{background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px s
 .account-save-btn:hover:not(:disabled),.account-plan-btn:hover{transform:translateY(-1px)}
 .account-save-btn:active:not(:disabled),.account-plan-btn:active{transform:translateY(0) scale(.98)}
 .account-save-btn:disabled{opacity:.55;cursor:default}
-.images-panel-head{display:flex;justify-content:flex-end;margin-bottom:.75rem}
+.images-panel-head{display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem}
+.account-ghost-btn{border:1.5px solid var(--line);background:transparent;color:var(--head);font-family:inherit;font-size:.78rem;font-weight:700;padding:.5rem .85rem;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;transition:border-color .15s,color .15s,transform .12s}
+.account-ghost-btn:hover:not(:disabled){border-color:var(--red);color:var(--red);transform:translateY(-1px)}
+.account-ghost-btn:disabled{opacity:.55;cursor:default}
+.calls-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.4rem}
+.calls-record{display:inline-flex;align-items:center;gap:.5rem;font-size:.8rem;font-weight:700;color:var(--head);cursor:pointer}
+.calls-record input{accent-color:var(--red);width:16px;height:16px}
+.calls-note{font-size:.74rem;line-height:1.5;color:var(--text);margin:.3rem 0 .9rem}
+.calls-list{display:flex;flex-direction:column;gap:.5rem}
+.call-row{display:flex;align-items:center;gap:.7rem;border:1px solid var(--line);border-radius:13px;padding:.65rem .75rem;background:var(--bg-alt)}
+.call-row-icon{flex:none;width:36px;height:36px;border-radius:50%;background:rgba(var(--accent-rgb),.14);color:var(--red);display:flex;align-items:center;justify-content:center}
+.call-row-main{flex:1;min-width:0;cursor:pointer}
+.call-row-main b{display:block;font-size:.82rem;color:var(--head)}
+.call-row-main small{display:block;font-size:.7rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.call-row-rec{flex:none;color:var(--red);font-size:.8rem}
+.call-icon-btn{flex:none;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--head);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;transition:border-color .15s,color .15s,background .15s}
+.call-icon-btn:hover{border-color:var(--red);color:var(--red)}
+.call-icon-btn.danger:hover{background:var(--red);color:#fff}
+.call-back{margin-bottom:.8rem}
+.call-detail-title{font-size:1rem;margin:0 0 .15rem;color:var(--head)}
+.call-audio{border:1px solid var(--line);border-radius:13px;padding:.75rem;background:var(--bg-alt);margin-bottom:.8rem;display:flex;flex-direction:column;gap:.55rem;align-items:flex-start}
+.call-audio audio{width:100%}
+.call-audio-head{font-size:.8rem;font-weight:800;color:var(--head)}
+.call-audio-head small{font-weight:500;color:var(--text);margin-left:.3rem}
+.call-detail-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.call-transcript{display:flex;flex-direction:column;gap:.6rem}
+.call-line{max-width:88%;display:flex;flex-direction:column}
+.call-line.ai{align-self:flex-start}
+.call-line.you{align-self:flex-end;align-items:flex-end}
+.call-line-bubble{padding:.55rem .75rem;border-radius:13px;font-size:.82rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--head)}
+.call-line.ai .call-line-bubble{background:var(--bg-alt);border:1px solid var(--line)}
+.call-line.you .call-line-bubble{background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.3)}
+.call-line-meta{font-size:.65rem;color:var(--text);margin-top:.15rem}
+.call-rec{margin:.45rem 0 0;font-size:.72rem;font-weight:600;color:#ff8b8b;display:flex;align-items:center;gap:.4rem}
+.call-rec[hidden]{display:none}
+.call-rec i{font-size:.5rem;animation:callRecBlink 1.2s infinite}
+@keyframes callRecBlink{50%{opacity:.25}}
 .account-danger-btn{border:1.5px solid var(--red);background:transparent;color:var(--red);font-family:inherit;font-size:.78rem;font-weight:700;padding:.5rem .85rem;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;transition:background .15s,color .15s,transform .12s}
 .account-danger-btn:hover:not(:disabled){background:var(--red);color:#fff;transform:translateY(-1px)}
 .account-danger-btn:active:not(:disabled){transform:translateY(0) scale(.98)}
@@ -748,15 +784,38 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 .call-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:1rem;background:radial-gradient(circle at 50% 28%,rgba(var(--accent-rgb),.24),transparent 62%),rgba(7,12,10,.95);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .call-overlay[hidden]{display:none}
 .call-card{width:min(380px,100%);display:flex;flex-direction:column;align-items:center;text-align:center;color:#e9f1ee}
-.call-avatar{position:relative;width:104px;height:104px;border-radius:50%;background:linear-gradient(145deg,var(--red),var(--red-dark));display:flex;align-items:center;justify-content:center;font-size:2.2rem;color:#fff;margin-bottom:1rem}
-.call-avatar::before,.call-avatar::after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid rgba(var(--accent-rgb),.6);opacity:0}
+/* the caller picture: a glowing colour-shifting orb with a voice meter inside */
+.call-avatar{position:relative;width:124px;height:124px;border-radius:50%;margin-bottom:1.1rem;box-shadow:0 0 34px rgba(0,229,255,.32),0 0 78px rgba(124,77,255,.3)}
+.call-avatar::before,.call-avatar::after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid rgba(0,229,255,.55);opacity:0}
+.call-orb{position:absolute;inset:0;border-radius:50%;overflow:hidden;background:#05070f}
+.call-orb::before{content:'';position:absolute;inset:-40%;background:conic-gradient(from 0deg,#00f5d4,#00b4ff,#7c4dff,#ff4fd8,#ffb347,#00f5d4);filter:blur(7px);animation:callSpin 7s linear infinite}
+.call-core{position:absolute;inset:7px;border-radius:50%;display:flex;align-items:center;justify-content:center;gap:5px;background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.2),transparent 36%),radial-gradient(circle at 50% 60%,#101a38,#05070f 78%);box-shadow:inset 0 0 20px rgba(0,229,255,.28)}
+.call-core i{display:block;width:5px;height:34px;border-radius:4px;background:linear-gradient(180deg,#8cf9ff,#b69cff);transform:scaleY(.3);transform-origin:center;--h:.6}
+.call-core i:nth-child(1),.call-core i:nth-child(5){--h:.45}
+.call-core i:nth-child(2),.call-core i:nth-child(4){--h:.8}
+.call-core i:nth-child(3){--h:1}
 .call-overlay[data-state="speaking"] .call-avatar::before{animation:callRing 1.8s ease-out infinite}
 .call-overlay[data-state="speaking"] .call-avatar::after{animation:callRing 1.8s ease-out .6s infinite}
-.call-overlay[data-state="listening"] .call-avatar{animation:callBreath 1.6s ease-in-out infinite}
+.call-overlay[data-state="speaking"] .call-orb::before{animation-duration:2.6s}
+.call-overlay[data-state="speaking"] .call-core i{animation:callBar .85s ease-in-out infinite}
+.call-overlay[data-state="listening"] .call-avatar{animation:callBreath 1.8s ease-in-out infinite}
+.call-overlay[data-state="listening"] .call-core i{animation:callBarSoft 2.2s ease-in-out infinite}
 .call-overlay[data-state="thinking"] .call-avatar{animation:callThink 1.1s ease-in-out infinite}
+.call-overlay[data-state="thinking"] .call-orb::before{animation-duration:3.2s}
+.call-overlay[data-state="thinking"] .call-core i{animation:callBarWave 1.1s ease-in-out infinite}
+.call-overlay[data-state="muted"] .call-orb::before{animation-play-state:paused;filter:blur(7px) grayscale(1) brightness(.7)}
+.call-overlay[data-state="muted"] .call-core i{transform:scaleY(.18)}
+.call-core i:nth-child(2){animation-delay:-.18s!important}
+.call-core i:nth-child(3){animation-delay:-.36s!important}
+.call-core i:nth-child(4){animation-delay:-.54s!important}
+.call-core i:nth-child(5){animation-delay:-.72s!important}
+@keyframes callSpin{to{transform:rotate(360deg)}}
 @keyframes callRing{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.9);opacity:0}}
-@keyframes callBreath{0%,100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.5)}50%{box-shadow:0 0 0 14px rgba(var(--accent-rgb),0)}}
+@keyframes callBreath{0%,100%{box-shadow:0 0 34px rgba(0,229,255,.32),0 0 78px rgba(124,77,255,.3),0 0 0 0 rgba(0,229,255,.45)}50%{box-shadow:0 0 34px rgba(0,229,255,.32),0 0 78px rgba(124,77,255,.3),0 0 0 16px rgba(0,229,255,0)}}
 @keyframes callThink{0%,100%{transform:scale(1)}50%{transform:scale(.94)}}
+@keyframes callBar{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(var(--h))}}
+@keyframes callBarSoft{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(calc(var(--h) * .45 + .12))}}
+@keyframes callBarWave{0%,100%{transform:scaleY(.22);opacity:.55}50%{transform:scaleY(.7);opacity:1}}
 .call-brand{margin:0;font-family:var(--font-head);font-size:1.25rem;font-weight:700;color:#fff}
 .call-timer{margin:.15rem 0 0;font-size:.85rem;color:rgba(233,241,238,.65);font-variant-numeric:tabular-nums}
 .call-status{margin:1.1rem 0 .3rem;font-size:1rem;font-weight:700;color:rgb(var(--accent-rgb));min-height:1.5em}
@@ -777,7 +836,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 .call-act.end:hover .call-act-circle{background:#cf3a3f}
 .call-act.end .call-act-circle i{transform:rotate(135deg)}
 .call-note{margin:1.4rem 0 0;font-size:.7rem;line-height:1.5;color:rgba(233,241,238,.5)}
-@media (prefers-reduced-motion:reduce){.call-overlay .call-avatar,.call-overlay .call-avatar::before,.call-overlay .call-avatar::after{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.call-overlay .call-avatar,.call-overlay .call-avatar::before,.call-overlay .call-avatar::after,.call-overlay .call-orb::before,.call-overlay .call-core i{animation:none!important}.call-core i{transform:scaleY(.5)}}
 .search-btn{border:1px solid transparent;cursor:pointer;background:none;color:#9aa3b0;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem;position:relative;transition:color .16s,background .16s,border-color .16s,box-shadow .16s,transform .12s}
 .search-btn:hover:not(:disabled){color:#10b981;background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.34);transform:translateY(-1px)}
 .search-btn:active:not(:disabled){transform:translateY(0) scale(.92)}
@@ -1216,6 +1275,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           <button type="button" class="acct-menu-item" data-account-panel="subscription" role="menuitem"><i class="fas fa-crown"></i> Subscription details</button>
           <button type="button" class="acct-menu-item" data-account-panel="reports" role="menuitem"><i class="fas fa-flag"></i> My reports</button>
           <button type="button" class="acct-menu-item" data-account-panel="images" role="menuitem"><i class="fas fa-images"></i> My Images</button>
+          <button type="button" class="acct-menu-item" data-account-panel="calls" role="menuitem"><i class="fas fa-phone-volume"></i> My calls</button>
           <button type="button" class="acct-menu-item" data-account-panel="api" role="menuitem"><i class="fas fa-key"></i> Get API</button>
           <button type="button" class="acct-menu-item" data-account-panel="coding" role="menuitem"><i class="fas fa-terminal"></i> Start coding</button>
           <button type="button" class="acct-menu-item" id="exportAllMenuBtn" role="menuitem"><i class="fas fa-file-export"></i> Export all chats</button>
@@ -1355,6 +1415,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     <button type="button" class="account-tab" data-account-tab="subscription" role="tab">Subscription</button>
     <button type="button" class="account-tab" data-account-tab="reports" role="tab">Reports</button>
     <button type="button" class="account-tab" data-account-tab="images" role="tab">My Images</button>
+    <button type="button" class="account-tab" data-account-tab="calls" role="tab">My calls</button>
     <button type="button" class="account-tab" data-account-tab="api" role="tab">Get API</button>
     <button type="button" class="account-tab" data-account-tab="coding" role="tab">Start coding</button>
   </div>
@@ -1527,6 +1588,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     <div class="account-panel" data-account-content="subscription" hidden><div class="account-loading">Loading subscription…</div></div>
     <div class="account-panel" data-account-content="reports" hidden><div class="account-loading">Loading reports…</div></div>
     <div class="account-panel" data-account-content="images" hidden><div class="account-loading">Loading images…</div></div>
+    <div class="account-panel" data-account-content="calls" hidden><div class="account-loading">Loading calls…</div></div>
     <div class="account-panel" data-account-content="api" hidden><div class="account-loading">Loading…</div></div>
     <div class="account-panel" data-account-content="coding" hidden><div class="account-loading">Loading…</div></div>
   </div>
@@ -1786,9 +1848,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
 <div class="call-overlay" id="callOverlay" data-state="idle" hidden role="dialog" aria-modal="true" aria-label="Voice call">
   <div class="call-card">
-    <div class="call-avatar" aria-hidden="true"><i class="fas fa-phone"></i></div>
+    <div class="call-avatar" aria-hidden="true"><span class="call-orb"></span><span class="call-core"><i></i><i></i><i></i><i></i><i></i></span></div>
     <p class="call-brand">{{ SITE_AI_BRAND_NAME }} AI</p>
     <p class="call-timer" id="callTimer">00:00</p>
+    <p class="call-rec" id="callRec" hidden><i class="fas fa-circle"></i> Recording your voice</p>
     <p class="call-status" id="callStatus" aria-live="polite">Calling…</p>
     <p class="call-caption" id="callCaption" aria-live="polite"></p>
     <form class="call-name-form" id="callNameForm" hidden autocomplete="off">
@@ -1883,7 +1946,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var activeAbort = null;
   // Voice call (see "voice call" below). Declared up here because send()
   // reads it and runs long after the call code has been set up.
-  var voiceCall = { active: false, phase: '', name: '', muted: false, silence: 0, nameTries: 0, token: 0, recognition: null, waiting: null, skip: null, timer: null, startedAt: 0 };
+  var voiceCall = { active: false, phase: '', name: '', muted: false, silence: 0, nameTries: 0, token: 0, recognition: null, waiting: null, skip: null, timer: null, startedAt: 0, session: null };
   function stopGenerating(){
     if (activeAbort) activeAbort.abort();
   }
@@ -4474,7 +4537,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return out;
   }
   var speakingBtn = null;
+  var speakRun = 0;
   function stopSpeaking(){
+    speakRun += 1;
     if (SPEECH_SYNTH_SUPPORTED) window.speechSynthesis.cancel();
     if (speakingBtn) { speakingBtn.classList.remove('speaking'); speakingBtn.innerHTML = '<i class="fas fa-volume-high"></i> Listen'; }
     speakingBtn = null;
@@ -4487,40 +4552,119 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     window.speechSynthesis.getVoices();
     window.speechSynthesis.addEventListener('voiceschanged', function(){});
   }
-  // Best-effort — picks a female-sounding Indian voice for `lang` if the
-  // browser/OS shipped one, so Sumudrika doesn't default to whatever
-  // generic (often male, often US-accented) voice the system picks. Falls
-  // back gracefully: female voice for that exact lang > any voice for that
-  // lang > any Indian voice for the same language family > browser default
-  // (utterance.voice left unset).
-  function pickIndianFemaleVoice(lang){
-    if (!SPEECH_SYNTH_SUPPORTED) return null;
-    var voices = window.speechSynthesis.getVoices() || [];
-    if (!voices.length) return null;
-    var langPrefix = lang.split('-')[0].toLowerCase();
-    var pool = voices.filter(function(v){ return v.lang && v.lang.toLowerCase() === lang.toLowerCase(); });
-    if (!pool.length) pool = voices.filter(function(v){ return v.lang && v.lang.toLowerCase().indexOf(langPrefix + '-in') === 0; });
-    if (!pool.length) pool = voices.filter(function(v){ return v.lang && v.lang.toLowerCase().indexOf(langPrefix) === 0; });
-    if (!pool.length) return null;
-    var female = pool.find(function(v){ return /female|woman|girl|heera|priya|veena|lekha|kalpana|swara/i.test(v.name); });
-    return female || pool[0];
+  // ---- choosing the speaking voice ----
+  // A call and the Listen button use two different voices so they never sound
+  // alike: the call is a woman, Listen is a man. Browsers don't say who a voice
+  // is, so the gender is read from the voice's name (the well-known voices on
+  // Edge, Chrome, Windows, macOS and Android). Only voices for the chosen
+  // language are considered. Among them the right gender comes first, then the
+  // best sounding one: Edge's online "Natural" voices, then Google's network
+  // voices, then enhanced system voices, then the plain built-in ones. When no
+  // voice of the right gender can be told apart (some phones), the pitch is
+  // raised or lowered instead so the two still differ.
+  var VOICE_FEMALE_RE = /\b(?:female|woman|zira|hazel|susan|linda|heera|kalpana|swara|neerja|aria|jenny|michelle|emma|sonia|libby|maisie|natasha|clara|ava|samantha|karen|tessa|moira|fiona|victoria|allison|serena|kate|veena|lekha|pallavi|tanishaa|shruti|aarohi|dhwani|sapna|sobhana|gul|zoe|nicky|joanna|salli|kimberly|ivy|amy|emily|olivia)\b|google (?:us english|हिन्दी)/i;
+  var VOICE_MALE_RE = /\b(?:male|man|david|mark|george|james|richard|guy|ryan|prabhat|madhur|hemant|ravi|rishi|daniel|alex|fred|tom|oliver|arthur|aaron|thomas|christopher|eric|brian|roger|davis|jason|tony|mohan|valluvar|bashkar|manohar|niranjan|gagan|midhun|salman|sean|andrew|brandon|liam|noah|connor)\b/i;
+  function voiceGender(voice){
+    var name = voice.name || '';
+    if (VOICE_FEMALE_RE.test(name)) return 'female';
+    if (VOICE_MALE_RE.test(name)) return 'male';
+    return '';
   }
-  function toggleSpeak(btn, text, indianFemaleVoice){
+  function voiceLanguageFit(voice, lang){
+    var have = (voice.lang || '').toLowerCase().replace('_', '-');
+    var want = lang.toLowerCase();
+    var family = want.split('-')[0];
+    if (have === want) return 3;
+    if (have === family + '-in') return 2;
+    if (have.split('-')[0] === family) return 1;
+    return 0;
+  }
+  function voiceQuality(voice){
+    var name = voice.name || '';
+    var score = 0;
+    if (/natural|neural/i.test(name)) score = 100;
+    else if (/^google\b/i.test(name)) score = 60;
+    else if (/premium|enhanced|siri/i.test(name)) score = 50;
+    if (voice.localService === false) score += 10;
+    if (/espeak|compact|festival/i.test(name)) score -= 40;
+    return score;
+  }
+  // { voice, sure }: the chosen voice (null when the browser has none for this
+  // language) and whether its gender is known to be the one asked for.
+  function pickVoice(lang, gender){
+    var none = { voice: null, sure: false };
+    if (!SPEECH_SYNTH_SUPPORTED) return none;
+    var voices = window.speechSynthesis.getVoices() || [];
+    var best = null;
+    var bestScore = -1;
+    var bestGender = '';
+    voices.forEach(function(voice){
+      var fit = voiceLanguageFit(voice, lang);
+      if (!fit) return;
+      var who = voiceGender(voice);
+      var score = (who === gender ? 1000 : (who ? 0 : 400)) + fit * 30 + voiceQuality(voice);
+      if (score > bestScore) { best = voice; bestScore = score; bestGender = who; }
+    });
+    return best ? { voice: best, sure: bestGender === gender } : none;
+  }
+  function buildUtterance(text, lang, gender, plain){
+    var utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    var pick = plain ? { voice: null, sure: false } : pickVoice(lang, gender);
+    if (pick.voice) utterance.voice = pick.voice;
+    if (!pick.sure) utterance.pitch = gender === 'female' ? 1.25 : 0.8;
+    return utterance;
+  }
+  // Speaks one piece of text. If the chosen voice fails to start (a network
+  // voice while offline) the piece is tried once more with the browser's own
+  // default voice instead of going silent.
+  function speakPiece(text, lang, gender, hooks){
+    var retried = false;
+    function wire(utterance){
+      utterance.onstart = hooks.onstart || null;
+      utterance.onend = hooks.onend || null;
+      utterance.onerror = function(e){
+        var code = e && e.error;
+        if (!retried && utterance.voice && utterance.voice.localService === false && code !== 'canceled' && code !== 'interrupted') {
+          retried = true;
+          var plain = buildUtterance(text, lang, gender, true);
+          wire(plain);
+          window.speechSynthesis.speak(plain);
+          return;
+        }
+        if (hooks.onerror) hooks.onerror(e);
+      };
+      return utterance;
+    }
+    var first = wire(buildUtterance(text, lang, gender, false));
+    window.speechSynthesis.speak(first);
+    return first;
+  }
+  // Listen reads a reply in a man's voice, one sentence at a time (Chrome
+  // silently stops a single long utterance after about fifteen seconds). The
+  // Sumudrika/Jagu persona replies keep a woman's voice.
+  function toggleSpeak(btn, text, persona){
     var wasSpeaking = btn === speakingBtn;
     stopSpeaking();
     if (wasSpeaking) return;
-    var utterance = new SpeechSynthesisUtterance(sanitizeForSpeech(text));
-    utterance.lang = SPEECH_LANG_MAP[currentLanguage] || 'en-IN';
-    if (indianFemaleVoice) {
-      var voice = pickIndianFemaleVoice(utterance.lang);
-      if (voice) utterance.voice = voice;
-    }
-    utterance.onend = function(){ if (speakingBtn === btn) stopSpeaking(); };
-    utterance.onerror = function(){ if (speakingBtn === btn) stopSpeaking(); };
+    var chunks = speechChunks(sanitizeForSpeech(text));
+    if (!chunks.length) return;
+    var lang = SPEECH_LANG_MAP[currentLanguage] || 'en-IN';
+    var gender = persona ? 'female' : 'male';
+    var run = speakRun;
+    var index = 0;
     speakingBtn = btn;
     btn.classList.add('speaking');
     btn.innerHTML = '<i class="fas fa-stop"></i> Stop';
-    window.speechSynthesis.speak(utterance);
+    function next(){
+      if (run !== speakRun) return;
+      if (index >= chunks.length) { stopSpeaking(); return; }
+      speakPiece(chunks[index++], lang, gender, {
+        onend: next,
+        onerror: function(){ if (run === speakRun) stopSpeaking(); }
+      });
+    }
+    next();
   }
 
   // ---- voice call ----
@@ -4545,6 +4689,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var callMuteBtn = document.getElementById('callMuteBtn');
   var callSkipBtn = document.getElementById('callSkipBtn');
   var callEndBtn = document.getElementById('callEndBtn');
+  var callRecEl = document.getElementById('callRec');
   var CALL_NOTE_TEXT = callNoteEl ? callNoteEl.textContent : '';
   var CALL_MAX_SILENCES = 4;
   var CALL_SETTLE_MS = 1100;
@@ -4591,9 +4736,110 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     callTimerEl.textContent = (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
   }
 
+
+  // ---- saving the call: transcript, and the caller's voice if allowed ----
+  // The call is saved to the account as it goes (see myapp/ai_calls.py): the
+  // transcript after each spoken line, and the microphone recording in
+  // ten-second pieces, so closing the tab keeps what was said so far. Only
+  // signed-in callers are saved. The AI's own voice cannot be captured by the
+  // browser, so the recording is the caller's voice only.
+  function callLog(who, text, step){
+    var session = voiceCall.session;
+    text = (text || '').trim();
+    if (!session || !text) return null;
+    var entry = { who: who, text: text.slice(0, 4000), at: new Date().toISOString(), step: step || voiceCall.phase };
+    session.transcript.push(entry);
+    return entry;
+  }
+  function callBody(session, final){
+    return {
+      transcript: session.transcript, caller_name: voiceCall.name || session.callerName || '',
+      conversation_id: state.currentConversationId, final: !!final, language: currentLanguage
+    };
+  }
+  function callSyncSession(session, final){
+    if (!session) return Promise.resolve();
+    return session.idPromise.then(function(id){
+      if (!id) return null;
+      var body = JSON.stringify(callBody(session, final));
+      return fetch('/AI/api/calls/' + id + '/save/', {
+        method: 'POST', credentials: 'same-origin', keepalive: body.length < 60000,
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() }, body: body
+      }).catch(function(){});
+    });
+  }
+  function callSync(final){ return callSyncSession(voiceCall.session, final); }
+
+  function callRecordingWanted(){
+    try { if (localStorage.getItem('ai_call_record') === '0') return false; } catch (e) {}
+    return !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+  function callQueueChunk(session, blob){
+    var seq = session.seq++;
+    session.chain = session.chain.then(function(){ return session.idPromise; }).then(function(id){
+      if (!id || session.uploadStopped) return null;
+      var form = new FormData();
+      form.append('chunk', blob, 'part');
+      form.append('seq', String(seq));
+      form.append('mime', session.mime);
+      return fetch('/AI/api/calls/' + id + '/audio/', {
+        method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': csrfToken() }, body: form
+      }).then(function(response){
+        if (!response.ok) {
+          session.uploadStopped = true;
+          if (session.recorder && session.recorder.state !== 'inactive') { try { session.recorder.stop(); } catch (e) {} }
+          if (callRecEl) callRecEl.hidden = true;
+        }
+      });
+    }).catch(function(){ session.uploadStopped = true; });
+  }
+  function callStartRecording(session){
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function(stream){
+      var mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].filter(function(type){
+        return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type);
+      })[0] || '';
+      var recorder = null;
+      if (voiceCall.session === session) {
+        try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 }) : new MediaRecorder(stream); } catch (e) { recorder = null; }
+      }
+      if (!recorder) { stream.getTracks().forEach(function(track){ track.stop(); }); return; }
+      session.stream = stream;
+      session.recorder = recorder;
+      session.mime = recorder.mimeType || mime || 'audio/webm';
+      recorder.ondataavailable = function(e){ if (e.data && e.data.size) callQueueChunk(session, e.data); };
+      recorder.addEventListener('stop', function(){ stream.getTracks().forEach(function(track){ track.stop(); }); });
+      recorder.start(10000);
+      if (voiceCall.muted) { try { recorder.pause(); } catch (e) {} }
+      if (callRecEl) callRecEl.hidden = false;
+    }).catch(function(){ /* no microphone permission for recording: the call carries on without it */ });
+  }
+  function callOpenSession(){
+    var session = { transcript: [], id: null, idPromise: Promise.resolve(null), recorder: null, stream: null, mime: '', seq: 0, chain: Promise.resolve(), uploadStopped: false, callerName: '' };
+    if (!AI_AUTHENTICATED) return session;
+    session.idPromise = fetch('/AI/api/calls/start/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+      body: JSON.stringify({ language: currentLanguage })
+    }).then(function(response){ return response.ok ? response.json() : null; })
+      .then(function(body){ session.id = body && body.id ? body.id : null; return session.id; })
+      .catch(function(){ return null; });
+    if (callRecordingWanted()) callStartRecording(session);
+    return session;
+  }
+  function callFinishSession(session){
+    if (callRecEl) callRecEl.hidden = true;
+    var finalize = function(){ session.chain.then(function(){ return callSyncSession(session, true); }); };
+    if (session.recorder && session.recorder.state !== 'inactive') {
+      session.recorder.addEventListener('stop', finalize, { once: true });
+      try { session.recorder.stop(); } catch (e) { finalize(); }
+    } else {
+      finalize();
+    }
+  }
+
   // Splits a reply into short pieces: Chrome silently stops a single long
   // utterance after roughly fifteen seconds, so each sentence is its own one.
-  function callSpeechChunks(text){
+  function speechChunks(text){
     var pieces = text.match(/[^.!?।。]+[.!?।。]*\s*/g) || [text];
     var chunks = [];
     pieces.forEach(function(piece){
@@ -4631,8 +4877,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return plausible && !callIsEcho(heard, spoken);
   }
 
-  // Speaks `text` with the same cleanup and voice choice as the Listen
-  // button, then calls done(). When onHeard is given the microphone stays on
+  // Speaks `text` in a woman's voice (Listen uses a man's) with the same
+  // cleanup as the Listen button, then calls done(). When onHeard is given the microphone stays on
   // meanwhile: if the caller starts talking, speech stops immediately and
   // onHeard(what they said) runs instead of done().
   function callSay(text, done, lang, onHeard){
@@ -4643,7 +4889,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var spoken = sanitizeForSpeech(text);
     var shown = spoken.length > 400 ? spoken.slice(0, 400).replace(/\s+\S*$/, '') + '…' : spoken;
     callSetState('speaking', 'Speaking…', shown);
-    var chunks = callSpeechChunks(spoken);
+    var entry = callLog('ai', spoken, voiceCall.phase);
+    var chunks = speechChunks(spoken);
     var index = 0;
     var finished = false;
     var watchdog = null;
@@ -4659,6 +4906,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       if (finished) return;
       stopSpeech();
       callStopRecognition();
+      callSync(false);
       if (token === voiceCall.token && voiceCall.active && done) done();
     }
     voiceCall.skip = finish;
@@ -4682,6 +4930,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         if (!interrupted) {
           if (finished || !callIsInterruption(e.results[last][0].transcript, spoken)) return;
           interrupted = true;
+          if (entry) entry.interrupted = true;
           firstSegment = last;
           stopSpeech();
           callSetState('listening', 'Listening…', '');
@@ -4714,20 +4963,18 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     function next(){
       if (!current()) return;
       if (index >= chunks.length) { finish(); return; }
-      var utterance = new SpeechSynthesisUtterance(chunks[index]);
+      var piece = chunks[index];
       index += 1;
-      utterance.lang = lang || callSpeechLang();
-      var voice = pickIndianFemaleVoice(utterance.lang);
-      if (voice) utterance.voice = voice;
       var started = false;
-      utterance.onstart = function(){ started = true; clearTimeout(watchdog); };
-      utterance.onend = next;
-      utterance.onerror = function(){ if (current()) next(); };
       // If the browser never starts speaking (no voices, blocked), move on
       // instead of leaving the caller in silence.
       clearTimeout(watchdog);
       watchdog = setTimeout(function(){ if (!started) finish(); }, 6000);
-      window.speechSynthesis.speak(utterance);
+      speakPiece(piece, lang || callSpeechLang(), 'female', {
+        onstart: function(){ started = true; clearTimeout(watchdog); },
+        onend: next,
+        onerror: function(){ if (current()) next(); }
+      });
     }
     next();
     watchForCaller();
@@ -4753,7 +5000,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     rec.maxAlternatives = 1;
     var heard = '';
     var fatal = '';
-    callSetState('listening', 'Listening…', 'Speak loudly and clearly.');
+    callSetState('listening', 'Listening…', '');
     rec.onresult = function(e){
       var text = '';
       for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
@@ -4814,6 +5061,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     callListen(callGotName, function(){
       voiceCall.nameTries += 1;
       if (voiceCall.nameTries >= CALL_MAX_SILENCES) {
+        voiceCall.phase = 'closing';
         callSay('I could not hear you, so I will end the call now. Please call again any time. Goodbye!', function(){ callEnd(); }, 'en-IN');
         return;
       }
@@ -4822,6 +5070,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     }, 'en-IN');
   }
   function callGotName(raw){
+    callLog('you', raw, 'name');
     var name = callExtractName(raw);
     if (!name) {
       voiceCall.nameTries += 1;
@@ -4852,6 +5101,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     callListen(callHeard, function(){
       voiceCall.silence += 1;
       if (voiceCall.silence >= CALL_MAX_SILENCES) {
+        voiceCall.phase = 'closing';
         callSay('I have not heard anything, so I will end the call now. Goodbye!', function(){ callEnd(); });
       } else if (voiceCall.silence === 2) {
         callSay('Are you still there?', callListenChat, undefined, callHeard);
@@ -4861,8 +5111,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     });
   }
   function callHeard(text){
+    callLog('you', text, 'chat');
     voiceCall.silence = 0;
     if (callIsGoodbye(text)) {
+      voiceCall.phase = 'closing';
       callSay('Goodbye ' + voiceCall.name + '! Have a great day.', function(){ callEnd(); });
       return;
     }
@@ -4881,6 +5133,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     opts = opts || {};
     var spoken = (text || '').trim();
     if (opts.end) {
+      voiceCall.phase = 'closing';
       if (spoken) callSay(spoken, function(){ callEnd(); });
       else callEnd();
       return;
@@ -4922,6 +5175,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     callOverlay.hidden = false;
     callSetState('thinking', 'Calling…', '');
     voiceCall.phase = 'greeting';
+    voiceCall.session = callOpenSession();
     callSay(callGreeting() + '! This is ' + AI_BRAND_NAME + ' AI. May I know your name, please?', callAskName, 'en-IN', callGotName);
   }
 
@@ -4937,6 +5191,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (state.streaming && activeAbort) { try { activeAbort.abort(); } catch (e) {} }
     callOverlay.hidden = true;
     callOverlay.dataset.state = 'idle';
+    var finished = voiceCall.session;
+    voiceCall.session = null;
+    if (finished) callFinishSession(finished);
     if (!input.disabled) input.focus();
   }
 
@@ -4949,6 +5206,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       callMuteBtn.setAttribute('aria-pressed', voiceCall.muted ? 'true' : 'false');
       callMuteBtn.querySelector('.call-act-label').textContent = voiceCall.muted ? 'Unmute' : 'Mute';
       callMuteBtn.querySelector('i').className = voiceCall.muted ? 'fas fa-microphone-slash' : 'fas fa-microphone';
+      var recording = voiceCall.session && voiceCall.session.recorder;
+      if (recording) { try { if (voiceCall.muted) recording.pause(); else recording.resume(); } catch (e) {} }
       if (voiceCall.muted) {
         if (callOverlay.dataset.state === 'listening') {
           // Muting while it is listening stops the microphone; it resumes on unmute.
@@ -4970,6 +5229,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       e.preventDefault();
       var name = callExtractName(callNameInput.value);
       if (!name) { callNameInput.focus(); return; }
+      callLog('you', name, 'name');
       callNewToken();
       callStopRecognition();
       window.speechSynthesis.cancel();
@@ -4977,6 +5237,16 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     });
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && voiceCall.active) callEnd();
+    });
+    window.addEventListener('pagehide', function(){
+      var session = voiceCall.session;
+      if (!session || !session.id) return;
+      try {
+        var form = new FormData();
+        form.append('csrfmiddlewaretoken', csrfToken());
+        form.append('payload', JSON.stringify(callBody(session, true)));
+        navigator.sendBeacon('/AI/api/calls/' + session.id + '/save/', form);
+      } catch (e) {}
     });
   }
 
@@ -5650,7 +5920,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       return;
     }
     panel.innerHTML =
-      '<div class="images-panel-head"><button type="button" class="account-danger-btn" id="imagesDeleteAllBtn"><i class="fas fa-trash"></i> Delete all images</button></div>' +
+      '<div class="images-panel-head"><button type="button" class="account-ghost-btn" id="imagesDownloadAllBtn"><i class="fas fa-file-zipper"></i> Download all (.zip)</button>' +
+      '<button type="button" class="account-danger-btn" id="imagesDeleteAllBtn"><i class="fas fa-trash"></i> Delete all images</button></div>' +
       '<div class="image-gallery-grid">' + images.map(function(image){
         var created = image.created_at ? new Date(image.created_at).toLocaleDateString() : '';
         return '<button type="button" class="image-gallery-item" data-url="' + escHtml(image.url) + '">' +
@@ -5658,6 +5929,17 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           (created ? '<span class="image-gallery-date">' + escHtml(created) + '</span>' : '') +
         '</button>';
       }).join('') + '</div>';
+    var downloadAllBtn = panel.querySelector('#imagesDownloadAllBtn');
+    if (downloadAllBtn) {
+      downloadAllBtn.addEventListener('click', function(){
+        downloadAllBtn.disabled = true;
+        downloadAllBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing the zip…';
+        saveFileFrom('/AI/api/images/download-all/', 'images.zip').then(function(){
+          downloadAllBtn.disabled = false;
+          downloadAllBtn.innerHTML = '<i class="fas fa-file-zipper"></i> Download all (.zip)';
+        });
+      });
+    }
     var deleteAllBtn = panel.querySelector('#imagesDeleteAllBtn');
     if (deleteAllBtn) {
       deleteAllBtn.addEventListener('click', function(){
@@ -5680,6 +5962,182 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         });
       });
     }
+  }
+
+  // ---- "My calls": every voice call, with its chat and (if recorded) audio ----
+  var accountCalls = [];
+
+  function formatCallLength(seconds){
+    seconds = Math.max(0, parseInt(seconds, 10) || 0);
+    var minutes = Math.floor(seconds / 60), secs = seconds % 60;
+    if (minutes >= 60) return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    return minutes + ':' + (secs < 10 ? '0' : '') + secs;
+  }
+  function formatCallSize(bytes){
+    if (!bytes) return '';
+    return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+  function callRecordingPref(){
+    try { return localStorage.getItem('ai_call_record') !== '0'; } catch (e) { return true; }
+  }
+
+  // Downloads a file from a URL that needs the login cookie, with a clear
+  // message instead of a JSON error page when the server refuses.
+  function saveFileFrom(url, fallbackName){
+    return fetch(url, { credentials: 'same-origin' }).then(function(response){
+      if (!response.ok) {
+        return response.json().catch(function(){ return {}; }).then(function(body){
+          throw new Error(body.detail || 'Could not download that.');
+        });
+      }
+      var match = /filename="?([^";]+)"?/i.exec(response.headers.get('Content-Disposition') || '');
+      return response.blob().then(function(blob){ return { blob: blob, name: match ? match[1] : fallbackName }; });
+    }).then(function(file){
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(file.blob);
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function(){ URL.revokeObjectURL(link.href); }, 4000);
+    }).catch(function(error){
+      showAiToast(error.message, true);
+    });
+  }
+
+  function callPostJson(url){
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': csrfToken() } })
+      .then(function(response){
+        return response.json().then(function(body){ return { ok: response.ok, body: body }; });
+      });
+  }
+
+  function renderAccountCalls(calls){
+    var panel = accountModal && accountModal.querySelector('[data-account-content="calls"]');
+    if (!panel) return;
+    accountCalls = calls || [];
+    var head =
+      '<div class="calls-head">' +
+        '<label class="calls-record"><input type="checkbox" id="callsRecordToggle"' + (callRecordingPref() ? ' checked' : '') + '> Record my voice during calls</label>' +
+        (accountCalls.length ? '<button type="button" class="account-danger-btn" id="callsDeleteAllBtn"><i class="fas fa-trash"></i> Delete all calls</button>' : '') +
+      '</div>' +
+      '<p class="calls-note">Every call is saved here with its full chat. With recording on, your own voice is saved too — the AI’s spoken replies are in the chat text only. Calls are private to your account and you can delete them any time.</p>';
+    if (!accountCalls.length) {
+      panel.innerHTML = head + '<div class="account-empty"><i class="fas fa-phone-volume"></i><br><br>No calls yet. Tap the phone button next to the message box to start one.</div>';
+    } else {
+      panel.innerHTML = head + '<div class="calls-list">' + accountCalls.map(function(call){
+        var when = new Date(call.started_at);
+        var title = isNaN(when) ? 'Voice call' : when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        var bits = [formatCallLength(call.duration_seconds), call.turn_count + (call.turn_count === 1 ? ' thing you said' : ' things you said')];
+        if (!call.ended) bits.push('ended unexpectedly');
+        return '<div class="call-row" data-call-id="' + call.id + '">' +
+          '<span class="call-row-icon"><i class="fas fa-phone-volume"></i></span>' +
+          '<div class="call-row-main"><b>' + escHtml(title) + '</b><small>' + escHtml(bits.join(' · ')) + '</small>' +
+            (call.preview ? '<small class="call-row-preview">“' + escHtml(call.preview) + '”</small>' : '') + '</div>' +
+          (call.has_audio ? '<span class="call-row-rec" title="Recorded"><i class="fas fa-microphone"></i></span>' : '') +
+          '<button type="button" class="call-icon-btn" data-call-view title="View the chat"><i class="fas fa-eye"></i></button>' +
+          '<button type="button" class="call-icon-btn" data-call-download title="Download the chat"><i class="fas fa-download"></i></button>' +
+          '<button type="button" class="call-icon-btn danger" data-call-delete title="Delete this call"><i class="fas fa-trash"></i></button>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    var toggle = panel.querySelector('#callsRecordToggle');
+    if (toggle) toggle.addEventListener('change', function(){
+      try { localStorage.setItem('ai_call_record', toggle.checked ? '1' : '0'); } catch (e) {}
+      showAiToast(toggle.checked ? 'Your voice will be recorded during calls.' : 'Calls will not be recorded.');
+    });
+    var deleteAll = panel.querySelector('#callsDeleteAllBtn');
+    if (deleteAll) deleteAll.addEventListener('click', function(){
+      if (!confirm('Delete all ' + accountCalls.length + ' calls and their recordings? This cannot be undone.')) return;
+      deleteAll.disabled = true;
+      callPostJson('/AI/api/calls/delete-all/').then(function(result){
+        if (!result.ok) throw new Error(result.body.detail || 'Could not delete your calls.');
+        if (accountData) accountData.calls = [];
+        renderAccountCalls([]);
+      }).catch(function(error){ deleteAll.disabled = false; showAiToast(error.message, true); });
+    });
+    panel.querySelectorAll('.call-row').forEach(function(row){
+      var id = row.getAttribute('data-call-id');
+      row.querySelector('[data-call-view]').addEventListener('click', function(){ showCallDetail(id); });
+      row.querySelector('.call-row-main').addEventListener('click', function(){ showCallDetail(id); });
+      row.querySelector('[data-call-download]').addEventListener('click', function(){
+        saveFileFrom('/AI/api/calls/' + id + '/download/txt/', 'voice-call-' + id + '.txt');
+      });
+      row.querySelector('[data-call-delete]').addEventListener('click', function(){
+        if (!confirm('Delete this call and its recording? This cannot be undone.')) return;
+        callPostJson('/AI/api/calls/' + id + '/delete/').then(function(result){
+          if (!result.ok) throw new Error(result.body.detail || 'Could not delete that call.');
+          accountCalls = accountCalls.filter(function(call){ return String(call.id) !== String(id); });
+          if (accountData) accountData.calls = accountCalls;
+          renderAccountCalls(accountCalls);
+        }).catch(function(error){ showAiToast(error.message, true); });
+      });
+    });
+  }
+
+  function showCallDetail(id){
+    var panel = accountModal && accountModal.querySelector('[data-account-content="calls"]');
+    if (!panel) return;
+    panel.innerHTML = '<div class="account-loading">Loading the call…</div>';
+    fetch('/AI/api/calls/' + id + '/', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function(response){
+        return response.json().then(function(body){
+          if (!response.ok) throw new Error(body.detail || 'Could not open that call.');
+          return body;
+        });
+      }).then(function(call){
+        var when = new Date(call.started_at);
+        var title = isNaN(when) ? 'Voice call' : when.toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        var lines = (call.transcript || []).map(function(turn){
+          var at = turn.at ? new Date(turn.at) : null;
+          var stamp = at && !isNaN(at) ? at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+          var mine = turn.who === 'you';
+          return '<div class="call-line ' + (mine ? 'you' : 'ai') + '"><div class="call-line-bubble">' + escHtml(turn.text) + '</div>' +
+            '<div class="call-line-meta">' + escHtml((mine ? (call.caller_name || 'You') : AI_BRAND_NAME + ' AI') + (stamp ? ' · ' + stamp : '') + (turn.interrupted ? ' · interrupted' : '')) + '</div></div>';
+        }).join('');
+        var audioBlock = call.has_audio
+          ? '<div class="call-audio"><div class="call-audio-head"><i class="fas fa-microphone"></i> Your recording <small>' + escHtml(formatCallSize(call.audio_bytes)) + ' · your voice only</small></div>' +
+            '<audio controls preload="metadata" src="/AI/api/calls/' + call.id + '/audio/"></audio>' +
+            '<button type="button" class="cc-ghost-btn" id="callDownloadAudio"><i class="fas fa-download"></i> Download recording</button></div>'
+          : '<p class="calls-note">No recording was saved for this call.</p>';
+        panel.innerHTML =
+          '<button type="button" class="cc-ghost-btn call-back" id="callBack"><i class="fas fa-arrow-left"></i> All calls</button>' +
+          '<h3 class="call-detail-title">' + escHtml(title) + '</h3>' +
+          '<p class="calls-note">' + escHtml(formatCallLength(call.duration_seconds)) + ' · ' + call.turn_count + ' thing' + (call.turn_count === 1 ? '' : 's') + ' you said' +
+            (call.caller_name ? ' · as ' + escHtml(call.caller_name) : '') + '</p>' +
+          audioBlock +
+          '<div class="call-detail-actions">' +
+            '<button type="button" class="cc-ghost-btn" id="callDownloadTxt"><i class="fas fa-file-lines"></i> Download chat (text)</button>' +
+            '<button type="button" class="cc-ghost-btn" id="callDownloadPdf"><i class="fas fa-file-pdf"></i> Download chat (PDF)</button>' +
+            (call.conversation_id ? '<button type="button" class="cc-ghost-btn" id="callOpenChat"><i class="fas fa-comments"></i> Open in chat</button>' : '') +
+          '</div>' +
+          '<div class="call-transcript">' + (lines || '<div class="account-empty">Nothing was said in this call.</div>') + '</div>';
+        panel.querySelector('#callBack').addEventListener('click', function(){ renderAccountCalls(accountCalls); });
+        panel.querySelector('#callDownloadTxt').addEventListener('click', function(){ saveFileFrom('/AI/api/calls/' + call.id + '/download/txt/', 'voice-call-' + call.id + '.txt'); });
+        panel.querySelector('#callDownloadPdf').addEventListener('click', function(){ saveFileFrom('/AI/api/calls/' + call.id + '/download/pdf/', 'voice-call-' + call.id + '.pdf'); });
+        var audioDownload = panel.querySelector('#callDownloadAudio');
+        if (audioDownload) audioDownload.addEventListener('click', function(){ saveFileFrom('/AI/api/calls/' + call.id + '/audio/?download=1', 'voice-call-' + call.id + '.webm'); });
+        var openChat = panel.querySelector('#callOpenChat');
+        if (openChat) openChat.addEventListener('click', function(){ closeAccountModal(); loadConversation(call.conversation_id); });
+        var player = panel.querySelector('audio');
+        if (player) {
+          // A recording made in the browser has no length stored in the file;
+          // jumping to the end once makes the player work it out.
+          player.addEventListener('loadedmetadata', function(){
+            if (player.duration === Infinity) {
+              player.currentTime = 1e101;
+              player.addEventListener('timeupdate', function reset(){
+                player.removeEventListener('timeupdate', reset);
+                player.currentTime = 0;
+              });
+            }
+          });
+        }
+      }).catch(function(error){
+        panel.innerHTML = '<button type="button" class="cc-ghost-btn call-back" id="callBack"><i class="fas fa-arrow-left"></i> All calls</button><div class="account-empty">' + escHtml(error.message) + '</div>';
+        panel.querySelector('#callBack').addEventListener('click', function(){ renderAccountCalls(accountCalls); });
+      });
   }
 
   function renderAccountApi(apiAccess, revealedKey){
@@ -5925,6 +6383,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       '<h3 class="account-section-title" style="margin-top:1.2rem">Good to know</h3>' +
       '<ul class="cc-help-list account-help" style="padding-left:1.1rem;margin:0 0 .8rem">' +
       '<li><strong>What is sent:</strong> your messages and the file contents OpenCode reads for a task are sent to ' + escHtml(coding.brand) + ' to produce the answer. Don’t point it at folders holding secrets.</li>' +
+      '<li><strong>What is recorded:</strong> ' + escHtml(coding.brand) + ' administrators can see which accounts use OpenCode and, for monitoring and support, the requests and replies of each session.</li>' +
       '<li><strong>Limits:</strong> up to ' + escHtml(String(coding.limits.per_minute)) + ' requests a minute and ' + escHtml(String(coding.limits.per_day)) + ' a day per key.</li>' +
       '<li><strong>“Invalid API key”:</strong> the key was regenerated or revoked — create a new one and run <code>opencode auth login</code> again.</li>' +
       '<li><strong>“Model not found”:</strong> the model ID in <code>opencode.json</code> must be <code>' + escHtml(coding.model.id) + '</code> and the provider ID <code>vidhyora</code>.</li>' +
@@ -6044,17 +6503,20 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         renderAccountImages(body.images);
         renderAccountApi(body.api_access);
         renderAccountCoding(body.coding);
+        renderAccountCalls(body.calls);
       }).catch(function(error){
         var subscriptionPanel = accountModal && accountModal.querySelector('[data-account-content="subscription"]');
         var reportsPanel = accountModal && accountModal.querySelector('[data-account-content="reports"]');
         var imagesPanel = accountModal && accountModal.querySelector('[data-account-content="images"]');
         var apiPanel = accountModal && accountModal.querySelector('[data-account-content="api"]');
         var codingPanel = accountModal && accountModal.querySelector('[data-account-content="coding"]');
+        var callsPanel = accountModal && accountModal.querySelector('[data-account-content="calls"]');
         if (subscriptionPanel) subscriptionPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
         if (reportsPanel) reportsPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
         if (imagesPanel) imagesPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
         if (apiPanel) apiPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
         if (codingPanel) codingPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
+        if (callsPanel) callsPanel.innerHTML = '<div class="account-empty">' + escHtml(error.message) + '</div>';
       });
   }
 

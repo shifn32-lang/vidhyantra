@@ -68,6 +68,12 @@
 .dbx-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:1rem}
 .dbx-inline-form{display:inline}
 .dbx-note{font-size:.74rem;color:#9aa3b0;margin-top:.9rem;line-height:1.5}
+.dbx-steps{margin:0 0 1.1rem;padding:.8rem 1rem .8rem 2rem;background:#f3f6ff;border:1px solid #d7e0ff;border-radius:12px;font-size:.8rem;line-height:1.55;color:var(--text)}
+.dbx-steps li{margin:.15rem 0}
+.dbx-steps b{color:var(--head)}
+.dbx-steps a{color:#3b5bdb;font-weight:700}
+.dbx-hint{display:block;font-weight:600;font-size:.72rem;color:#9aa3b0;margin-top:.3rem}
+a.btn[aria-disabled="true"]{opacity:.5;pointer-events:none}
 </style>
 {% endblock %}
 
@@ -127,7 +133,12 @@
     <form class="dbx-form" method="post" action="{% url 'dashboard_backup_settings' %}" autocomplete="off">
       {% csrf_token %}<input type="hidden" name="action" value="save">
       <h4>{% if connected %}Change storage{% else %}Connect Dropbox{% endif %}</h4>
-      <p class="dbx-lead">Paste the credentials from your Dropbox app. They are checked with Dropbox first and saved only if they connect. After switching accounts the backup list below shows what that account holds.</p>
+      <p class="dbx-lead">Whatever you enter is checked with Dropbox first and saved only if it connects. After switching accounts the backup list below shows what that account holds.</p>
+      <ol class="dbx-steps">
+        <li>Type the <b>App Key</b> and <b>App Secret</b> from your app at <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener noreferrer">dropbox.com/developers/apps</a>.</li>
+        <li>Press <b>Get Dropbox code</b>, then press <b>Allow</b> in the window that opens. Dropbox shows a short code &mdash; copy it.</li>
+        <li>Paste the code into the last box and press <b>Save &amp; connect</b>. It is turned into a permanent connection for you.</li>
+      </ol>
       <div class="form-group">
         <label for="dbxAppKey">DROPBOX_APP_KEY <span class="dbx-source">{% if sources.app_key == 'dashboard' %}saved here{% elif sources.app_key == 'server' %}server default{% endif %}</span></label>
         <input type="text" id="dbxAppKey" name="app_key" value="{{ settings_obj.app_key }}" placeholder="{% if effective_app_key and not settings_obj.app_key %}Using the server default — type to replace{% else %}App key{% endif %}" autocomplete="off" spellcheck="false" maxlength="200">
@@ -142,21 +153,37 @@
       <div class="form-group">
         <label for="dbxRefreshToken">DROPBOX_REFRESH_TOKEN <span class="dbx-source">{% if sources.refresh_token == 'dashboard' %}saved here{% elif sources.refresh_token == 'server' %}server default{% endif %}</span></label>
         <div class="dbx-secret">
-          <input type="password" id="dbxRefreshToken" name="refresh_token" value="" placeholder="{% if sources.refresh_token %}•••••••• saved — leave blank to keep{% else %}Refresh token{% endif %}" autocomplete="new-password" spellcheck="false" maxlength="400">
+          <input type="password" id="dbxRefreshToken" name="refresh_token" value="" placeholder="{% if sources.refresh_token %}•••••••• saved — leave blank to keep{% else %}Paste the code from Dropbox here{% endif %}" autocomplete="new-password" spellcheck="false" maxlength="400">
           <button type="button" data-reveal="dbxRefreshToken" aria-label="Show or hide the value"><i class="fas fa-eye"></i></button>
         </div>
+        <span class="dbx-hint">Paste the code Dropbox shows after you press Allow, or a Refresh Token you already have.</span>
       </div>
       <div class="dbx-actions">
+        <a id="dbxGetCode" class="btn btn-ghost" href="{{ authorize_url }}" data-default-href="{{ authorize_url }}" target="_blank" rel="noopener noreferrer"{% if not authorize_url %} aria-disabled="true"{% endif %}><i class="fab fa-dropbox"></i> Get Dropbox code</a>
         <button type="submit" class="btn btn-blue"><i class="fas fa-link"></i> Save &amp; connect</button>
         {% if saved_here %}
         <button type="submit" name="action" value="reset" class="btn btn-ghost" formnovalidate onclick="return confirm('Remove the credentials saved here? The server\'s built-in credentials (if any) will be used instead.');"><i class="fas fa-rotate-left"></i> Use server credentials</button>
         {% endif %}
       </div>
-      <p class="dbx-note">A refresh token comes from your app's OAuth2 flow with <code>token_access_type=offline</code> and, unlike an access token, doesn't expire. Give the app the <code>account_info.read</code> permission to see the account email here, plus <code>files.content.write</code> and <code>files.content.read</code> for backups. The AI image archive uses the same Dropbox account.</p>
+      <p class="dbx-note">In your Dropbox app's Permissions tab, tick <code>account_info.read</code> (shows the account email here), <code>files.content.write</code> and <code>files.content.read</code> (for backups) and press Submit <em>before</em> pressing Get Dropbox code. A code works once and only for a few minutes, so paste it straight away. The AI image archive uses the same Dropbox account.</p>
     </form>
   </div>
 </div>
 <script>
+(function(){
+  var keyInput = document.getElementById('dbxAppKey');
+  var codeLink = document.getElementById('dbxGetCode');
+  if (!keyInput || !codeLink) return;
+  function syncCodeLink(){
+    var typed = keyInput.value.trim();
+    var href = typed
+      ? 'https://www.dropbox.com/oauth2/authorize?client_id=' + encodeURIComponent(typed) + '&response_type=code&token_access_type=offline'
+      : codeLink.getAttribute('data-default-href');
+    if (href) { codeLink.setAttribute('href', href); codeLink.removeAttribute('aria-disabled'); }
+    else { codeLink.removeAttribute('href'); codeLink.setAttribute('aria-disabled', 'true'); }
+  }
+  keyInput.addEventListener('input', syncCodeLink);
+})();
 document.querySelectorAll('[data-reveal]').forEach(function(button){
   button.addEventListener('click', function(){
     var field = document.getElementById(button.getAttribute('data-reveal'));

@@ -77,7 +77,7 @@
             </form>
             {% endif %}
             {% if c.user_id and c.user_id not in blocked_user_ids %}
-            <form method="post" action="{% url 'dashboard_ai_block' %}" onsubmit="return confirm('Block the account {{ c.user.email|default:c.user.username|escapejs }} from Vidhyora AI?')">
+            <form method="post" action="{% url 'dashboard_ai_block' %}" onsubmit="return confirm('Block the account {{ c.user.email|default:c.user.username|escapejs }} from {{ SITE_AI_BRAND_NAME|escapejs }} AI?')">
               {% csrf_token %}
               <input type="hidden" name="user_id" value="{{ c.user_id }}">
               <button type="submit" class="block-btn" title="Block this account">Block account</button>

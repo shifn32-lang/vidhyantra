@@ -153,7 +153,7 @@
       <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Grant access</button>
     </div>
   </form>
-  <p class="panel-note">Sets Vidhyora AI premium access to run for this many days from today — unlimited messages, every model, no free-tier cap. This is separate from Signups' Staff/Superuser role, which grants full dashboard and Django-admin access instead (see the table below).</p>
+  <p class="panel-note">Sets {{ SITE_AI_BRAND_NAME }} AI premium access to run for this many days from today — unlimited messages, every model, no free-tier cap. This is separate from Signups' Staff/Superuser role, which grants full dashboard and Django-admin access instead (see the table below).</p>
 </div>
 
 <div class="panel">
@@ -441,7 +441,7 @@
     if (!form) return;
     event.preventDefault();
     var account = form.getAttribute('data-user');
-    if (!confirm('Revoke Vidhyora AI premium access for ' + account + '?')) return;
+    if (!confirm('Revoke {{ SITE_AI_BRAND_NAME|escapejs }} AI premium access for ' + account + '?')) return;
 
     var row = form.closest('tr');
     var button = form.querySelector('button[type="submit"]');
