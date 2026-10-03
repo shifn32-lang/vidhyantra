@@ -218,8 +218,8 @@ TWO_FACTOR_API_KEY = '12feb4c9-9636-11f1-9cb1-0200cd936042'
 # down together since all three share this one model id. Repointed at
 # nemotron-3-super-120b-a12b — the same backend Sol/Terra/Luna already use
 # successfully — with a key confirmed working against it.
-NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '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').strip()
-NVIDIA_CHAT_MODEL = os.environ.get('NVIDIA_CHAT_MODEL', 'nvidia/nemotron-3-super-120b-a12b').strip()
+NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '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').strip()
+NVIDIA_CHAT_MODEL = os.environ.get('NVIDIA_CHAT_MODEL', 'nvidia/nemotron-3-ultra-550b-a55b').strip()
 # Spare keys for the same endpoint. One key being rate-limited, out of
 # credit, or revoked shouldn't take the whole chat down, so ai_chat tries
 # these in order after the primary above (see _nvidia_key_pool there).
@@ -274,7 +274,7 @@ NVIDIA_API_KEYS = [k for k in NVIDIA_API_KEYS if k != NVIDIA_LUNA_API_KEY]
 _nemotron_super_key_file = BASE_DIR / '.secrets' / 'nvidia_nemotron_super_api_key'
 NVIDIA_NEMOTRON_SUPER_API_KEY = os.environ.get(
     'NVIDIA_NEMOTRON_SUPER_API_KEY',
-    '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',
+    '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',
 ).strip()
 if not NVIDIA_NEMOTRON_SUPER_API_KEY and _nemotron_super_key_file.is_file():
     NVIDIA_NEMOTRON_SUPER_API_KEY = _nemotron_super_key_file.read_text(encoding='utf-8').strip()

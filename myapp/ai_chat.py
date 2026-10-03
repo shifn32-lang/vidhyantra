@@ -478,7 +478,7 @@ MODELS = {
         # 'nemotron-3-super' entry below, offered as its own picker option.
         # Shares that entry's dedicated credential, so it is likewise outside
         # the shared key pool's failover and hedging.
-        'id': 'nvidia/nemotron-3-super-120b-a12b',
+        'id': 'nvidia/nemotron-3-ultra-550b-a55b',
         'label': 'ChatGPT 5.6 Sol',
         'description': "OpenAI's most powerful model — named for the sun, the brightest core model, built for complex, multi-step professional work.",
         'reasoning': True,
@@ -487,7 +487,7 @@ MODELS = {
     },
     TERRA_MODEL_KEY: {
         # Same Super backend as Sol, with Terra's separately verified key.
-        'id': 'nvidia/nemotron-3-super-120b-a12b',
+        'id': 'nvidia/nemotron-3-ultra-550b-a55b',
         'label': 'ChatGPT 5.6 Terra',
         'description': "OpenAI's most powerful model — named for the earth, grounded and balanced, steady reasoning for everyday professional work.",
         'reasoning': True,
@@ -498,7 +498,7 @@ MODELS = {
         # A user-facing automatic route, not a separate upstream endpoint.
         # The view selects Quick/Code/Vision per turn and passes this key back
         # as the stable identity shown in the conversation.
-        'id': 'nvidia/nemotron-3-super-120b-a12b',
+        'id': 'nvidia/nemotron-3-ultra-550b-a55b',
         'label': 'ChatGPT 5.6 Luna',
         'description': "OpenAI's most powerful model — named for the moon, always with you, the everyday all-rounder for questions, reasoning, coding, writing, and images.",
         'reasoning': True,
@@ -683,7 +683,7 @@ MODELS = {
         # live against this account: it answers, and enable_thinking=False is
         # honoured (without it the reply opens with raw "Okay, the user asked
         # me to..." chain-of-thought), so it stays a 'reasoning' model here.
-        'id': 'nvidia/nemotron-3-super-120b-a12b',
+        'id': 'nvidia/nemotron-3-ultra-550b-a55b',
         'label': 'Nemotron 3 Super',
         'hidden_from_picker': True,
         'description': 'Largest reasoning model — best for hard, multi-step problems where depth matters more than speed.',

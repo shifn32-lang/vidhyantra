@@ -1918,7 +1918,7 @@ class AIResponseReliabilityTests(TestCase):
         invoke access to it — and it is deliberately the final option in the
         model list, which views.ai_page builds straight from MODELS order."""
         cfg = ai_chat.MODELS[ai_chat.NEMOTRON_SUPER_MODEL_KEY]
-        self.assertEqual(cfg['id'], 'nvidia/nemotron-3-super-120b-a12b')
+        self.assertEqual(cfg['id'], 'nvidia/nemotron-3-ultra-550b-a55b')
         self.assertEqual(cfg['api_key_setting'], 'NVIDIA_NEMOTRON_SUPER_API_KEY')
         self.assertTrue(settings.NVIDIA_NEMOTRON_SUPER_API_KEY)
         self.assertEqual(list(ai_chat.MODELS)[-1], ai_chat.NEMOTRON_SUPER_MODEL_KEY)
@@ -1938,7 +1938,7 @@ class AIResponseReliabilityTests(TestCase):
 
         self.assertEqual(result, '391')
         get_client.assert_called_with('NVIDIA_NEMOTRON_SUPER_API_KEY', key_index=0)
-        self.assertEqual(captured['model'], 'nvidia/nemotron-3-super-120b-a12b')
+        self.assertEqual(captured['model'], 'nvidia/nemotron-3-ultra-550b-a55b')
         # Without this the reply opens with raw "Okay, the user asked me..."
         # chain-of-thought — verified live against the real endpoint.
         self.assertIs(
@@ -1983,7 +1983,7 @@ class AIResponseReliabilityTests(TestCase):
                             identity_model_key=persona,
                         ))
                     self.assertEqual(result, '391')
-                    self.assertEqual(captured['model'], 'nvidia/nemotron-3-super-120b-a12b')
+                    self.assertEqual(captured['model'], 'nvidia/nemotron-3-ultra-550b-a55b')
                     get_client.assert_called_with(setting, key_index=0)
 
     def test_stream_chat_fails_over_to_the_next_api_key(self):
