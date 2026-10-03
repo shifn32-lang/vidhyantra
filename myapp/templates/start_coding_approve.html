@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Connect your terminal · {{ brand }} AI</title>
+<style>
+:root{--bg:#0b0f0e;--surface:#111917;--line:#22302c;--head:#f3f7f5;--text:#a9b8b3;--accent:#10b981;--accent-ink:#04120d;--warn:#f59e0b;--bad:#f87171}
+@media (prefers-color-scheme: light){:root{--bg:#f3f6f5;--surface:#fff;--line:#d7e0dd;--head:#0d1a16;--text:#4a5c56;--accent:#059669;--accent-ink:#fff;--bad:#dc2626}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.2rem;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.card{width:min(440px,100%);background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:1.6rem 1.5rem;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+.brand{font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 .7rem}
+h1{font-size:1.25rem;line-height:1.3;margin:0 0 .5rem;color:var(--head)}
+p{margin:0 0 .9rem;font-size:.92rem}
+.code{font:800 1.9rem/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.14em;text-align:center;color:var(--head);background:var(--bg);border:1.5px dashed var(--accent);border-radius:12px;padding:1rem .5rem;margin:1rem 0}
+dl{margin:0 0 1.1rem;font-size:.82rem;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+dl div{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .8rem}
+dl div+div{border-top:1px solid var(--line)}
+dt{color:var(--text)} dd{margin:0;color:var(--head);text-align:right;word-break:break-word}
+.warn{font-size:.8rem;border-left:3px solid var(--warn);padding:.1rem 0 .1rem .7rem;margin:0 0 1.1rem}
+.row{display:flex;gap:.6rem}
+button,.btn{flex:1;font-weight:700;font-size:.92rem;font-family:inherit;border-radius:11px;padding:.8rem 1rem;border:1.5px solid var(--line);background:transparent;color:var(--head);cursor:pointer;text-align:center;text-decoration:none}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.6;cursor:default}
+label{display:block;font-size:.76rem;font-weight:700;color:var(--head);margin:.2rem 0 .3rem}
+input[type=text],input[type=password]{width:100%;padding:.7rem .8rem;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--head);font:inherit;margin-bottom:.8rem}
+input:focus{outline:none;border-color:var(--accent)}
+.err{color:var(--bad);font-size:.82rem;margin:0 0 .8rem;min-height:1.1em}
+.big{font-size:2.2rem;line-height:1;margin:0 0 .6rem}
+.muted{font-size:.8rem}
+.next{margin:1rem 0;padding-left:1.2rem;font-size:.9rem}
+.next li{margin-bottom:.8rem}
+.next strong{color:var(--head)}
+.cmd{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.45rem;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.5rem .6rem .5rem .8rem}
+.cmd code,.next code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--head)}
+.cmd code{font-size:1rem}
+.copy{flex:none;padding:.35rem .7rem;font-size:.75rem;border-radius:8px}
+</style>
+</head>
+<body>
+<main class="card">
+  <p class="brand">{{ brand }} AI · Start coding</p>
+
+  {% if state == 'confirm' %}
+    <h1>Connect OpenCode on this computer?</h1>
+    <p>A terminal is asking to sign in to your {{ brand }} account. Check that this code matches the one shown in your terminal.</p>
+    <div class="code">{{ user_code }}</div>
+    <dl>
+      <div><dt>Computer</dt><dd>{{ row.machine }}</dd></div>
+      <div><dt>Requested</dt><dd>{{ requested_at|date:"d M Y, h:i A" }}</dd></div>
+      <div><dt>From IP address</dt><dd>{{ row.requester_ip|default:"unknown" }}</dd></div>
+      <div><dt>Account</dt><dd>{{ user_name }}</dd></div>
+    </dl>
+    <p class="warn">Only approve if you just ran the setup command yourself. Approving gives that computer access to {{ brand }} Code on your plan; you can remove it later under Start coding.</p>
+    <form method="post" class="row">
+      {% csrf_token %}
+      <input type="hidden" name="code" value="{{ user_code }}">
+      <button type="submit" name="decision" value="deny">Deny</button>
+      <button type="submit" name="decision" value="approve" class="primary">Approve</button>
+    </form>
+
+  {% elif state == 'approved' %}
+    <p class="big">✓</p>
+    <h1>Connected — now go back to your terminal</h1>
+    <p>You can close this tab. {{ brand }} is finishing the setup on your computer.</p>
+    <ol class="next">
+      <li><strong>Switch to your terminal.</strong> Wait for it to say <em>“All set”</em> (a few seconds).</li>
+      <li><strong>Go to your project folder</strong> and type this, then press Enter:
+        <div class="cmd"><code>opencode</code><button type="button" class="copy" data-copy="opencode">Copy</button></div>
+      </li>
+      <li>First time in a project? Type <code>/init</code> inside OpenCode, then just describe what you want to build or fix.</li>
+    </ol>
+    <p class="muted">Didn’t see “All set”? Run the setup command again, or manage connected computers under <strong>Start coding</strong> in your account menu.</p>
+    <script>
+    document.addEventListener('click', function(event){
+      var button = event.target.closest('[data-copy]');
+      if (!button) return;
+      var done = function(){ button.textContent = 'Copied'; setTimeout(function(){ button.textContent = 'Copy'; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(button.getAttribute('data-copy')).then(done);
+    });
+    </script>
+
+  {% elif state == 'denied' %}
+    <h1>Request denied</h1>
+    <p>Nothing was connected. If this wasn’t you, you can ignore it — the code expires on its own.</p>
+
+  {% elif state == 'login' %}
+    <h1>Log in to continue</h1>
+    <p>Log in to your {{ brand }} account to connect the terminal that shows code <strong>{{ user_code }}</strong>.</p>
+    <form id="loginForm">
+      {% csrf_token %}
+      <label for="identifier">Email or phone</label>
+      <input type="text" id="identifier" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <p class="err" id="loginError" aria-live="polite"></p>
+      <button type="submit" class="primary" style="width:100%">Log in</button>
+    </form>
+    <script>
+    (function(){
+      var form = document.getElementById('loginForm');
+      var errorBox = document.getElementById('loginError');
+      form.addEventListener('submit', function(event){
+        event.preventDefault();
+        var button = form.querySelector('button');
+        button.disabled = true;
+        errorBox.textContent = '';
+        fetch('/AI/api/login/', {
+          method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value},
+          body: JSON.stringify({identifier: document.getElementById('identifier').value.trim(), password: document.getElementById('password').value})
+        }).then(function(response){ return response.json().then(function(body){ return {ok: response.ok, body: body}; }); })
+        .then(function(result){
+          if (!result.ok) {
+            var errors = result.body.errors ? Object.keys(result.body.errors).map(function(k){ return result.body.errors[k]; }).join(' ') : '';
+            throw new Error(result.body.detail || errors || 'Could not log in.');
+          }
+          window.location.reload();
+        }).catch(function(error){ errorBox.textContent = error.message; button.disabled = false; });
+      });
+    })();
+    </script>
+
+  {% elif state == 'no_plan' %}
+    <h1>Start coding needs a premium plan</h1>
+    <p>Your account is on the free plan, so this terminal can’t be connected yet.</p>
+    <a class="btn primary" href="{{ purchase_url }}">See plans</a>
+
+  {% elif state == 'disabled' %}
+    <h1>Start coding is switched off</h1>
+    <p>Please contact the administrator at {{ support_email }}.</p>
+
+  {% elif state == 'done' %}
+    <h1>Already handled</h1>
+    <p>This code was already approved. Check your terminal.</p>
+
+  {% elif state == 'limited' %}
+    <h1>Too many attempts</h1>
+    <p>Wait a few minutes, then run the setup command again.</p>
+
+  {% else %}
+    <h1>This code isn’t valid</h1>
+    <p>It may have expired (codes last 10 minutes) or been mistyped. Run the setup command again to get a new one.</p>
+  {% endif %}
+</main>
+</body>
+</html>

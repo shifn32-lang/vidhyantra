@@ -125,6 +125,18 @@ DATABASES = {
     }
 }
 
+# Uploads (chat attachments are accepted up to 50MB each — see
+# views.AI_DOC_MAX_UPLOAD_BYTES). Django keeps a file in memory only while it is
+# under FILE_UPLOAD_MAX_MEMORY_SIZE and streams anything larger to a temporary
+# file on disk, so a big upload never has to fit in RAM while it arrives.
+# DATA_UPLOAD_MAX_MEMORY_SIZE covers non-file request bodies, i.e. the JSON of a
+# chat message that carries the text extracted from up to ten files.
+# Behind nginx also set client_max_body_size to at least 55m, and give the app
+# server a request timeout of 60s or more, or large uploads are cut off before
+# they reach Django.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -302,11 +314,9 @@ NVIDIA_FLUX_EDIT_API_KEY = 'nvapi-SU5rnFSYexTuT1IDahxBGp6ZCpn7KuhfPJRXvjTe64smr4
 CLOUDFLARE_ACCOUNT_ID = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '').strip()
 CLOUDFLARE_API_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '').strip()
 
-# Backs the "Gemini 2.5 Flash" picker option (myapp/ai_chat.py) — called
-# through Google's OpenAI-compatible endpoint, not the native generateContent
-# REST API, so it can reuse the existing chat streaming pipeline. Set via env
-# (Railway → Variables) — no hardcoded fallback, since GitHub's push
-# protection flags this key if it's committed in plaintext.
+# NVIDIA API key for the "Gemini 3.6 Flash" picker option (myapp/ai_chat.py),
+# which is served by DiffusionGemma on NVIDIA NIM — never sent to Google. Normally set
+# on the dashboard's API Settings page; this env var is only the default.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
 
 # Backs the OpenRouter picker options (myapp/ai_chat.py) — OpenRouter's REST

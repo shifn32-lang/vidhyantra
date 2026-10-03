@@ -1,6 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from myapp import views
+from myapp import coding_api, views
 
 urlpatterns = [
     path('', views.ai_page, name='home'),
@@ -40,6 +40,7 @@ urlpatterns = [
     path('store/dashboard/ai/reports/<int:pk>/status/', views.dashboard_ai_report_status_update, name='dashboard_ai_report_status_update'),
     path('store/dashboard/ai/reports/<int:pk>/delete/', views.dashboard_ai_report_delete, name='dashboard_ai_report_delete'),
     path('store/dashboard/api-data/', views.dashboard_api_data, name='dashboard_api_data'),
+    path('store/dashboard/api-settings/', views.dashboard_api_settings, name='dashboard_api_settings'),
     path('store/dashboard/api-management/', views.dashboard_api_management, name='dashboard_api_management'),
     path('store/dashboard/api-management/grant/', views.dashboard_api_access_grant, name='dashboard_api_access_grant'),
     path('store/dashboard/api-management/<int:pk>/revoke/', views.dashboard_api_access_revoke, name='dashboard_api_access_revoke'),
@@ -77,7 +78,7 @@ urlpatterns = [
     path('AI/api/youtube/<uuid:token>/status/', views.ai_youtube_status, name='ai_youtube_status'),
     path('AI/api/youtube/<uuid:token>/file/<str:file_kind>/', views.ai_youtube_file, name='ai_youtube_file'),
     path('AI/api/conversations/', views.ai_conversations_list, name='ai_conversations_list'),
-    path('AI/api/conversations/import/', views.ai_conversation_import, name='ai_conversation_import'),
+    path('AI/api/conversations/export/<str:file_format>/', views.ai_conversations_export_all, name='ai_conversations_export_all'),
     path('AI/api/conversations/<int:conversation_id>/', views.ai_conversation_messages, name='ai_conversation_messages'),
     path('AI/api/conversations/<int:conversation_id>/delete/', views.ai_conversation_delete, name='ai_conversation_delete'),
     path('AI/api/conversations/<int:conversation_id>/export/<str:file_format>/', views.ai_conversation_export, name='ai_conversation_export'),
@@ -92,6 +93,16 @@ urlpatterns = [
     # allowed models directly, authenticated by AIAPIKey (Authorization:
     # Bearer <key>) rather than a browser session. See views.api_chat_completions.
     path('api/v1/chat/', views.api_chat_completions, name='api_chat_completions'),
+    # "Start coding": an OpenAI-compatible provider for terminal coding agents
+    # (OpenCode). Authenticated by a personal vdc_ key; see myapp/coding_api.py.
+    path('api/v1/code/models', coding_api.models_list, name='coding_api_models'),
+    path('api/v1/code/chat/completions', coding_api.chat_completions, name='coding_api_chat'),
+    path('api/v1/code/device/start', coding_api.device_start, name='coding_device_start'),
+    path('api/v1/code/device/poll', coding_api.device_poll, name='coding_device_poll'),
+    path('start-coding/approve/', coding_api.approve_page, name='coding_device_approve'),
+    path('start-coding/setup.<str:kind>', coding_api.setup_script, name='coding_setup_script'),
+    path('AI/api/coding-key/generate/', coding_api.key_generate, name='ai_coding_key_generate'),
+    path('AI/api/coding-key/revoke/', coding_api.key_revoke, name='ai_coding_key_revoke'),
 
     path('AI/api/github/status/', views.github_status, name='github_status'),
     path('AI/api/github/oauth/start/', views.github_oauth_start, name='github_oauth_start'),

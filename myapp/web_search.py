@@ -36,6 +36,8 @@ MAX_RESULTS = 4
 # five of them don't crowd out the actual conversation in the context window.
 MAX_SNIPPET_CHARS = 320
 CACHE_SECONDS = 900
+# Row key in models.AIModelControl for the dashboard's search on/off switch and counters.
+SEARCH_CONTROL_KEY = 'web-search'
 
 
 # Explicit "go and look this up" phrasing, including the Hindi/Hinglish forms
@@ -169,6 +171,9 @@ def search(query, max_results=MAX_RESULTS):
     query = (query or '').strip()
     if not query:
         return []
+    from myapp import model_controls
+    if not model_controls.is_enabled(SEARCH_CONTROL_KEY):
+        return []
 
     # hashlib, not hash(): Python randomises string hashing per process, so
     # built-in hash() would give every gunicorn worker a different key for the
@@ -183,6 +188,7 @@ def search(query, max_results=MAX_RESULTS):
 
     from myapp.provider_keys import get_key
     tavily_key = get_key('TAVILY_API_KEY').strip()
+    model_controls.record_request(SEARCH_CONTROL_KEY)
     if tavily_key:
         try:
             response = requests.post(
@@ -201,6 +207,7 @@ def search(query, max_results=MAX_RESULTS):
             raw = response.json().get('results', [])
         except (requests.RequestException, ValueError, TypeError) as exc:
             logger.warning('Tavily search failed for %r: %s', query[:80], exc)
+            model_controls.record_error(SEARCH_CONTROL_KEY, f'{exc.__class__.__name__}: {exc}')
             return []
     else:
         # Keep local/test environments usable when no Tavily key is supplied.
@@ -208,11 +215,13 @@ def search(query, max_results=MAX_RESULTS):
             from ddgs import DDGS
         except ImportError:
             logger.warning('Web search unavailable: no Tavily key and ddgs is not installed')
+            model_controls.record_error(SEARCH_CONTROL_KEY, 'No Tavily key is set.')
             return []
         try:
             raw = DDGS(timeout=SEARCH_TIMEOUT_SECONDS).text(query, max_results=max_results)
         except Exception as exc:
             logger.warning('Web search failed for %r: %s', query[:80], exc)
+            model_controls.record_error(SEARCH_CONTROL_KEY, f'{exc.__class__.__name__}: {exc}')
             return []
 
     results = []
@@ -225,8 +234,33 @@ def search(query, max_results=MAX_RESULTS):
         if title and url:
             results.append({'title': title, 'url': url, 'snippet': snippet})
 
+    model_controls.record_success(SEARCH_CONTROL_KEY)
     cache.set(cache_key, results, CACHE_SECONDS)
     return results
+
+
+def test_connection():
+    """One live Tavily request with the key currently in effect, so the
+    dashboard can confirm a pasted key works. Returns (ok, message)."""
+    from myapp.provider_keys import get_key
+    key = get_key('TAVILY_API_KEY').strip()
+    if not key:
+        return False, 'No Tavily API key is set.'
+    try:
+        response = requests.post(
+            'https://api.tavily.com/search',
+            json={'api_key': key, 'query': 'test', 'max_results': 1, 'search_depth': 'basic'},
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        return False, f'{exc.__class__.__name__}: {str(exc)[:200]}'
+    if response.status_code in (401, 403):
+        return False, 'Tavily rejected this API key as invalid or not permitted.'
+    if response.status_code == 429:
+        return True, 'Key accepted, but Tavily is rate-limiting or the quota is used up right now.'
+    if not response.ok:
+        return False, f'Tavily returned HTTP {response.status_code}.'
+    return True, 'Working — Tavily returned search results.'
 
 
 def build_context(query, max_results=MAX_RESULTS):

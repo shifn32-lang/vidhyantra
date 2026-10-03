@@ -1,0 +1,112 @@
+{% extends "dashboard/base.html" %}
+{% block title %}API Settings{% endblock %}
+{% block page_title %}API Settings{% endblock %}
+
+{% block extra_head %}
+<style>
+.badge.api-connected{background:#e8fbf0;color:#1da851}
+.badge.api-disconnected{background:#fee2e2;color:#b91c1c}
+.panel-note{padding:0 1.4rem 1.1rem;font-size:.8rem;color:var(--text)}
+.settings-intro{font-size:.85rem;color:var(--text);margin:0 0 1.2rem}
+.save-msg.error{background:#fee2e2;color:#b91c1c}
+.api-field label,.gem-text-field label{display:block;font-size:.72rem;font-weight:700;color:var(--text);opacity:.75;margin-bottom:.25rem}
+.api-field-row{display:flex;gap:.4rem;align-items:center}
+/* The eye toggle flips type=password to type=text, so style the input
+   itself, not just the password state. */
+.api-field-row input{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.6rem 2.6rem .6rem .85rem;font-family:inherit;font-size:.85rem;background:var(--bg-alt);color:var(--head)}
+.api-field-row input:focus{outline:none;border-color:var(--red)}
+.api-field-row .pw-toggle-wrap{flex:1;min-width:0}
+.api-field-meta{font-size:.68rem;color:var(--text);opacity:.6;margin-top:.25rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.api-field-clear{flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;font-size:.68rem;cursor:pointer;color:var(--text)}
+.api-field-clear:hover{background:var(--bg-alt)}
+.gem-text-field{margin-bottom:1rem}
+.gem-text-field input[type=text],.gem-text-field textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.6rem .85rem;font-family:inherit;font-size:.85rem;background:var(--bg-alt);color:var(--head);resize:vertical}
+.gem-text-field input[type=text]:focus,.gem-text-field textarea:focus{outline:none;border-color:var(--red)}
+.gem-body{padding:0 1.4rem 1.4rem}
+.gem-sub{font-size:.8rem;color:var(--text);opacity:.75;margin:0 0 1rem}
+.gem-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.7rem;margin-bottom:1.1rem}
+.gem-stat{border:1px solid var(--line);border-radius:12px;padding:.7rem .9rem;background:var(--bg-alt)}
+.gem-stat b{display:block;font-size:1.25rem;color:var(--head)}
+.gem-stat span{font-size:.72rem;color:var(--text);opacity:.75}
+.gem-toggle{display:flex;align-items:center;gap:.6rem;margin:.9rem 0;font-size:.88rem;font-weight:600;color:var(--head);cursor:pointer}
+.gem-toggle input{width:18px;height:18px;accent-color:var(--red)}
+.gem-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.gem-actions .btn:not(.btn-primary){background:var(--bg-alt);color:var(--head);border:1px solid var(--line)}
+.gem-test-line{font-size:.78rem;margin-top:.8rem;color:var(--text)}
+.gem-test-line.ok{color:#1da851}
+.gem-test-line.bad{color:#dc2626}
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="settings-intro">One section per feature. Saving a new key tests it straight away; turn a feature off to hide it from users until you switch it back on.</p>
+
+{% for panel in panels %}
+<div class="panel" id="panel-{{ panel.id }}">
+  <div class="panel-head">
+    <h3>{{ panel.title }}</h3>
+    {% if panel.toggle %}{% if panel.enabled %}<span class="badge api-connected">Enabled</span>{% else %}<span class="badge api-disconnected">Disabled</span>{% endif %}{% endif %}
+  </div>
+  <div class="gem-body">
+    {% if panel.note %}<p class="gem-sub">{{ panel.note }}</p>{% endif %}
+    {% if message and message.panel == panel.id %}
+    <div class="save-msg{% if not message.ok %} error{% endif %}"><i class="fas {% if message.ok %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i> {{ message.text }}</div>
+    {% endif %}
+    <div class="gem-stats">
+      <div class="gem-stat"><b>{{ panel.control.request_count|default:0 }}</b><span>Requests made</span></div>
+      <div class="gem-stat"><b>{{ panel.control.success_count|default:0 }}</b><span>Successful</span></div>
+      <div class="gem-stat"><b>{{ panel.control.error_count|default:0 }}</b><span>Failed</span></div>
+      <div class="gem-stat"><b>{% if panel.control.last_used_at %}{{ panel.control.last_used_at|timesince }} ago{% else %}Never{% endif %}</b><span>Last used</span></div>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="panel" value="{{ panel.id }}">
+      {% for item in panel.items %}
+      <div class="api-field gem-text-field">
+        <label for="id_{{ panel.id }}_{{ item.key }}_name">{% if panel.items|length > 1 %}{{ item.default_name }} — {% endif %}Display name</label>
+        <input type="text" id="id_{{ panel.id }}_{{ item.key }}_name" name="name__{{ item.key }}" value="{{ item.label }}" maxlength="60" placeholder="{{ item.default_name }}">
+        <div class="api-field-meta">Shown in the model picker and on every reply from this model. Default: {{ item.default_name }}</div>
+      </div>
+      <div class="api-field gem-text-field">
+        <label for="id_{{ panel.id }}_{{ item.key }}_description">{% if panel.items|length > 1 %}{{ item.default_name }} — {% endif %}Description</label>
+        <textarea id="id_{{ panel.id }}_{{ item.key }}_description" name="description__{{ item.key }}" rows="3" maxlength="300" placeholder="{{ item.default_description }}">{{ item.description }}</textarea>
+        <div class="api-field-meta">Shown under the name in the model picker (max 300 characters). Clear a field to restore its default.</div>
+      </div>
+      {% endfor %}
+      {% for field in panel.fields %}
+      <div class="api-field gem-text-field">
+        <label for="id_{{ panel.id }}_{{ field.setting }}">{{ field.label }}</label>
+        <div class="api-field-row">
+          <input type="password" id="id_{{ panel.id }}_{{ field.setting }}" name="key__{{ field.setting }}" value="" autocomplete="new-password" placeholder="{% if field.configured %}{{ field.preview }}{% else %}Paste your API key{% endif %}">
+          {% if field.overridden %}<button type="submit" name="action" value="clear:{{ field.setting }}" class="api-field-clear" title="Revert to the server default" formnovalidate>Clear</button>{% endif %}
+        </div>
+        <div class="api-field-meta">
+          {% if field.overridden %}Custom key{% if field.updated_at %}, saved {{ field.updated_at|date:"d M Y, h:i A" }}{% endif %}
+          {% elif field.configured %}Using server default
+          {% else %}No key configured{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if panel.toggle %}
+      <label class="gem-toggle">
+        <input type="checkbox" name="enabled" {% if panel.enabled %}checked{% endif %}>
+        Enabled — {{ panel.enable_text }}
+      </label>
+      {% endif %}
+      <div class="gem-actions">
+        <button type="submit" name="action" value="save" class="btn btn-primary"><i class="fas fa-check"></i> Save{% if not panel.configured %} &amp; test{% endif %}</button>
+        <button type="submit" name="action" value="test" class="btn"><i class="fas fa-vial"></i> Test connection</button>
+      </div>
+    </form>
+    {% if panel.control.last_tested_at %}
+    <div class="gem-test-line {% if panel.control.last_test_ok %}ok{% else %}bad{% endif %}">
+      <i class="fas {% if panel.control.last_test_ok %}fa-circle-check{% else %}fa-circle-xmark{% endif %}"></i>
+      Last test {{ panel.control.last_tested_at|timesince }} ago: {{ panel.control.last_test_message }}
+    </div>
+    {% endif %}
+    {% if panel.control.last_error %}<div class="gem-test-line bad">Last request error: {{ panel.control.last_error }}</div>{% endif %}
+  </div>
+</div>
+{% endfor %}
+<p class="panel-note">Request counts cover every request made since this page was added; failed requests are included. A disabled feature is refused in the app and the developer API; existing chats keep their history.</p>
+{% endblock %}

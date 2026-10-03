@@ -79,7 +79,15 @@ def list_user_repos(token):
         if len(batch) < 100:
             break
     return [
-        {'full_name': r['full_name'], 'private': r['private'], 'default_branch': r['default_branch']}
+        {
+            'full_name': r['full_name'], 'private': r['private'], 'default_branch': r['default_branch'],
+            # Shown in the repository picker so similarly named repos are easy to tell apart.
+            'description': (r.get('description') or '')[:140],
+            'language': r.get('language') or '',
+            'updated_at': r.get('updated_at') or '',
+            'archived': bool(r.get('archived')),
+            'fork': bool(r.get('fork')),
+        }
         for r in repos
     ]
 

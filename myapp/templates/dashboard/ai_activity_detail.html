@@ -62,7 +62,7 @@
   <div class="transcript">
     {% for m in ai_messages %}
     <div class="msg-row {{ m.role }}">
-      <div class="msg-role">{{ m.role }}{% if m.role == 'assistant' and m.model_key %} · {{ m.model_key }}{% endif %}</div>
+      <div class="msg-role">{{ m.role }}{% if m.role == 'assistant' and m.model_key %} · {{ m.model_key }}{% endif %}{% if m.superseded %} · replaced by a retry/edit (hidden from the user's chat){% endif %}</div>
       <div class="msg-content">{{ m.content|default:"(no text)" }}</div>
       {% if m.document_name %}<div class="msg-document"><i class="fas fa-paperclip"></i> {{ m.document_name }}</div>{% endif %}
       {% if m.image_data %}<img class="msg-image" src="{% url 'dashboard_ai_message_image' m.pk %}" loading="lazy" alt="{% if m.role == 'user' %}User-supplied image{% else %}AI-generated image{% endif %}" onerror="this.hidden=true;this.nextElementSibling.textContent='Stored image file unavailable';"><div class="msg-image-note">{% if m.role == 'user' %}User-supplied image{% else %}AI-generated or edited image{% endif %}</div>{% endif %}

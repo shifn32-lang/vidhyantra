@@ -234,26 +234,6 @@ _PROMPT_BLOCK_TRIGGER_RE = re.compile(
 _QUOTED_TEXT_RE = re.compile(r'["“][^"”]{1,80}["”]')
 
 
-def _sanitize_prompt_for_retry(prompt):
-    """Best-effort cleanup for a retry after a backend blocked the prompt.
-
-    Not a guess at the exact policy that tripped — just the two patterns
-    most likely to be the cause: literal warning/label text in quotes, and
-    security-jargon phrases describing a prompt-injection/data-leak scene.
-    """
-    cleaned = _QUOTED_TEXT_RE.sub("", prompt)
-    cleaned = _PROMPT_BLOCK_TRIGGER_RE.sub("", cleaned)
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)
-    cleaned = re.sub(r"\s*,\s*,+", ",", cleaned)
-    cleaned = re.sub(r"\s+([,.])", r"\1", cleaned)
-    return cleaned.strip(" ,")
-
-
-# Tried, in order, after the originally selected backend blocks a prompt.
-# Cloudflare's models run their own independent filtering, so a prompt one
-# provider blocks often just goes straight through on another — and by the
-# second entry the prompt has also been through the sanitizer above.
-_BLOCKED_PROMPT_FALLBACK_KEYS = ('sdxl-lightning', 'flux-1-schnell')
 
 
 def _api_key(*, editing=False):
@@ -482,12 +462,8 @@ def generate_image(prompt, source_image=None, *, model_key=None):
     ``source_image`` is the browser-provided PNG/JPEG data URI. It is decoded
     and normalized before being placed in FLUX's reference-image array.
 
-    When the originally selected backend blocks the prompt outright (its own
-    content filter, or a generic 400 that in practice is usually the same
-    thing — see ImageGenerationError.blocked), this retries once or twice on
-    a different backend with the prompt's most likely trigger phrases
-    stripped, instead of just handing the user an error for a prompt that a
-    different provider's filter is often fine with.
+    There is no fallback: if the selected backend fails or blocks the prompt,
+    the error is raised as is rather than retried on another key or provider.
     """
     prompt = (prompt or "").strip()
     if not prompt:
@@ -498,84 +474,12 @@ def generate_image(prompt, source_image=None, *, model_key=None):
     if len(prompt) > MAX_PROMPT_CHARS:
         raise ImageGenerationError("That image prompt is too long.", status_code=400)
 
-    try:
-        return _dispatch_generate(prompt, source_image, model_key)
-    except ImageGenerationError as exc:
-        # Retry ordinary generation on a separately credentialed FLUX worker.
-        # Do not send uploads to a text-to-image backend or retry content
-        # refusals here. Input validation above also never triggers failover.
-        if (
-            not source_image
-            and model_key in (None, 'flux-klein-4b')
-            and not exc.blocked
-            and not exc.editing_unavailable
-            and _get_key('NVIDIA_FLUX_DEV_API_KEY')
-        ):
-            return _generate_flux_dev(prompt)
-        if not exc.blocked:
-            raise
-        fallback_keys = [k for k in _BLOCKED_PROMPT_FALLBACK_KEYS if k != model_key]
-        if not fallback_keys:
-            raise
-        sanitized = _sanitize_prompt_for_retry(prompt) or prompt
-        last_error = exc
-        for fallback_key in fallback_keys:
-            try:
-                return _generate_cloudflare(sanitized, source_image, fallback_key)
-            except ImageGenerationError as fallback_exc:
-                last_error = fallback_exc
-        raise last_error
-
-
-def _generate_flux_dev(prompt):
-    """One backup attempt using FLUX.1-dev's hosted text-to-image schema."""
-    key = _get_key('NVIDIA_FLUX_DEV_API_KEY').strip()
-    if not key:
-        raise ImageGenerationError('The backup image service is not configured.')
-    try:
-        response = requests.post(
-            'https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-dev',
-            headers={
-                'Authorization': f'Bearer {key}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-            # Hosted FLUX.1-dev documents 1024x1024 output only.
-            json={'prompt': prompt, 'mode': 'base', 'width': 1024,
-                  'height': 1024, 'cfg_scale': 5, 'steps': 50,
-                  'samples': 1, 'seed': 0},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        raise ImageGenerationError('Could not reach the backup image service. Please try again.') from exc
-    if response.status_code != 200:
-        raise _safe_error(response)
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ImageGenerationError('The backup image service returned an invalid response.') from exc
-    return _decode_artifact(payload)
+    # One attempt on the one configured service: a failure is reported, not
+    # silently retried on another key or provider.
+    return _dispatch_generate(prompt, source_image, model_key)
 
 
 def _dispatch_generate(prompt, source_image, model_key):
-    """Try the primary Klein key, then its backup before model failover."""
-    try:
-        return _dispatch_generate_once(prompt, source_image, model_key)
-    except ImageGenerationError as exc:
-        backup = _get_key('NVIDIA_FLUX_BACKUP_API_KEY').strip()
-        if (
-            not source_image
-            and model_key in (None, 'flux-klein-4b')
-            and not exc.blocked
-            and not exc.editing_unavailable
-            and backup
-            and backup != _api_key()
-        ):
-            return _dispatch_generate_once(prompt, source_image, model_key, generation_key=backup)
-        raise
-
-
-def _dispatch_generate_once(prompt, source_image, model_key, *, generation_key=None):
     if model_key == 'qwen-image-edit':
         return _generate_qwen_edit(prompt, source_image)
     if model_key in CLOUDFLARE_MODEL_ENDPOINTS:
@@ -602,8 +506,6 @@ def _dispatch_generate_once(prompt, source_image, model_key, *, generation_key=N
     # A private deployment has its own optional credential. Never forward the
     # hosted NVIDIA credential to a separately configured server.
     key = _get_key('FLUX_EDIT_API_KEY').strip() if edit_url else _api_key(editing=editing)
-    if not editing and generation_key is not None:
-        key = generation_key
     if kontext:
         edit_url = ''
         key = _get_key('NVIDIA_FLUX_KONTEXT_API_KEY').strip()
@@ -662,3 +564,16 @@ def _dispatch_generate_once(prompt, source_image, model_key, *, generation_key=N
     except ValueError as exc:
         raise ImageGenerationError("The image service returned an invalid response. Please try again.") from exc
     return _decode_artifact(payload)
+
+
+def test_connection():
+    """Generate one tiny test picture with the FLUX key currently in effect
+    (and its backup, if set), so the dashboard can confirm the key works.
+    Returns (ok, message)."""
+    try:
+        image = _dispatch_generate('a small red circle on a plain white background', None, None)
+    except ImageGenerationError as exc:
+        return False, str(exc)[:250]
+    except Exception as exc:
+        return False, f'{exc.__class__.__name__}: {str(exc)[:200]}'
+    return True, f'Working — generated a test image ({len(image.content) // 1024} KB).'

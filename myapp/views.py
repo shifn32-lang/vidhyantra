@@ -22,7 +22,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.models import User
 from django.db import OperationalError, ProgrammingError
-from django.db.models import Q, F, Count, Sum, Max, Prefetch
+from django.db.models import Q, F, Count, Sum, Max, Prefetch, Exists, OuterRef
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.urls import resolve, Resolver404, reverse
@@ -41,6 +41,8 @@ from myapp.models import StoreProfile, Order, OrderItem, PaymentSettings, Paymen
 from myapp import dropbox_backup
 from myapp import dropbox_images
 from myapp import ai_chat
+from myapp import chat_export
+from myapp import coding_api
 from myapp import github_ops
 from myapp import doc_extract
 from myapp import company_knowledge
@@ -57,6 +59,7 @@ from myapp.geocoding import reverse_geocode_place
 from myapp.ai_report_analysis import analyze_report, aggregate_report_issues
 from myapp.emailing import send_store_email, get_notify_email
 from myapp.sms import send_phone_otp, verify_phone_otp
+from myapp import model_controls
 from myapp.single_device import register_active_session
 
 logger = logging.getLogger(__name__)
@@ -576,6 +579,9 @@ def ai_account_details(request):
                 timezone.localtime(api_key.created_at).isoformat() if api_key else None
             ),
         },
+        'coding': coding_api.account_summary(
+            request.user, allowed=bool(is_staff or is_subscribed), purchase_url=_ai_purchase_url(),
+        ),
         'subscription': {
             'plan_name': plan_name,
             'active': bool(is_staff or is_subscribed),
@@ -674,6 +680,8 @@ def api_chat_completions(request):
     chat_models = _api_chat_model_choices()
     if model_key not in chat_models:
         return JsonResponse({'error': f'Model "{model_key}" does not support the chat API.'}, status=400)
+    if not ai_chat.is_model_enabled(model_key):
+        return JsonResponse({'error': f'Model "{model_key}" is currently disabled.'}, status=503)
 
     messages = payload.get('messages')
     if not messages:
@@ -706,9 +714,11 @@ def api_chat_completions(request):
     # leaking the real backend vendor or borrowing a persona name it wasn't
     # given is just as much a trust problem here as it is in the browser UI.
     if model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
-        reply = _chatgpt_public_reply(reply)
+        reply = _chatgpt_public_reply(reply, ai_chat.chatgpt_persona_name(model_key))
     else:
         reply = _vidhyora_public_reply(reply, ai_chat.MODELS[model_key]['label'])
+        if model_key == ai_chat.GEMINI_36_FLASH_MODEL_KEY:
+            reply = _gemini_public_reply(reply)
 
     AIAPIKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
     return JsonResponse({
@@ -1653,8 +1663,6 @@ def _ai_api_registry():
             'model_keys': [ai_chat.FLUX_KLEIN_4B_MODEL_KEY],
             'fields': [
                 ('NVIDIA_FLUX_API_KEY', 'API key', 'secret'),
-                ('NVIDIA_FLUX_BACKUP_API_KEY', 'Backup API key (optional)', 'secret'),
-                ('NVIDIA_FLUX_DEV_API_KEY', 'FLUX.1-dev backup key (optional)', 'secret'),
             ],
         },
         {
@@ -1699,8 +1707,8 @@ def _ai_api_registry():
             ],
         },
         {
-            'name': 'Google Gemini',
-            'note': 'Backs Gemini 3.6 Flash.',
+            'name': 'Gemini 3.6 Flash (NVIDIA Gemma)',
+            'note': 'Dedicated NVIDIA key for Gemini 3.6 Flash, served by DiffusionGemma on NVIDIA. Also managed on the API Settings page.',
             'connected': bool(get_key('GEMINI_API_KEY')),
             'model_keys': [ai_chat.GEMINI_36_FLASH_MODEL_KEY],
             'fields': [('GEMINI_API_KEY', 'API key', 'secret')],
@@ -1739,6 +1747,24 @@ def _mask_secret(value):
     if len(value) <= 8:
         return '•' * len(value)
     return value[:4] + '…' + value[-4:]
+
+
+@dashboard_staff_required
+def dashboard_api_settings(request):
+    """Per-feature controls that go beyond a plain key — see myapp.api_controls:
+    each ChatGPT model, Gemini, image generation and web search get a key, a
+    live connection test, an on/off checkbox and request counters."""
+    from myapp import api_controls
+    message = None
+    if request.method == 'POST':
+        panel_id, ok, text = api_controls.handle_post(request)
+        if text:
+            message = {'panel': panel_id, 'ok': ok, 'text': text}
+    return render(request, 'dashboard/api_settings.html', {
+        'active': 'api_settings',
+        'panels': api_controls.panel_context(),
+        'message': message,
+    })
 
 
 @dashboard_staff_required
@@ -2499,7 +2525,7 @@ AI_UNLIMITED_IMAGE_EMAILS = frozenset({'rnt@gmail.com'})
 # cap (see the clean_history loop below) — roughly 4 chars/token, so this
 # budget leaves headroom under typical 32k+ context windows once the system
 # prompt, late reminders, and reply tokens are also accounted for.
-AI_CHAT_HISTORY_CHAR_BUDGET = 48000
+AI_CHAT_HISTORY_CHAR_BUDGET = 120000  # room for one multi-file turn (doc_extract.TOTAL_MAX_CHARS) plus recent chat
 AI_CONVERSATION_TITLE_CHARS = 60
 AI_CURRENT_CONVERSATION_SESSION_KEY = 'ai_current_conversation_id'
 AI_GUEST_MESSAGE_LIMIT = 6        # free messages before a guest must log in/sign up
@@ -2527,9 +2553,26 @@ _CLOUDFLARE_IMAGE_MODEL_KEYS = (
 # body, so an oversized image gets our own clean error instead of Django's
 # generic one. The client also resizes/compresses before ever uploading.
 AI_IMAGE_MAX_DATA_URI_CHARS = 2_000_000
-AI_DOCUMENT_MODES = {'coding', 'details'}
+AI_DOCUMENT_MODES = {'coding', 'details', 'multi'}
 AI_DOCUMENT_CODE_MAX_OUTPUT_TOKENS = 6000
 AI_GENERATED_FILE_MAX_OUTPUT_TOKENS = 10000
+
+
+def _ai_voice_call_instruction(payload):
+    """Reply style for the phone-call feature: the answer is read aloud, so it
+    must be short, plain spoken language. The caller's name is cleaned to
+    letters/spaces so it can't carry instructions into the prompt."""
+    name = re.sub(r"[^\w .'-]", '', str(payload.get('caller_name') or ''), flags=re.UNICODE).strip()[:40]
+    text = (
+        "This is a live voice call: your reply will be read aloud by a speech engine. "
+        "Answer like a friendly person on the phone, in one to three short spoken sentences. "
+        "Use no Markdown, lists, tables, headings, code blocks, emojis or links. Do not read out "
+        "URLs. If the answer needs a lot of detail, give the key point and offer to continue. "
+        "Spell out symbols and units the way a person would say them."
+    )
+    if name:
+        text += f" The caller's name is {name}; use it naturally now and then, not in every reply."
+    return text
 
 
 def _ai_document_instruction(mode, filename, truncated=False):
@@ -2547,6 +2590,13 @@ def _ai_document_instruction(mode, filename, truncated=False):
             f"requested in their current message.{truncation_rule} Keep explanation brief and put the full "
             "updated file first. For a binary office file, return the complete revised textual content that "
             "can be represented in chat and do not claim to have generated a downloadable binary file."
+        )
+    if mode == 'multi':
+        return (
+            f"The user attached several files at once ({filename}). Their extracted text is provided in "
+            "order, each under a '=== File n of N: name ===' heading, and long ones may be shortened. Answer the "
+            "user's current message using all of them, say which file a point comes from, and compare or combine "
+            "them when asked. Do not claim to have produced a downloadable file."
         )
     if mode == 'details':
         return (
@@ -3152,7 +3202,10 @@ def ai_page(request):
     # Sol is the picker's default selection (a fixed flagship endpoint, not
     # the ChatGPT-56 auto-router) — kept separate from ai_chat.DEFAULT_MODEL_KEY,
     # which is the router model used as the internal MODELS-lookup fallback.
-    ai_default_model = ai_chat.SOL_MODEL_KEY if ai_full_model_access else 'quick'
+    ai_default_model = (
+        ai_chat.SOL_MODEL_KEY
+        if ai_full_model_access and ai_chat.is_model_enabled(ai_chat.SOL_MODEL_KEY) else 'quick'
+    )
     models = [
         {
             'key': key,
@@ -3163,6 +3216,7 @@ def ai_page(request):
         for key, cfg in ai_chat.MODELS.items()
         if key != 'vision' and not cfg.get('hidden_from_picker', False)
         and (ai_full_model_access or key not in AI_FULL_ACCESS_ONLY_MODEL_KEYS)
+        and ai_chat.is_model_enabled(key)
     ]
 
     return render(request, 'ai.html', {
@@ -3183,6 +3237,13 @@ def ai_page(request):
         'ai_free_used': ai_free_used,
         'ai_purchase_url': _ai_purchase_url(),
         'ai_models': models,
+        'ai_languages': [
+            {
+                'code': code, 'label': label, 'short': short, 'speech': speech, 'group': group,
+                'search': f'{label} {code}'.lower(),
+            }
+            for code, label, short, speech, group in ai_chat.LANGUAGE_MENU
+        ],
         # Drives the homepage's ChatGPT 5.6 call-out: whether to say "it's
         # already selected" or "here's how to unlock it". Without this the
         # empty state would tell a free user a model is selected that the
@@ -3807,7 +3868,7 @@ def _normalize_ai_home_links(reply):
     return re.sub(r'[ \t]{2,}', ' ', text)
 
 
-def _chatgpt_public_reply(reply):
+def _chatgpt_public_reply(reply, name='ChatGPT 5.6'):
     """Keep routed worker identities out of ChatGPT-visible response text.
 
     Runs over the whole visible reply, not just its opening — ai_chat's
@@ -3824,14 +3885,14 @@ def _chatgpt_public_reply(reply):
     # mention later in the same sentence and let it through.
     for _ in range(_CHATGPT_SANITIZE_MAX_PASSES):
         replaced = _CHATGPT_SELF_ATTRIBUTION_RE.sub(r'\1OpenAI', cleaned)
-        replaced = _CHATGPT_SELF_IDENTITY_RE.sub('I am ChatGPT 5.6', replaced)
-        replaced = _CHATGPT_SELF_NAME_RE.sub('My name is ChatGPT 5.6', replaced)
+        replaced = _CHATGPT_SELF_IDENTITY_RE.sub(f'I am {name}', replaced)
+        replaced = _CHATGPT_SELF_NAME_RE.sub(f'My name is {name}', replaced)
         if replaced == cleaned:
             break
         cleaned = replaced
-    cleaned = _CHATGPT_ARCHITECTURE_RE.sub('ChatGPT 5.6', cleaned)
+    cleaned = _CHATGPT_ARCHITECTURE_RE.sub(name, cleaned)
     for pattern in _CHATGPT_HIDDEN_MODEL_PATTERNS:
-        cleaned = pattern.sub('ChatGPT 5.6', cleaned)
+        cleaned = pattern.sub(name, cleaned)
     cleaned = _CHATGPT_REDUNDANT_DENIAL_RE.sub('OpenAI', cleaned)
     return _normalize_ai_home_links(cleaned)
 
@@ -3894,6 +3955,31 @@ def _vidhyora_public_reply(reply, mode_label):
     return cleaned
 
 
+# "Gemini 3.6 Flash" is served by DiffusionGemma on NVIDIA behind the scenes,
+# but must only ever present as Gemini 3.6 Flash. The prompt tells the model
+# so; this rewrites whatever still slips through, anywhere in the reply.
+_GEMINI_HIDDEN_MODEL_RE = re.compile(
+    r"\b(?:google/)?(?:diffusion[\s-]?gemma|gemma)"
+    r"(?:[\s-]?\d(?:\.\d+)?(?![\d.]*b))?(?:[\s-]?\d+b)?(?:[\s-]?a\d+b)?(?:-it)?\b",
+    re.IGNORECASE,
+)
+_GEMINI_THINKING_MARKER_RE = re.compile(r"<\|?channel\|?>(?:\s*thought)?[ \t]*")
+_GEMINI_DEEPMIND_RE = re.compile(r"\bgoogle[\s-]?deep[\s-]?mind\b", re.IGNORECASE)
+_GEMINI_OPEN_WEIGHTS_RE = re.compile(
+    r"\ban?\s+open[\s-]?(?:weights?|source)(?:\s+large\s+language)?\s+(?:model|llm)\b",
+    re.IGNORECASE,
+)
+
+
+def _gemini_public_reply(reply):
+    cleaned = str(reply or '')
+    cleaned = _GEMINI_THINKING_MARKER_RE.sub('', cleaned)
+    cleaned = _GEMINI_OPEN_WEIGHTS_RE.sub('a Google model', cleaned)
+    cleaned = _GEMINI_DEEPMIND_RE.sub('Google', cleaned)
+    cleaned = _GEMINI_HIDDEN_MODEL_RE.sub(ai_chat.MODELS[ai_chat.GEMINI_36_FLASH_MODEL_KEY]['label'], cleaned)
+    return cleaned
+
+
 def _ai_public_routed_model_key(response_model_key, routed_model_key):
     """Never expose ChatGPT's private worker selection to the browser."""
     if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, *_CLOUDFLARE_IMAGE_MODEL_KEYS, 'gpt-oss-20b', 'flux-kontext-dev', 'qwen-image-edit'):
@@ -3901,46 +3987,49 @@ def _ai_public_routed_model_key(response_model_key, routed_model_key):
     return routed_model_key
 
 
+def _support_email():
+    """The support address saved under dashboard → Customize."""
+    try:
+        return SiteCustomization.get_solo().support_email or 'support@edutrellis.in'
+    except (OperationalError, ProgrammingError):
+        return 'support@edutrellis.in'
+
+
 def _ai_chat_failure_reply(error, response_model_key, is_staff=False):
-    """Turn upstream failures into safe, accurate, public-facing guidance."""
+    """Turn upstream failures into safe, accurate, public-facing guidance.
+    A missing/invalid key or unavailable model is never explained in terms of
+    settings or environment variables, even to staff: everyone is pointed to
+    the administrator at the saved support email instead."""
     label = ai_chat.MODELS.get(response_model_key, {}).get('label', 'The selected AI model')
     status_code = getattr(error, 'status_code', None)
-    if ai_chat._is_unconfigured_key_error(error):
-        setting_name = str(error).split(' is not configured', 1)[0].strip()
-        suffix = (
-            f' Set {setting_name} in the deployment environment, then restart the application.'
-            if is_staff else
-            ' Please try again after the administrator reconnects it.'
-        )
-        return f'{label} text access is currently disconnected.{suffix}'
-    if ai_chat._is_model_unavailable_error(error):
-        suffix = (
-            ' Update the configured text-model API key, then restart the application.'
-            if is_staff else
-            ' Please try again after the administrator reconnects it.'
-        )
-        return f'{label} text access is currently disconnected.{suffix}'
+    contact = f' Please contact the administrator at {_support_email()}.'
+    if ai_chat._is_unconfigured_key_error(error) or ai_chat._is_model_unavailable_error(error):
+        return f'{label} text access is currently disconnected.{contact}'
     if status_code in (401, 403):
-        suffix = (
-            ' Update the configured API key, then restart the application.'
-            if is_staff else
-            ' Please try again after the administrator reconnects it.'
-        )
-        return f'{label} authentication is currently unavailable.{suffix}'
+        return f'{label} authentication is currently unavailable.{contact}'
     if status_code == 429:
-        return f'{label} is currently at its request limit. Please wait a moment and try again.'
+        return (
+            f'{label} is currently at its request limit. Please wait a moment and try again, '
+            f'or contact the administrator at {_support_email()} if it keeps happening.'
+        )
     if ai_chat._is_transient_error(error):
-        return f'{label} is temporarily unavailable. Please wait a moment and try again.'
+        return (
+            f'{label} is temporarily unavailable. Please wait a moment and try again, '
+            f'or contact the administrator at {_support_email()} if it keeps happening.'
+        )
     return (
-        f'{label} is taking longer than expected to respond. Please try again in '
-        'a moment — if this keeps happening, switching to a different model from '
-        'the picker usually helps.'
+        f'{label} is taking longer than expected to respond. Please try again in a moment, '
+        f'or contact the administrator at {_support_email()} if it keeps happening.'
     )
 
 
 def _ai_flux_response(conversation, prompt, source_image, response_model_key=None, owner_email=''):
     """Run a FLUX generation/editing turn and persist the real image URL."""
     display_model_key = response_model_key or ai_chat.FLUX_KLEIN_4B_MODEL_KEY
+    # Only FLUX-drawn images count towards the image panel's request numbers.
+    counts_for_flux = display_model_key not in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS)
+    if counts_for_flux:
+        model_controls.record_request(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     try:
         try:
             if display_model_key in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS):
@@ -3967,11 +4056,16 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
         stored_name = default_storage.save(filename, ContentFile(generated.content))
         generated_url = default_storage.url(stored_name)
     except image_generation.ImageGenerationError as exc:
+        if counts_for_flux:
+            model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, str(exc))
+        service_down = exc.status_code == 503 and not exc.blocked and not exc.editing_unavailable
         detail = (
             _chatgpt_image_error_detail(exc, display_model_key)
             if display_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, 'gpt-oss-20b')
             else str(exc)
         )
+        if service_down:
+            detail = f'Image generation is currently unavailable. Please contact the administrator at {_support_email()}.'
         response = JsonResponse(
             {'status': 'error', 'detail': detail},
             status=exc.status_code,
@@ -3982,7 +4076,9 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
             display_model_key, ai_chat.FLUX_KLEIN_4B_MODEL_KEY,
         )
         return response
-    except Exception:
+    except Exception as exc:
+        if counts_for_flux:
+            model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, f'{exc.__class__.__name__}: {exc}')
         logger.exception("Failed to save generated FLUX image")
         response = JsonResponse(
             {'status': 'error', 'detail': 'The image was generated but could not be saved. Please try again.'},
@@ -3994,6 +4090,9 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
             display_model_key, ai_chat.FLUX_KLEIN_4B_MODEL_KEY,
         )
         return response
+
+    if counts_for_flux:
+        model_controls.record_success(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
 
     # Mirror the image into the owner's Dropbox archive, because local media
     # storage does not survive a redeploy. Placed after the try/except above
@@ -4044,6 +4143,35 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
     return response
 
 
+def _ai_visible_messages(request, conversation):
+    """The conversation's live messages: not replaced by a retry/edit, and —
+    while a retry/edit is being processed — not the turn it is replacing."""
+    messages = conversation.messages.filter(superseded=False)
+    replace_from = getattr(request, '_ai_replace_from_pk', None)
+    if replace_from:
+        messages = messages.exclude(pk__gte=replace_from)
+    return messages
+
+
+def _ai_replace_target(request, payload):
+    """The sent user message a Retry/Edit is replacing (payload
+    replace_message_id), or None. Only the owner's own live message counts,
+    and it must belong to the conversation the request names."""
+    try:
+        message_id = int(payload.get('replace_message_id'))
+    except (TypeError, ValueError):
+        return None
+    target = AIMessage.objects.filter(
+        pk=message_id, role=AIMessage.ROLE_USER, superseded=False,
+    ).first()
+    if target is None or str(payload.get('conversation_id') or '') != str(target.conversation_id):
+        return None
+    if not AIConversation.objects.filter(_ai_owner_filter(request), pk=target.conversation_id).exists():
+        return None
+    request._ai_replace_from_pk = target.pk
+    return target
+
+
 def _ai_image_daily_count(request):
     """Count images successfully saved today for this account/session."""
     images = AIUserImage.objects.filter(created_at__date=timezone.localdate())
@@ -4068,7 +4196,7 @@ def _ai_previous_image_for_edit(request, conversation_id, message):
     ).first()
     if not conversation:
         return ''
-    previous = conversation.messages.exclude(image_data='').order_by(
+    previous = _ai_visible_messages(request, conversation).exclude(image_data='').order_by(
         '-created_at', '-pk',
     ).values_list('image_data', flat=True).first()
     snapshotted = _snapshot_ai_report_image(previous or '')
@@ -4088,7 +4216,7 @@ def _ai_previous_generated_image(request, conversation_id, message):
     ).first()
     if not conversation:
         return ''
-    return conversation.messages.filter(
+    return _ai_visible_messages(request, conversation).filter(
         role=AIMessage.ROLE_ASSISTANT,
     ).exclude(image_data='').order_by(
         '-created_at', '-pk',
@@ -4112,13 +4240,13 @@ def _ai_pending_image_prompt(request, conversation_id, message):
     if not conversation:
         return ''
 
-    latest = conversation.messages.order_by('-created_at', '-pk').first()
+    latest = _ai_visible_messages(request, conversation).order_by('-created_at', '-pk').first()
     if (
         not latest or latest.role != AIMessage.ROLE_ASSISTANT
         or not ai_chat.is_image_details_question(latest.content)
     ):
         return ''
-    earlier = conversation.messages.filter(
+    earlier = _ai_visible_messages(request, conversation).filter(
         Q(created_at__lt=latest.created_at)
         | Q(created_at=latest.created_at, pk__lt=latest.pk),
         role=AIMessage.ROLE_USER,
@@ -4164,6 +4292,16 @@ def _ai_recalled_image_response(conversation, image_value, display_model_key):
 
 
 def ai_chat_send(request):
+    response = _ai_chat_send(request)
+    # Lets the page tag the message it just rendered, so a later Edit/Retry
+    # can name the exact message it replaces.
+    user_message_id = getattr(request, '_ai_user_message_id', None)
+    if user_message_id:
+        response['X-User-Message-Id'] = str(user_message_id)
+    return response
+
+
+def _ai_chat_send(request):
     request_started = time.perf_counter()
     if request.method != 'POST':
         return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
@@ -4236,15 +4374,26 @@ def ai_chat_send(request):
     document_text = payload.get('document_text')
     document_name = payload.get('document_name')
     if isinstance(document_text, str) and document_text.strip() and isinstance(document_name, str) and document_name.strip():
-        document_text = document_text.strip()[:doc_extract.MAX_CHARS]
+        document_text = document_text.strip()[:doc_extract.TOTAL_MAX_CHARS]
         document_name = document_name.strip()[:255]
     else:
         document_text = ''
         document_name = ''
+    # Retry / Edit of an earlier message: the attachment it had carries over
+    # unless a new one was supplied, since the page never re-uploads it.
+    replace_target = _ai_replace_target(request, payload)
+    if replace_target is not None and not image_data and not document_text:
+        if replace_target.image_data:
+            image_data = replace_target.image_data
+            image_ocr_text = replace_target.document_text
+        elif replace_target.document_name and replace_target.document_text:
+            document_text = replace_target.document_text
+            document_name = replace_target.document_name
     requested_document_mode = payload.get('document_mode')
     document_mode = requested_document_mode if document_text and requested_document_mode in AI_DOCUMENT_MODES else ''
     document_truncated = bool(payload.get('document_truncated')) if document_text else False
     document_instruction = _ai_document_instruction(document_mode, document_name, document_truncated)
+    voice_instruction = _ai_voice_call_instruction(payload) if payload.get('voice_call') is True else ''
 
     if not message and not image_data and not document_text:
         return JsonResponse({'status': 'error', 'detail': 'No message provided.'}, status=400)
@@ -4277,15 +4426,30 @@ def ai_chat_send(request):
     # task-specific workers. Keep its public identity while routing the actual
     # turn to Vision, Code, or Quick.
     full_model_access = _ai_has_full_model_access(request.user)
-    default_model_key = ai_chat.SOL_MODEL_KEY if full_model_access else 'quick'
+    default_model_key = (
+        ai_chat.SOL_MODEL_KEY
+        if full_model_access and ai_chat.is_model_enabled(ai_chat.SOL_MODEL_KEY) else 'quick'
+    )
     requested_model_key = payload.get('model')
     selected_model_key = (
         requested_model_key
         if requested_model_key in ai_chat.MODELS
         else default_model_key
     )
+    if not ai_chat.is_model_enabled(selected_model_key):
+        return JsonResponse({
+            'status': 'model_disabled',
+            'detail': (
+                f"{ai_chat.MODELS[selected_model_key]['label']} is temporarily unavailable. "
+                'Please pick another model from the model menu.'
+            ),
+        }, status=403)
     chatgpt_mode = selected_model_key == ai_chat.CHATGPT_56_MODEL_KEY
-    response_model_key = selected_model_key if selected_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, *_CLOUDFLARE_IMAGE_MODEL_KEYS, 'gpt-oss-20b', 'flux-kontext-dev', 'qwen-image-edit') else None
+    # Whatever the turn is auto-routed to (image generation, vision, code...),
+    # the reply is always shown, labelled and saved under the model the user
+    # picked, never under the worker that actually produced it. Only the
+    # hidden internal 'vision' key has no picker entry of its own.
+    response_model_key = selected_model_key if selected_model_key != 'vision' else None
 
     # Gated on ai_chat.is_image_generation_request rather than just "FLUX is
     # selected" — that regex is what decides whether a message genuinely
@@ -4452,6 +4616,18 @@ def ai_chat_send(request):
             ),
         }, status=403)
 
+    # Image generation switched off on the dashboard: refuse any turn that
+    # would be drawn by FLUX, whichever model the user picked.
+    if (
+        model_key == ai_chat.FLUX_KLEIN_4B_MODEL_KEY
+        and response_model_key not in ('flux-kontext-dev', 'qwen-image-edit', *_CLOUDFLARE_IMAGE_MODEL_KEYS)
+        and not ai_chat.is_model_enabled(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
+    ):
+        return JsonResponse({
+            'status': 'model_disabled',
+            'detail': 'Image generation is temporarily unavailable. Please try again later.',
+        }, status=403)
+
     if model_key == ai_chat.FLUX_KLEIN_4B_MODEL_KEY and not message:
         return JsonResponse({
             'status': 'error',
@@ -4515,11 +4691,18 @@ def ai_chat_send(request):
         else:
             conversation = AIConversation.objects.create(session_key=request.session.session_key, title=title, ip_address=conv_ip)
 
-    AIMessage.objects.create(
+    if replace_target is not None and replace_target.conversation_id == conversation.id:
+        conversation.messages.filter(pk__gte=replace_target.pk).update(superseded=True)
+    # From here the old turn is flagged in the database, so the temporary
+    # "ignore everything from the replaced message on" rule must not also hide
+    # the message created next.
+    request._ai_replace_from_pk = None
+    user_message = AIMessage.objects.create(
         conversation=conversation, role=AIMessage.ROLE_USER, content=message,
         image_data=image_data, document_name=document_name,
         document_text=document_text or image_ocr_text,
     )
+    request._ai_user_message_id = user_message.pk
     conversation.updated_at = timezone.now()
     conversation.save(update_fields=['updated_at'])
     request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
@@ -4606,7 +4789,7 @@ def ai_chat_send(request):
             onboarding_profile.save(update_fields=['ai_onboarding_pending'])
 
     recent = list(
-        conversation.messages.order_by('-created_at')
+        _ai_visible_messages(request, conversation).order_by('-created_at')
         .values('role', 'content', 'image_data', 'document_name', 'document_text')[:AI_CHAT_MAX_HISTORY]
     )
     recent.reverse()
@@ -4788,6 +4971,8 @@ def ai_chat_send(request):
     )
 
     def model_stream(instruction=document_instruction):
+        if voice_instruction and not generated_file_spec:
+            instruction = ((instruction or '') + ' ' + voice_instruction).strip()
         return ai_chat.stream_chat(
             clean_history, model_key=model_key,
             identity_model_key=(response_model_key if response_model_key != model_key else None),
@@ -4835,9 +5020,11 @@ def ai_chat_send(request):
         # its output, so a fake link is removed before any of it is released.
         def public_text(text):
             if hide_chatgpt_worker:
-                text = _chatgpt_public_reply(text)
+                text = _chatgpt_public_reply(text, ai_chat.chatgpt_persona_name(response_model_key))
             elif fix_wrong_persona_identity:
                 text = _vidhyora_public_reply(text, response_model_label)
+                if response_model_key == ai_chat.GEMINI_36_FLASH_MODEL_KEY:
+                    text = _gemini_public_reply(text)
             if generated_file_spec:
                 text = _strip_fake_download_links(text)
             return text
@@ -5021,8 +5208,9 @@ def ai_chat_send(request):
     return response
 
 
-AI_DOC_RATE_LIMIT = 15
-AI_DOC_MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # raw file cap, before extraction
+AI_DOC_RATE_LIMIT = 40   # one request per file, and a message can carry several
+AI_DOC_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # raw file cap, before extraction
+AI_DOC_MAX_UPLOAD_MB = AI_DOC_MAX_UPLOAD_BYTES // (1024 * 1024)
 
 
 def ai_extract_document(request):
@@ -5047,7 +5235,7 @@ def ai_extract_document(request):
     if not f:
         return JsonResponse({'status': 'error', 'detail': 'No file provided.'}, status=400)
     if f.size > AI_DOC_MAX_UPLOAD_BYTES:
-        return JsonResponse({'status': 'error', 'detail': 'That file is too large — please use one under 8MB.'}, status=400)
+        return JsonResponse({'status': 'error', 'detail': f'That file is too large — please use one under {AI_DOC_MAX_UPLOAD_MB}MB.'}, status=400)
 
     try:
         file_bytes = f.read()
@@ -5094,7 +5282,7 @@ def ai_convert_file(request):
     if not upload:
         return JsonResponse({'status': 'error', 'detail': 'No file provided.'}, status=400)
     if upload.size > AI_DOC_MAX_UPLOAD_BYTES:
-        return JsonResponse({'status': 'error', 'detail': 'That file is too large — please use one under 8MB.'}, status=400)
+        return JsonResponse({'status': 'error', 'detail': f'That file is too large — please use one under {AI_DOC_MAX_UPLOAD_MB}MB.'}, status=400)
     if not target:
         return JsonResponse({'status': 'error', 'detail': 'Choose a format to convert to.'}, status=400)
 
@@ -5116,6 +5304,75 @@ def ai_convert_file(request):
     return response
 
 
+def _ai_speaker_label(message):
+    """Who spoke, as the chat itself labels it: "You", or the model that
+    answered (never an internal worker name)."""
+    if message.role == AIMessage.ROLE_USER:
+        return 'You'
+    return ai_chat.MODELS.get(message.model_key, {}).get('label') or 'Vidhyora AI'
+
+
+def _ai_transcript_lines(conversation, messages, markdown=True):
+    """One conversation as text lines. markdown=True gives "# title / ## who —
+    when" headings (for the PDF and Word renderers); False gives plain text."""
+    title = conversation.title or 'Vidhyora AI conversation'
+    if markdown:
+        lines = [f'# {title}', '']
+    else:
+        lines = ['=' * 60, title, '=' * 60, '']
+    for message in messages:
+        stamp = timezone.localtime(message.created_at).strftime('%d %b %Y, %I:%M %p')
+        header = f'{_ai_speaker_label(message)} — {stamp}'
+        lines.append(f'## {header}' if markdown else header)
+        content = (message.content or '').strip()
+        if content:
+            lines.append(content)
+        # The image itself isn't embedded (a generated image is a URL and an
+        # upload is a data URI); note it so the transcript doesn't look like
+        # it silently lost a turn.
+        if message.image_data:
+            lines.append('- [image in this message]' if markdown else '[image in this message]')
+        if message.document_name:
+            note = f'attached file: {message.document_name}'
+            lines.append(f'- [{note}]' if markdown else f'[{note}]')
+        lines.append('')
+    return lines
+
+
+def _ai_export_chat(conversation, messages):
+    """A conversation as chat_export.Chat data (names, times and notes already
+    resolved), for the designed PDF and the plain-text export."""
+    turns = []
+    for message in messages:
+        local = timezone.localtime(message.created_at)
+        notes = []
+        if message.image_data:
+            notes.append('[image in this message]')
+        if message.document_name:
+            notes.append(f'[attached file: {message.document_name}]')
+        turns.append(chat_export.Turn(
+            role='user' if message.role == AIMessage.ROLE_USER else 'assistant',
+            who=_ai_speaker_label(message),
+            when=local.strftime('%d %b %Y, %I:%M %p'),
+            time=local.strftime('%I:%M %p'),
+            content=(message.content or '').strip(),
+            notes=notes,
+        ))
+    started = turns[0].when if turns else ''
+    count = len(turns)
+    return chat_export.Chat(
+        title=conversation.title or 'Vidhyora AI conversation',
+        turns=turns,
+        started=started,
+        subtitle=f'Started {started} · {count} message{"" if count == 1 else "s"}',
+    )
+
+
+def _ai_download_name(stem, extension):
+    stem = re.sub(r'[^A-Za-z0-9_-]+', '-', stem or '').strip('-')[:60]
+    return f'{stem or "conversation"}.{extension}'
+
+
 def ai_conversation_export(request, conversation_id, file_format):
     """Download one conversation as a real PDF or Word document."""
     if request.method != 'GET':
@@ -5129,35 +5386,71 @@ def ai_conversation_export(request, conversation_id, file_format):
     if not conversation:
         return JsonResponse({'status': 'error', 'detail': 'Conversation not found.'}, status=404)
 
-    lines = [f'# {conversation.title or "Vidhyora AI conversation"}', '']
-    for message in conversation.messages.order_by('created_at', 'pk'):
-        speaker = 'You' if message.role == AIMessage.ROLE_USER else 'Vidhyora AI'
-        stamp = timezone.localtime(message.created_at).strftime('%d %b %Y, %I:%M %p')
-        lines.append(f'## {speaker} — {stamp}')
-        content = (message.content or '').strip()
-        if content:
-            lines.append(content)
-        if message.image_data:
-            # The image itself isn't embedded (a generated image is a URL and
-            # an upload is a data URI); note it so the transcript doesn't look
-            # like it silently lost a turn.
-            lines.append('- [image in this message]')
-        if message.document_name:
-            lines.append(f'- [attached file: {message.document_name}]')
-        lines.append('')
-
-    document_text = '\n'.join(lines)
+    ai_chat.get_ai_brand_name()  # refresh model labels before they are printed
+    live_messages = conversation.messages.filter(superseded=False).order_by('created_at', 'pk')
     try:
         if file_format == 'pdf':
-            payload = file_convert.text_to_pdf_bytes(document_text)
+            payload = chat_export.build_pdf(
+                ai_chat.get_ai_brand_name(), [_ai_export_chat(conversation, live_messages)], single=True,
+            )
         else:
-            payload = file_convert.text_to_docx_bytes(document_text)
+            payload = file_convert.text_to_docx_bytes('\n'.join(_ai_transcript_lines(conversation, live_messages)))
     except file_convert.ConvertError as exc:
         return JsonResponse({'status': 'error', 'detail': str(exc)}, status=503)
 
-    stem = re.sub(r'[^A-Za-z0-9_-]+', '-', conversation.title or 'conversation').strip('-')[:60]
     response = HttpResponse(payload, content_type=file_convert.mime_for(file_format))
-    response['Content-Disposition'] = f'attachment; filename="{stem or "conversation"}.{file_format}"'
+    response['Content-Disposition'] = f'attachment; filename="{_ai_download_name(conversation.title, file_format)}"'
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+AI_EXPORT_ALL_LIMIT = 500
+
+
+def ai_conversations_export_all(request, file_format):
+    """Download every one of the caller's chats in a single PDF or text file
+    (account menu → "Export all chats"). Newest chat first; replaced turns
+    are left out, like everywhere else the thread is shown."""
+    if request.method != 'GET':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    if file_format not in ('pdf', 'txt'):
+        return JsonResponse({'status': 'error', 'detail': 'Unsupported export format.'}, status=400)
+
+    brand = ai_chat.get_ai_brand_name()  # also refreshes the model labels
+    conversations = list(
+        AIConversation.objects.filter(_ai_owner_filter(request)).order_by('-updated_at', '-pk')[:AI_EXPORT_ALL_LIMIT + 1]
+    )
+    truncated = len(conversations) > AI_EXPORT_ALL_LIMIT
+    conversations = conversations[:AI_EXPORT_ALL_LIMIT]
+
+    by_conversation = {}
+    for message in (
+        AIMessage.objects.filter(conversation__in=conversations, superseded=False)
+        .order_by('created_at', 'pk')
+    ):
+        by_conversation.setdefault(message.conversation_id, []).append(message)
+    conversations = [c for c in conversations if by_conversation.get(c.pk)]
+    if not conversations:
+        return JsonResponse({'status': 'error', 'detail': 'You have no chats to export yet.'}, status=404)
+
+    exported_at = timezone.localtime().strftime('%d %b %Y, %I:%M %p')
+    note = f'the {AI_EXPORT_ALL_LIMIT} most recent chats' if truncated else ''
+    chats = [_ai_export_chat(c, by_conversation[c.pk]) for c in conversations]
+    if file_format == 'pdf':
+        try:
+            payload = chat_export.build_pdf(brand, chats, exported_at=exported_at, note=note)
+        except file_convert.ConvertError as exc:
+            return JsonResponse({'status': 'error', 'detail': str(exc)}, status=503)
+        content_type = file_convert.mime_for('pdf')
+    else:
+        # A BOM so Windows Notepad opens it as UTF-8 and Indic/CJK text survives.
+        payload = chat_export.build_text(brand, chats, exported_at, note).encode('utf-8-sig')
+        content_type = 'text/plain; charset=utf-8'
+
+    filename = _ai_download_name(f'{brand}-chats-{timezone.localdate():%Y-%m-%d}', file_format)
+    response = HttpResponse(payload, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     response['X-Content-Type-Options'] = 'nosniff'
     response['Cache-Control'] = 'private, no-store'
     return response
@@ -5264,14 +5557,76 @@ def ai_youtube_file(request, token, file_kind):
     return response
 
 
+AI_CONV_SEARCH_LIMIT = 100
+AI_CONV_RANGE_DAYS = {'week': 7, 'month': 30}
+
+
+def _ai_search_snippet(text, query, radius=36):
+    """A short excerpt of text around the first match of query."""
+    text = ' '.join((text or '').split())
+    index = text.lower().find(query.lower())
+    if index < 0:
+        return text[:radius * 3]
+    start = max(0, index - radius)
+    end = min(len(text), index + len(query) + radius * 2)
+    return ('…' if start else '') + text[start:end] + ('…' if end < len(text) else '')
+
+
 def ai_conversations_list(request):
-    conversations = list(
-        AIConversation.objects.filter(_ai_owner_filter(request))
-        .values('id', 'title', 'updated_at').order_by('-updated_at')[:100]
+    """The sidebar chat list. With no parameters: the 100 most recent chats.
+    Optional filters (all combine): q (matches the chat title or any live
+    message), range (today/week/month), has (images/files) and model (a chat
+    the model answered in)."""
+    conversations = AIConversation.objects.filter(_ai_owner_filter(request))
+    live_messages = AIMessage.objects.filter(conversation=OuterRef('pk'), superseded=False)
+
+    query = request.GET.get('q', '').strip()[:100]
+    date_range = request.GET.get('range', '')
+    has = request.GET.get('has', '')
+    model_key = request.GET.get('model', '')
+
+    now = timezone.localtime()
+    if date_range == 'today':
+        conversations = conversations.filter(
+            updated_at__gte=now.replace(hour=0, minute=0, second=0, microsecond=0),
+        )
+    elif date_range in AI_CONV_RANGE_DAYS:
+        conversations = conversations.filter(updated_at__gte=now - timedelta(days=AI_CONV_RANGE_DAYS[date_range]))
+    if has == 'images':
+        conversations = conversations.filter(Exists(live_messages.exclude(image_data='')))
+    elif has == 'files':
+        conversations = conversations.filter(Exists(live_messages.exclude(document_name='')))
+    if model_key in ai_chat.MODELS:
+        conversations = conversations.filter(
+            Exists(live_messages.filter(role=AIMessage.ROLE_ASSISTANT, model_key=model_key)),
+        )
+    if query:
+        conversations = conversations.filter(
+            Q(title__icontains=query) | Exists(live_messages.filter(content__icontains=query)),
+        )
+
+    rows = list(
+        conversations.values('id', 'title', 'updated_at').order_by('-updated_at')[:AI_CONV_SEARCH_LIMIT]
     )
-    for c in conversations:
-        c['updated_at'] = timezone.localtime(c['updated_at']).isoformat()
-    return JsonResponse({'status': 'ok', 'conversations': conversations})
+    for row in rows:
+        row['updated_at'] = timezone.localtime(row['updated_at']).isoformat()
+
+    if query and rows:
+        ids = [row['id'] for row in rows]
+        first_match, match_count = {}, {}
+        matching = (
+            AIMessage.objects.filter(conversation_id__in=ids, superseded=False, content__icontains=query)
+            .order_by('conversation_id', 'created_at').values_list('conversation_id', 'content')[:800]
+        )
+        for conversation_id, content in matching:
+            match_count[conversation_id] = match_count.get(conversation_id, 0) + 1
+            first_match.setdefault(conversation_id, content)
+        for row in rows:
+            row['matches'] = match_count.get(row['id'], 0)
+            row['snippet'] = (
+                _ai_search_snippet(first_match[row['id']], query) if row['id'] in first_match else ''
+            )
+    return JsonResponse({'status': 'ok', 'conversations': rows})
 
 
 def ai_conversation_messages(request, conversation_id):
@@ -5280,7 +5635,7 @@ def ai_conversation_messages(request, conversation_id):
         return JsonResponse({'status': 'error', 'detail': 'Conversation not found.'}, status=404)
     request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
     messages_qs = list(
-        conversation.messages.order_by('created_at')
+        conversation.messages.filter(superseded=False).order_by('created_at')
         .values('id', 'role', 'content', 'image_data', 'document_name', 'model_key')
     )
     return JsonResponse({'status': 'ok', 'title': conversation.title, 'messages': messages_qs})
@@ -5296,64 +5651,6 @@ def ai_conversation_delete(request, conversation_id):
     if request.session.get(AI_CURRENT_CONVERSATION_SESSION_KEY) == conversation_id:
         request.session.pop(AI_CURRENT_CONVERSATION_SESSION_KEY, None)
     return JsonResponse({'status': 'ok'})
-
-
-AI_IMPORT_MAX_MESSAGES = 500
-AI_IMPORT_MAX_MESSAGE_CHARS = 8000
-
-
-def ai_conversation_import(request):
-    """Creates a new conversation from a chat transcript the user uploads
-    from the account dropdown's "Import chat" option (see the Vidhyora AI
-    account menu in ai.html) — a JSON body shaped either as a bare list of
-    messages or {title, messages}, each message {role, content} with role
-    'user'/'assistant' (a handful of common aliases are accepted client-side
-    in normalizeImportedChat before this ever gets called). Owned the same
-    dual way as a conversation started from chat itself, so an imported
-    guest chat still carries over on login like any other."""
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
-    payload = _parse_json_body(request)
-    if not isinstance(payload, dict):
-        return JsonResponse({'status': 'error', 'detail': 'Invalid import file.'}, status=400)
-    raw_messages = payload.get('messages')
-    if not isinstance(raw_messages, list) or not raw_messages:
-        return JsonResponse({'status': 'error', 'detail': 'That file has no recognizable chat messages.'}, status=400)
-
-    cleaned = []
-    for item in raw_messages[:AI_IMPORT_MAX_MESSAGES]:
-        if not isinstance(item, dict):
-            continue
-        role = item.get('role')
-        content = item.get('content')
-        if role not in (AIMessage.ROLE_USER, AIMessage.ROLE_ASSISTANT):
-            continue
-        if not isinstance(content, str) or not content.strip():
-            continue
-        cleaned.append((role, content[:AI_IMPORT_MAX_MESSAGE_CHARS]))
-    if not cleaned:
-        return JsonResponse({'status': 'error', 'detail': 'That file has no recognizable chat messages.'}, status=400)
-
-    title = payload.get('title')
-    title = title.strip()[:AI_CONVERSATION_TITLE_CHARS] if isinstance(title, str) and title.strip() else ''
-    if not title:
-        first_user = next((content for role, content in cleaned if role == AIMessage.ROLE_USER), cleaned[0][1])
-        title = first_user[:AI_CONVERSATION_TITLE_CHARS]
-
-    if not request.user.is_authenticated and not request.session.session_key:
-        request.session.create()
-    ip = _client_ip(request)
-    conv_ip = ip if ip and ip != 'unknown' else None
-    if request.user.is_authenticated:
-        conversation = AIConversation.objects.create(user=request.user, title=title, ip_address=conv_ip)
-    else:
-        conversation = AIConversation.objects.create(session_key=request.session.session_key, title=title, ip_address=conv_ip)
-
-    AIMessage.objects.bulk_create([
-        AIMessage(conversation=conversation, role=role, content=content) for role, content in cleaned
-    ])
-
-    return JsonResponse({'status': 'ok', 'conversation': {'id': conversation.id, 'title': conversation.title}})
 
 
 def ai_notes_list(request):
@@ -5784,11 +6081,26 @@ def ai_github_send(request):
     message = str(payload.get('message', ''))[:AI_CHAT_MAX_MESSAGE_CHARS].strip()
     if not message:
         return JsonResponse({'status': 'error', 'detail': 'No instruction provided.'}, status=400)
-    display_model_key = (
-        ai_chat.CHATGPT_56_MODEL_KEY
-        if payload.get('model') == ai_chat.CHATGPT_56_MODEL_KEY
-        else 'github'
-    )
+    # Shown, labelled and saved under the model the user picked, never under a
+    # "GitHub" name of its own (same rule as every other feature).
+    requested_model_key = payload.get('model')
+    if requested_model_key in ai_chat.MODELS and requested_model_key != 'vision':
+        display_model_key = requested_model_key
+    else:
+        display_model_key = (
+            ai_chat.SOL_MODEL_KEY
+            if _ai_has_full_model_access(request.user) and ai_chat.is_model_enabled(ai_chat.SOL_MODEL_KEY)
+            else 'quick'
+        )
+    if not ai_chat.is_model_enabled(display_model_key):
+        return JsonResponse({
+            'status': 'model_disabled',
+            'detail': (
+                f"{ai_chat.MODELS[display_model_key]['label']} is temporarily unavailable. "
+                'Please pick another model from the model menu.'
+            ),
+        }, status=403)
+    replace_target = _ai_replace_target(request, payload)
 
     owner, _, repo = conn.repo_full_name.partition('/')
     branch = conn.default_branch or 'main'
@@ -5799,7 +6111,9 @@ def ai_github_send(request):
     if conversation is None:
         conversation = AIConversation.objects.create(user=request.user, title=message[:AI_CONVERSATION_TITLE_CHARS])
     request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
-    AIMessage.objects.create(conversation=conversation, role=AIMessage.ROLE_USER, content=message)
+    if replace_target is not None and replace_target.conversation_id == conversation.id:
+        conversation.messages.filter(pk__gte=replace_target.pk).update(superseded=True)
+    user_message = AIMessage.objects.create(conversation=conversation, role=AIMessage.ROLE_USER, content=message)
     conversation.updated_at = timezone.now()
     conversation.save(update_fields=['updated_at'])
 
@@ -5811,6 +6125,7 @@ def ai_github_send(request):
         return JsonResponse({
             'status': 'ok', 'reply': reply_text,
             'conversation_id': conversation.id, 'model_key': display_model_key,
+            'user_message_id': user_message.pk,
         })
 
     try:
@@ -5819,7 +6134,11 @@ def ai_github_send(request):
         return finish(f"Couldn't read the repository: {e}")
 
     wanted = ai_chat.github_select_files(message, file_paths)
-    file_contents, file_shas = {}, {}
+    # file_contents is what the planner is shown (trimmed to keep the prompt
+    # small); file_full keeps the real text so "edit" operations are applied
+    # to the whole file, not to the trimmed copy.
+    file_contents, file_full, file_shas = {}, {}, {}
+    shown_chars = 0
     for path in wanted:
         if github_ops.is_path_blocked(path):
             # The blocked list protects settings/migrations/secrets/etc from
@@ -5831,16 +6150,34 @@ def ai_github_send(request):
             content, sha = github_ops.get_file(conn.access_token, owner, repo, path, branch)
         except github_ops.GitHubAPIError:
             continue
-        if len(content) > AI_GITHUB_MAX_FILE_CHARS:
-            content = content[:AI_GITHUB_MAX_FILE_CHARS] + '\n...[truncated]'
-        file_contents[path] = content
+        file_full[path] = content
         file_shas[path] = sha
+        shown = content
+        if len(shown) > ai_chat.GITHUB_FILE_PROMPT_CHARS:
+            shown = shown[:ai_chat.GITHUB_FILE_PROMPT_CHARS] + '\n...[truncated]'
+        if shown_chars + len(shown) > ai_chat.GITHUB_TOTAL_PROMPT_CHARS:
+            continue  # keep the prompt a size the model can answer in time
+        shown_chars += len(shown)
+        file_contents[path] = shown
 
     try:
         plan = ai_chat.github_plan_changes(message, file_paths, file_contents)
     except Exception as e:
         logger.exception("GitHub plan generation failed: %s", e)
-        return finish("Something went wrong while planning the change — please try again or rephrase your request.")
+        contact = f"If it keeps happening, contact the administrator at {_support_email()}."
+        if isinstance(e, ai_chat.GitHubPlanTooLarge):
+            return finish(
+                "This change is too big to plan in one go. Ask for it in smaller pieces — for example one folder "
+                f"or a few named files at a time. {contact}"
+            )
+        if 'timeout' in e.__class__.__name__.lower():
+            return finish(
+                "The AI took too long to plan this change, usually because it touches many files. Try naming the "
+                f"specific files, or ask for a smaller change. {contact}"
+            )
+        return finish(
+            f"Something went wrong while planning the change — please try again or rephrase your request. {contact}"
+        )
 
     if not isinstance(plan, dict):
         return finish("The AI's response wasn't understood — please try rephrasing your request.")
@@ -5853,7 +6190,8 @@ def ai_github_send(request):
     # all, so we know whether there's anything real to commit BEFORE
     # creating a working branch for it (never open an empty branch/PR).
     valid_ops, skipped = [], []
-    for op in operations[:20]:
+    edited = {}  # path -> text after the edit operations so far (several ops may hit one file)
+    for op in operations[:60]:
         if not isinstance(op, dict):
             continue
         action = op.get('action')
@@ -5861,7 +6199,42 @@ def ai_github_send(request):
         if not path or github_ops.is_path_blocked(path):
             skipped.append(f"{path or '(blank path)'} — blocked")
             continue
-        if action in ('update', 'create'):
+        if action == 'edit':
+            # Find-and-replace edits applied here, to the file's real text, so
+            # the model only has to send the few lines that change.
+            edits = op.get('edits')
+            if not isinstance(edits, list) or not edits:
+                skipped.append(f"{path} — no edits given")
+                continue
+            original = edited.get(path, file_full.get(path))
+            if original is None:
+                try:
+                    original, file_shas[path] = github_ops.get_file(conn.access_token, owner, repo, path, branch)
+                except github_ops.GitHubAPIError:
+                    skipped.append(f"{path} — not found")
+                    continue
+            updated, replaced = original, 0
+            for edit in edits[:200]:
+                find = edit.get('find') if isinstance(edit, dict) else None
+                replacement = edit.get('replace') if isinstance(edit, dict) else None
+                if not isinstance(find, str) or not find or not isinstance(replacement, str):
+                    continue
+                occurrences = updated.count(find)
+                if occurrences == 0:
+                    skipped.append(f"{path} — text to replace not found: {find[:40]!r}")
+                elif occurrences > 1 and not edit.get('all'):
+                    skipped.append(f"{path} — {find[:40]!r} appears {occurrences} times (not specific enough)")
+                else:
+                    updated = updated.replace(find, replacement)
+                    replaced += occurrences
+            if updated == original:
+                if not replaced:
+                    skipped.append(f"{path} — no matching text, left unchanged")
+                continue
+            edited[path] = updated
+            valid_ops = [v for v in valid_ops if v['path'] != path]
+            valid_ops.append({'action': 'update', 'path': path, 'content': updated})
+        elif action in ('update', 'create'):
             content = op.get('content')
             if not isinstance(content, str):
                 skipped.append(f"{path} — no content given")

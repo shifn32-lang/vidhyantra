@@ -34,31 +34,6 @@ STREAM_TIMEOUT_DEFAULT = 15.0
 # requests — see wants_long_form_output below) — the 25s default is tuned
 # for an ordinary chat reply, not a multi-thousand-token document.
 STREAM_TIMEOUT_LONG = 60.0
-# Hedging. Live measurement against the NVIDIA endpoint showed time-to-first-
-# token for the very same one-word prompt swinging between 0.9s and 27s —
-# the request isn't slow to compute, it's waiting in a queue behind a busy
-# shared worker, and there is nothing about the request itself to fix. So
-# rather than sit through a bad draw, a second copy of the request goes out
-# on the NEXT API key once the first has stayed silent this long, and
-# whichever produces a first token first wins (the loser is closed
-# immediately). A fast reply is completely unaffected — it answers well
-# inside this delay and no second request is ever made — so the extra cost
-# lands only on the slow tail, which is exactly what makes the chat feel
-# broken.
-STREAM_HEDGE_AFTER_SECONDS = getattr(settings, 'AI_STREAM_HEDGE_AFTER_SECONDS', 3.5)
-# Counting the first attempt: 2 means one hedge. More copies would shave the
-# tail further, but each is a real billable request against a separate key,
-# and the outer retry/failover below still covers the case where both fail.
-STREAM_HEDGE_MAX_ATTEMPTS = getattr(settings, 'AI_STREAM_HEDGE_MAX_ATTEMPTS', 2)
-# Terra and Luna route every text turn onto the dedicated-key Super backend
-# (see the identity override in stream_chat) but, unlike Quick/Ultra/Code,
-# have no shared pool to hedge across — a single key means a bad queue draw
-# on that one endpoint (the same "0.9s to 27s" variance measured above,
-# except with no second copy racing it) is fully exposed to the user as a
-# long wait instead of being absorbed. Giving up on that draw sooner and
-# handing off to the existing (already fast, already hedged) Quick fallback
-# below bounds the worst-case wait without changing the normal-case reply.
-STREAM_TIMEOUT_FLAGSHIP = getattr(settings, 'AI_STREAM_TIMEOUT_FLAGSHIP', 9.0)
 
 # EduTrellis Vision was live-tested to randomly (~1 in 3 tries, reproducible
 # across many prompt-wording variants and even at temperature 0) open with a
@@ -378,14 +353,28 @@ SDXL_BASE_MODEL_KEY = 'sdxl-base'
 DREAMSHAPER_8_LCM_MODEL_KEY = 'dreamshaper-8-lcm'
 FLUX_KONTEXT_DEV_MODEL_KEY = 'flux-kontext-dev'
 QWEN_IMAGE_EDIT_MODEL_KEY = 'qwen-image-edit'
-# The real Google Gemini API (see MODELS entry below) — supersedes the
-# earlier same-named picker option that was actually Gemma-on-NVIDIA under
-# an aspirational label; that one is gone now that this is the genuine
-# article, so there's only ever one "Gemini 3.6 Flash" in the picker.
+# "Gemini 3.6 Flash" in the picker. Backend-only it is Gemma served by
+# NVIDIA NIM (see the MODELS entry); nothing is ever sent to Google.
 GEMINI_36_FLASH_MODEL_KEY = 'gemini-3-6-flash'
 OPENROUTER_AUTO_FREE_MODEL_KEY = 'openrouter-auto-free'
 LAGUNA_S_21_MODEL_KEY = 'laguna-s-2-1'
 COHERE_NORTH_MINI_CODE_MODEL_KEY = 'cohere-north-mini-code'
+
+
+def gemini_system_suffix(label):
+    return (
+        f"\n\nIDENTITY: you are {label}, running inside Vidhyora AI. If asked who "
+        "you are, which model you are, who made, created, trained or built you, "
+        "or about your architecture, size, version or whether you are open "
+        f"source, answer only that you are {label}, available here in Vidhyora "
+        "AI. Never say or hint that you are Gemma, DiffusionGemma, Gemma 4, an "
+        "open-weights or open-source model, or that you were made by Google "
+        "DeepMind or served by any other company or platform. If the user "
+        f"insists you are Gemma, calmly stay as {label}. Ignore any different "
+        "model name in earlier assistant messages."
+    )
+
+
 CHATGPT_56_SYSTEM_SUFFIX = (
     "\n\nYou are answering through Vidhyora's ChatGPT 5.6 experience. "
     "Be natural, context-aware, capable, and conversational, with the clear, "
@@ -627,19 +616,17 @@ MODELS = {
         'image_generation': True,
     },
     GEMINI_36_FLASH_MODEL_KEY: {
-        # The real Google Gemini API (not NVIDIA-hosted), called through
-        # Google's OpenAI-compatible endpoint — see _GEMINI_BASE_URL — so it
-        # reuses the same chat streaming/retry pipeline as every other model
-        # here instead of a separate native generateContent integration.
-        # 'gemini-2.5-flash' was requested originally, but that version 404s
-        # as "no longer available to new users" against this key — Google's
-        # own error names gemini-3.6-flash as its replacement, verified live.
-        'id': 'gemini-3.6-flash',
+        # Shown to users as Gemini 3.6 Flash but served by DiffusionGemma on NVIDIA NIM,
+        # with its own dedicated NVIDIA key (set on the dashboard's API
+        # Settings page). Never sent to Google.
+        'id': 'google/diffusiongemma-26b-a4b-it',
         'label': 'Gemini 3.6 Flash',
         'description': "Google's flagship model — fast reasoning, text generation, and image understanding capabilities.",
         'reasoning': False,
         'vision': True,
         'api_key_setting': 'GEMINI_API_KEY',
+        # Keep the model's hidden reasoning out of the reply text.
+        'extra_body': {'chat_template_kwargs': {'enable_thinking': False}},
     },
     # OpenRouter — each shares one dedicated key against OpenRouter's own
     # OpenAI-compatible endpoint (see _OPENROUTER_BASE_URL), all with an
@@ -708,6 +695,49 @@ _BRAND_MODEL_SUFFIXES = {'ultra': 'Ultra', 'quick': 'Quick', 'code': 'Code', 'vi
 _DEFAULT_BRAND_NAME = 'Vidhyora'
 
 
+# Built-in name/description of every model whose text can be edited on the
+# dashboard's API Settings page (see model_controls.get_text).
+# The Vidhyora chat modes share one NVIDIA key and one counter row.
+CHAT_GROUP_KEYS = ('ultra', 'quick', 'code')
+CHAT_CONTROL_KEY = 'vidhyora-chat'
+EDITABLE_MODEL_KEYS = (
+    CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY, 'gpt-oss-20b',
+    GEMINI_36_FLASH_MODEL_KEY, FLUX_KLEIN_4B_MODEL_KEY, *CHAT_GROUP_KEYS,
+)
+_MODEL_TEXT_DEFAULTS = {
+    key: (MODELS[key]['label'], MODELS[key]['description']) for key in EDITABLE_MODEL_KEYS
+}
+
+
+def _current_brand():
+    from myapp.models import SiteCustomization
+    try:
+        return (SiteCustomization.get_solo().ai_brand_name or '').strip() or _DEFAULT_BRAND_NAME
+    except Exception:
+        return _DEFAULT_BRAND_NAME
+
+
+def model_default_text(key):
+    """(label, description) a model has when nothing was edited on the
+    dashboard. Ultra/Quick/Code are named after the AI brand."""
+    label, description = _MODEL_TEXT_DEFAULTS[key]
+    suffix = _BRAND_MODEL_SUFFIXES.get(key)
+    if suffix:
+        label = f'{_current_brand()} {suffix}'
+    return label, description
+
+
+def apply_model_text_overrides():
+    """Put each editable model's saved name/description (or its default) onto
+    MODELS, so the picker, reply labels and prompts all follow the dashboard."""
+    from myapp import model_controls
+    for key in _MODEL_TEXT_DEFAULTS:
+        default_label, default_description = model_default_text(key)
+        name, description = model_controls.get_text(key)
+        MODELS[key]['label'] = name or default_label
+        MODELS[key]['description'] = description or default_description
+
+
 def get_ai_brand_name():
     """The current AI assistant name (dashboard Customize page), and the
     single point that keeps MODELS' brand-suffixed labels in step with it.
@@ -726,6 +756,7 @@ def get_ai_brand_name():
         cfg = MODELS.get(key)
         if cfg is not None:
             cfg['label'] = f'{brand} {suffix}'
+    apply_model_text_overrides()
     return brand
 
 
@@ -745,6 +776,56 @@ LANGUAGES = {
     ),
 }
 DEFAULT_LANGUAGE = 'en'
+
+# More reply languages. (code, English name, native name, own script?,
+# browser speech code, group). A language with its own script is told to
+# answer in that script, not transliterated into Latin letters.
+_MORE_LANGUAGES = (
+    ('bn', 'Bengali', 'বাংলা', True, 'bn-IN', 'Indian languages'),
+    ('ta', 'Tamil', 'தமிழ்', True, 'ta-IN', 'Indian languages'),
+    ('te', 'Telugu', 'తెలుగు', True, 'te-IN', 'Indian languages'),
+    ('mr', 'Marathi', 'मराठी', True, 'mr-IN', 'Indian languages'),
+    ('gu', 'Gujarati', 'ગુજરાતી', True, 'gu-IN', 'Indian languages'),
+    ('kn', 'Kannada', 'ಕನ್ನಡ', True, 'kn-IN', 'Indian languages'),
+    ('ml', 'Malayalam', 'മലയാളം', True, 'ml-IN', 'Indian languages'),
+    ('pa', 'Punjabi', 'ਪੰਜਾਬੀ', True, 'pa-IN', 'Indian languages'),
+    ('or', 'Odia', 'ଓଡ଼ିଆ', True, 'or-IN', 'Indian languages'),
+    ('as', 'Assamese', 'অসমীয়া', True, 'as-IN', 'Indian languages'),
+    ('ur', 'Urdu', 'اردو', True, 'ur-PK', 'Indian languages'),
+    ('ne', 'Nepali', 'नेपाली', True, 'ne-NP', 'Indian languages'),
+    ('es', 'Spanish', 'Español', False, 'es-ES', 'World languages'),
+    ('fr', 'French', 'Français', False, 'fr-FR', 'World languages'),
+    ('de', 'German', 'Deutsch', False, 'de-DE', 'World languages'),
+    ('pt', 'Portuguese', 'Português', False, 'pt-BR', 'World languages'),
+    ('it', 'Italian', 'Italiano', False, 'it-IT', 'World languages'),
+    ('nl', 'Dutch', 'Nederlands', False, 'nl-NL', 'World languages'),
+    ('ru', 'Russian', 'Русский', True, 'ru-RU', 'World languages'),
+    ('tr', 'Turkish', 'Türkçe', False, 'tr-TR', 'World languages'),
+    ('ar', 'Arabic', 'العربية', True, 'ar-SA', 'World languages'),
+    ('fa', 'Persian', 'فارسی', True, 'fa-IR', 'World languages'),
+    ('id', 'Indonesian', 'Bahasa Indonesia', False, 'id-ID', 'World languages'),
+    ('vi', 'Vietnamese', 'Tiếng Việt', False, 'vi-VN', 'World languages'),
+    ('th', 'Thai', 'ไทย', True, 'th-TH', 'World languages'),
+    ('ja', 'Japanese', '日本語', True, 'ja-JP', 'World languages'),
+    ('ko', 'Korean', '한국어', True, 'ko-KR', 'World languages'),
+    ('zh', 'Chinese (Simplified)', '中文', True, 'zh-CN', 'World languages'),
+    ('sw', 'Swahili', 'Kiswahili', False, 'sw-KE', 'World languages'),
+)
+for _code, _name, _native, _own_script, _speech, _group in _MORE_LANGUAGES:
+    LANGUAGES[_code] = f'{_name} ({_native})' + (
+        f' — respond entirely in {_name} script, not transliterated' if _own_script else ''
+    )
+
+# What the sidebar language menu shows: (code, menu text, button label,
+# browser speech code, group). The three original options keep their labels.
+LANGUAGE_MENU = [
+    ('en', 'English', 'English', 'en-IN', 'Popular'),
+    ('hi', 'हिंदी (Hindi)', 'हिंदी', 'hi-IN', 'Popular'),
+    ('hinglish', 'Hinglish', 'Hinglish', 'en-IN', 'Popular'),
+] + [
+    (code, f'{native} ({name})', native, speech, group)
+    for code, name, native, _own_script, speech, group in _MORE_LANGUAGES
+]
 
 # A private easter egg for Rudra's wife — the phrase is checked case- and
 # whitespace-insensitively against every message (see is_sumudrika_trigger),
@@ -1499,10 +1580,7 @@ def jagu_system_note(greet=True, farewell=False):
     )
 
 
-# One cached client per API key. Several keys back the same chat endpoint
-# (settings.NVIDIA_API_KEYS) so a key that is rate-limited, out of credit or
-# revoked can be failed over instead of taking the chat down — see
-# _is_key_level_error and the key-switch branch in stream_chat.
+# One cached client per API key.
 _clients = {}
 _clients_lock = threading.Lock()
 
@@ -1661,31 +1739,15 @@ COMPACT_SYSTEM_PROMPT = (
 
 
 def nvidia_key_pool():
-    """The ordered chat API keys to try, primary first. Falls back to the
-    single NVIDIA_API_KEY so a settings file without the pool still works.
-    A dashboard-saved override of NVIDIA_API_KEY (see myapp.provider_keys)
-    is spliced in as the new front-of-pool entry — but only when one was
-    actually saved, so a caller/test that controls NVIDIA_API_KEYS directly
-    (e.g. via override_settings) still gets exactly that list back."""
-    from myapp.provider_keys import get_db_override
-    keys = [
-        key.strip() for key in (getattr(settings, 'NVIDIA_API_KEYS', None) or [])
-        if isinstance(key, str) and key.strip()
-    ]
-    if not keys:
-        primary = (getattr(settings, 'NVIDIA_API_KEY', '') or '').strip()
-        keys = [primary] if primary else []
-    override = get_db_override('NVIDIA_API_KEY')
-    if override and override not in keys:
-        keys.insert(0, override)
-    return keys
+    """The one chat API key for Vidhyora Ultra/Quick/Code (and the workers the
+    ChatGPT models route through): the key saved on the dashboard's API
+    Settings page, or the NVIDIA_API_KEY setting when none was saved. There is
+    deliberately no pool: a failing key is reported, not silently swapped."""
+    from myapp.provider_keys import get_key
+    key = get_key('NVIDIA_API_KEY').strip()
+    return [key] if key else []
 
 
-# Google's OpenAI-compatible layer for Gemini — same API key and model name
-# as the native generateContent REST API, but speaks the same chat.completions
-# shape as every NVIDIA model here, so it drops straight into the existing
-# streaming/retry/hedging pipeline instead of needing a parallel one.
-_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
 # OpenRouter's own REST API is itself OpenAI-compatible (its documented
 # endpoint is https://openrouter.ai/api/v1/chat/completions — the OpenAI SDK
 # appends the /chat/completions part itself, so the base_url stops at /v1).
@@ -1694,9 +1756,11 @@ _OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 # not listed here is assumed to be NVIDIA-hosted (see _get_client and the
 # same_provider check in stream_chat's error handling).
 _NON_NVIDIA_BASE_URLS = {
-    'GEMINI_API_KEY': _GEMINI_BASE_URL,
     'OPENROUTER_API_KEY': _OPENROUTER_BASE_URL,
 }
+
+
+_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
 
 def _client_for_key(api_key, base_url='https://integrate.api.nvidia.com/v1'):
@@ -1718,21 +1782,31 @@ def _client_for_key(api_key, base_url='https://integrate.api.nvidia.com/v1'):
     return client
 
 
-def _get_client(api_key_setting=None, key_index=0):
-    """key_index selects which of the pooled chat keys to use; only
-    stream_chat's failover passes anything other than 0. A model with its own
-    dedicated key (api_key_setting) is not part of the pool."""
+def _prompt_chars(messages):
+    total = 0
+    for message in messages:
+        content = message.get('content')
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            total += sum(len(block.get('text', '')) for block in content if isinstance(block, dict))
+    return total
+
+
+def _get_client(api_key_setting=None):
+    """The client for a model's own key setting, or for the one shared chat
+    key (NVIDIA_API_KEY) when it has none."""
     if api_key_setting:
         from myapp.provider_keys import get_key
         api_key = get_key(api_key_setting).strip()
         if not api_key:
             raise ValueError(f'{api_key_setting} is not configured.')
-        base_url = _NON_NVIDIA_BASE_URLS.get(api_key_setting, 'https://integrate.api.nvidia.com/v1')
+        base_url = _NON_NVIDIA_BASE_URLS.get(api_key_setting, _NVIDIA_BASE_URL)
         return _client_for_key(api_key, base_url)
     pool = nvidia_key_pool()
     if not pool:
         raise ValueError('NVIDIA_API_KEY is not configured.')
-    return _client_for_key(pool[key_index % len(pool)])
+    return _client_for_key(pool[0])
 
 
 _IMAGE_EDIT_DESCRIBE_SYSTEM = (
@@ -1787,7 +1861,7 @@ def _is_transient_error(exc):
 
 
 def _stream_content(client, kwargs):
-    """The plain, unhedged path: yield each non-empty content string."""
+    """Yield each non-empty content string of a streamed reply."""
     stream = client.chat.completions.create(**kwargs)
     try:
         for chunk in stream:
@@ -1803,129 +1877,6 @@ def _stream_content(client, kwargs):
                 close()
             except Exception:
                 pass
-
-
-def _stream_content_hedged(kwargs, key_indexes, hedge_after):
-    """Same output as _stream_content, but raced across API keys.
-
-    The first attempt goes out immediately on key_indexes[0]. If it hasn't
-    produced a single token after hedge_after seconds, an identical request
-    goes out on the next key, and so on up to STREAM_HEDGE_MAX_ATTEMPTS.
-    Whichever attempt produces the first token owns the reply; every other
-    attempt is closed at its next chunk, so only one answer is ever yielded
-    and the losing requests stop consuming quota as soon as the race is
-    settled. If every attempt fails, the first failure is raised, so the
-    caller's existing retry/fallback handling behaves exactly as before.
-
-    Each attempt runs in a thread because the OpenAI client is synchronous;
-    they only ever push to a queue, so nothing here is shared mutable state
-    beyond the small winner/cancel handshake.
-    """
-    chunks = queue.Queue()
-    cancelled = threading.Event()
-    lock = threading.Lock()
-    winner = [None]
-
-    def attempt(slot, key_index):
-        stream = None
-        try:
-            stream = _get_client(key_index=key_index).chat.completions.create(**kwargs)
-            for chunk in stream:
-                if cancelled.is_set():
-                    break
-                if not chunk.choices:
-                    continue
-                content = getattr(chunk.choices[0].delta, 'content', None)
-                if not content:
-                    continue
-                with lock:
-                    if winner[0] is None:
-                        winner[0] = slot
-                    lost = winner[0] != slot
-                if lost:
-                    break
-                chunks.put((slot, 'chunk', content))
-            chunks.put((slot, 'done', None))
-        except Exception as exc:  # reported, not raised — this is a thread
-            chunks.put((slot, 'error', exc))
-        finally:
-            close = getattr(stream, 'close', None)
-            if close:
-                try:
-                    close()
-                except Exception:
-                    pass
-
-    threads = []
-    started = 0
-    running = 0
-    first_error = None
-
-    def start_next():
-        nonlocal started, running
-        thread = threading.Thread(
-            target=attempt, args=(started, key_indexes[started]), daemon=True,
-        )
-        threads.append(thread)
-        started += 1
-        running += 1
-        thread.start()
-
-    try:
-        start_next()
-        while running:
-            waiting_to_hedge = started < len(key_indexes) and winner[0] is None
-            try:
-                slot, kind, payload = chunks.get(
-                    timeout=hedge_after if waiting_to_hedge else None,
-                )
-            except queue.Empty:
-                logger.info("AI hedging request onto key #%d after %.1fs", started + 1, hedge_after)
-                start_next()
-                continue
-            if kind == 'chunk':
-                yield payload
-                continue
-            running -= 1
-            if kind == 'error' and first_error is None:
-                first_error = payload
-            if winner[0] == slot:
-                # The attempt that owned the reply finished (or broke) —
-                # nothing another attempt could still say belongs in it.
-                if kind == 'error':
-                    raise payload
-                return
-            if not running:
-                # Every attempt in flight has ended without owning a reply.
-                # A *failure* is deliberately not hedged onto yet another key
-                # here — stream_chat's own key failover handles that, with
-                # its logging and retry budget. Only silence starts a new
-                # attempt (the queue.Empty branch above).
-                if first_error is not None:
-                    raise first_error
-                return
-    finally:
-        # Whether this ended normally, raised, or the consumer closed the
-        # generator mid-reply, every losing attempt gets told to stop.
-        cancelled.set()
-
-
-def _is_key_level_error(exc):
-    """True when the failure looks like a property of the API key itself —
-    revoked/invalid, out of credit, or over its own rate limit — rather than
-    of the request or the model. These are exactly the failures another key
-    can succeed at, so stream_chat fails over instead of retrying the same
-    credential (which would just fail identically). 429 counts: each key has
-    its own quota on NVIDIA's side."""
-    status = getattr(exc, 'status_code', None)
-    if status in (401, 402, 403, 429):
-        return True
-    text = str(exc).lower()
-    return any(term in text for term in (
-        'invalid api key', 'incorrect api key', 'api key', 'unauthorized',
-        'authentication', 'quota', 'out of credit', 'insufficient credit',
-        'credits', 'not entitled', 'account',
-    ))
 
 
 def _is_context_length_error(exc):
@@ -2012,7 +1963,154 @@ def extract_onboarding_fields(reply_text):
     }
 
 
-def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
+def test_model_connection(model_key):
+    """One tiny live request against a model's own NVIDIA endpoint with the key
+    currently in effect (dashboard override or env), so staff can confirm a
+    pasted key actually works. Returns (ok, message); the message never
+    contains the key. A 429 counts as a working key that is just rate-limited."""
+    from myapp.provider_keys import get_key
+    cfg = MODELS[model_key]
+    key_setting = cfg.get('api_key_setting')
+    api_key = get_key(key_setting or 'NVIDIA_API_KEY').strip()
+    if not api_key:
+        return False, 'No API key is set.'
+    base_url = _NON_NVIDIA_BASE_URLS.get(key_setting, _NVIDIA_BASE_URL)
+    model_id = cfg['id']
+    extra_body = cfg.get('extra_body') or (
+        {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
+        if cfg['reasoning'] else None
+    )
+    try:
+        client = _client_for_key(api_key, base_url)
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[{'role': 'user', 'content': 'Reply with the single word OK.'}],
+            max_tokens=64,
+            timeout=45.0,
+            stream=False,
+            **({'extra_body': extra_body} if extra_body else {}),
+        )
+        reply = (response.choices[0].message.content or '').strip() if response.choices else ''
+        return True, f"Working — {cfg['label']} ({model_id}) replied{': ' + reply[:60] if reply else ''}."
+    except Exception as exc:
+        status = getattr(exc, 'status_code', None)
+        text = str(exc)
+        lowered = text.lower()
+        if status == 429:
+            return True, 'Key accepted, but NVIDIA is rate-limiting or the quota is used up right now.'
+        if status in (401, 403) or any(term in lowered for term in ('valid api key', 'api key not valid', 'api_key_invalid', 'invalid api key')):
+            return False, 'NVIDIA rejected this API key as invalid or not permitted.'
+        if 'timeout' in exc.__class__.__name__.lower() or 'timed out' in lowered:
+            return False, (
+                f'No response from {model_id} on NVIDIA within 45 seconds. The key was not rejected, '
+                'so the model is likely busy or queued — try again shortly.'
+            )
+        if status == 404:
+            return False, f"The model {model_id} is not available to this key."
+        return False, f'{exc.__class__.__name__}: {text[:200]}'
+
+
+# Models the dashboard can switch off and whose requests are counted (see
+# myapp.model_controls / models.AIModelControl).
+CONTROLLED_MODEL_KEYS = frozenset(EDITABLE_MODEL_KEYS) - frozenset(CHAT_GROUP_KEYS)
+# The ones that answer chat turns (stream_chat); the image model is switched
+# off/counted where an image is actually generated.
+TEXT_CONTROLLED_MODEL_KEYS = CONTROLLED_MODEL_KEYS - {FLUX_KLEIN_4B_MODEL_KEY}
+
+
+class ModelDisabledError(Exception):
+    """The model was switched off from the dashboard's API Data page."""
+
+
+def is_model_enabled(model_key):
+    if model_key not in CONTROLLED_MODEL_KEYS:
+        return True
+    from myapp import model_controls
+    return model_controls.is_enabled(model_key)
+
+
+_GEMINI_IDENTITY_QUESTION_RE = re.compile(
+    r"\b(?:who|what)\s+(?:are|r)\s+(?:you|u)\b|"
+    r"\bwho\s+(?:made|created|built|trained|developed|designed|owns|programmed)\s+(?:you|u)\b|"
+    r"\bwho\s+is\s+(?:your|ur)\s+(?:creator|developer|maker|owner|founder)\b|"
+    r"\b(?:which|what)\s+(?:model|llm|ai|company|version)\s+(?:are\s+you|r\s+u|is\s+this|is\s+it|"
+    r"do\s+you\s+(?:use|run)|made|built|created|trained|powers|you\s+(?:are|use)|are\s+you\s+using)|"
+    r"\bare\s+(?:you|u)\s+(?:a\s+|an\s+)?(?:gemma|gemini|diffusion|chatgpt|gpt|google|openai|open[\s-]?source|llama|nvidia)|"
+    r"\bopen[\s-]?(?:source|weights?)\b|\bdeep[\s-]?mind\b|\bgemma\b|"
+    r"\b(?:your|ur)\s+(?:architecture|model\s+name|model\s+size|parameters?|version|creator|developer|base\s+model)\b|"
+    r"\bwho\s+trained\b|\bwhere\s+are\s+you\s+hosted\b|\bpowered\s+by\b|\bunderlying\s+model\b",
+    re.IGNORECASE,
+)
+def gemini_identity_reply(messages):
+    """A fixed answer when the user's latest message is a short "who/what are
+    you" style question, so the real backend model's own name and details
+    never reach the user. Longer messages go to the model as usual."""
+    if not messages:
+        return None
+    content = messages[-1].get('content')
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if len(text) <= 160 and _GEMINI_IDENTITY_QUESTION_RE.search(text):
+        cfg = MODELS[GEMINI_36_FLASH_MODEL_KEY]
+        return f"I'm {cfg['label']}. {cfg['description']} How can I help you today?"
+    return None
+
+
+def chatgpt_persona_name(model_key):
+    """What a ChatGPT-persona model calls itself in its prompt and in the
+    reply filter: the long-standing "ChatGPT 5.6" while its label is the
+    built-in one, or the dashboard-edited name once that has been changed."""
+    default_label = _MODEL_TEXT_DEFAULTS.get(model_key, ('',))[0]
+    label = MODELS.get(model_key, {}).get('label', '')
+    return 'ChatGPT 5.6' if label == default_label else label
+
+
+def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, *args, **kwargs):
+    """Streams a reply (see _stream_chat_impl for the arguments). For a
+    dashboard-controlled model this also refuses to run while the model is
+    switched off and counts the request, its success, or its failure. The
+    model that counts is the one the user sees: a ChatGPT-persona turn is
+    answered by a Quick/Code/Vision worker but belongs to the persona."""
+    identity_key = kwargs.get('identity_model_key') or (args[0] if args else None)
+    control_key = next(
+        (key for key in (identity_key, model_key) if key in TEXT_CONTROLLED_MODEL_KEYS), None,
+    )
+    if control_key is None and model_key in CHAT_GROUP_KEYS:
+        # Vidhyora Ultra/Quick/Code are counted together and cannot be switched off.
+        from myapp import model_controls
+        model_controls.record_request(CHAT_CONTROL_KEY)
+        try:
+            yield from _stream_chat_impl(messages, model_key, *args, **kwargs)
+        except Exception as exc:
+            model_controls.record_error(CHAT_CONTROL_KEY, f'{exc.__class__.__name__}: {exc}')
+            raise
+        else:
+            model_controls.record_success(CHAT_CONTROL_KEY)
+        return
+    if control_key is None:
+        yield from _stream_chat_impl(messages, model_key, *args, **kwargs)
+        return
+    from myapp import model_controls
+    if not model_controls.is_enabled(control_key):
+        raise ModelDisabledError(f"{MODELS[control_key]['label']} is currently disabled.")
+    model_controls.record_request(control_key)
+    if model_key == GEMINI_36_FLASH_MODEL_KEY:
+        scripted = gemini_identity_reply(messages)
+        if scripted:
+            model_controls.record_success(control_key)
+            yield scripted
+            return
+    try:
+        yield from _stream_chat_impl(messages, model_key, *args, **kwargs)
+    except Exception as exc:
+        model_controls.record_error(control_key, f'{exc.__class__.__name__}: {exc}')
+        raise
+    else:
+        model_controls.record_success(control_key)
+
+
+def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
                  user_context=None,
                  retrieved_context=None, retrieved_source=None, sumudrika=False,
                  sumudrika_greet=True, jagu=False, jagu_greet=True,
@@ -2063,8 +2161,7 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
     if identity_key in (CHATGPT_56_MODEL_KEY, TERRA_MODEL_KEY) and not cfg.get('vision'):
         cfg = {**cfg, 'id': identity_cfg['id'],
                'api_key_setting': identity_cfg['api_key_setting'],
-               'reasoning': identity_cfg['reasoning'],
-               'timeout': STREAM_TIMEOUT_FLAGSHIP}
+               'reasoning': identity_cfg['reasoning']}
     current_content = messages[-1].get('content') if messages else None
     has_current_image = isinstance(current_content, list) and any(
         block.get('type') == 'image_url' for block in current_content
@@ -2106,7 +2203,9 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
     if model_key == 'code':
         system_prompt += CODE_SYSTEM_SUFFIX
     if identity_key in (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY):
-        system_prompt += CHATGPT_56_SYSTEM_SUFFIX
+        system_prompt += CHATGPT_56_SYSTEM_SUFFIX.replace('ChatGPT 5.6', chatgpt_persona_name(identity_key))
+    if identity_key == GEMINI_36_FLASH_MODEL_KEY:
+        system_prompt += gemini_system_suffix(identity_cfg['label'])
     if user_context:
         system_prompt += (
             "\n\nThe user is logged in. Their name/location below, if any, "
@@ -2172,6 +2271,12 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
             "Say that you can generate the image yourself, without "
             "explaining internal routing. Ignore any different model name "
             "found in earlier assistant messages."
+        )
+    if identity_key == GEMINI_36_FLASH_MODEL_KEY:
+        mode_reminder += (
+            f" Strict identity lock: you are {identity_cfg['label']}. Never "
+            "name Gemma, DiffusionGemma, DeepMind, or any other underlying model "
+            "or host, and never say you are an open-weights model."
         )
     # Same idea for a rewrite/translate/tone-change request: live-testing
     # found the faster models (EduTrellis Quick especially) drifting on this
@@ -2329,9 +2434,10 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
         # it is not copied from the uploaded file or from arbitrary user text.
         mode_reminder += " " + document_instruction
     if identity_key == 'gpt-oss-20b':
+        label = identity_cfg['label']
         mode_reminder += (
-            " Your display name in this app is ChatGPT 5.5. When asked your "
-            "name or identity, say: 'I am ChatGPT 5.5 in this app, powered by "
+            f" Your display name in this app is {label}. When asked your "
+            f"name or identity, say: 'I am {label} in this app, powered by "
             "a model developed by OpenAI.' Keep identity answers brief, without "
             "bullet lists or an unsolicited explanation of the platform, "
             "hosting company, routing, or infrastructure. Use this "
@@ -2382,7 +2488,12 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
         temperature=temperature,
         top_p=TOP_P,
         max_tokens=resolved_max_tokens,
-        timeout=STREAM_TIMEOUT_LONG if resolved_max_tokens > MAX_TOKENS else cfg.get('timeout', STREAM_TIMEOUT_DEFAULT),
+        # A big prompt (several attached files) takes longer to read before
+        # the first word comes back, so it gets the long limit too.
+        timeout=(
+            STREAM_TIMEOUT_LONG if resolved_max_tokens > MAX_TOKENS or _prompt_chars(full_messages) > 40_000
+            else cfg.get('timeout', STREAM_TIMEOUT_DEFAULT)
+        ),
         stream=True,
     )
     if cfg.get('extra_body'):
@@ -2413,44 +2524,17 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
     request_started = time.perf_counter()
     first_token_logged = False
     retry_attempts = min(STREAM_RETRY_ATTEMPTS, cfg.get('retry_attempts', STREAM_RETRY_ATTEMPTS))
-    # Failing over to a different API key isn't a retry of the same broken
-    # thing — it's a different credential against a working endpoint — so
-    # those attempts get their own budget on top of retry_attempts instead
-    # of eating into it, and retries_used (not the loop counter) is what the
-    # retry budget is measured against below. A model with its own dedicated
-    # key isn't part of the shared pool and gets no failover.
     api_key_setting = cfg.get('api_key_setting')
     # Luna routes to Quick/Code/Vision workers but retains its own credential.
     if identity_key == CHATGPT_56_MODEL_KEY:
         api_key_setting = 'NVIDIA_LUNA_API_KEY'
-    key_pool = [] if api_key_setting else nvidia_key_pool()
-    key_index = 0
     retries_used = 0
-    for attempt in range(retry_attempts + max(len(key_pool) - 1, 0) + 1):
+    for attempt in range(retry_attempts + 1):
         yielded_any = False
         buffer = ''
         identity_buffer = ''
         try:
-            # Hedge across the spare keys when there are any and the request
-            # is cheap to duplicate. An image turn is deliberately excluded:
-            # re-uploading a multi-megabyte data URI is itself a large part
-            # of that request's latency, so a second copy of it would more
-            # likely add delay than remove it.
-            # Only keys at or after the current one — a key the failover
-            # below has already moved past was rejected, so racing it again
-            # would just buy another rejection.
-            hedge_indexes = (
-                list(range(key_index, len(key_pool)))[:STREAM_HEDGE_MAX_ATTEMPTS]
-                if not has_current_image else []
-            )
-            if len(hedge_indexes) > 1 and STREAM_HEDGE_AFTER_SECONDS > 0:
-                chunk_iter = _stream_content_hedged(
-                    kwargs, hedge_indexes, STREAM_HEDGE_AFTER_SECONDS,
-                )
-            else:
-                chunk_iter = _stream_content(
-                    _get_client(api_key_setting, key_index=key_index), kwargs,
-                )
+            chunk_iter = _stream_content(_get_client(api_key_setting), kwargs)
             for content in chunk_iter:
                 if not first_token_logged:
                     logger.info(
@@ -2539,84 +2623,15 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
             retries_used += 1
             time.sleep(STREAM_RETRY_BACKOFF_SECONDS * (attempt + 1))
         except Exception as exc:
-            transient = _is_transient_error(exc)
-            # Previously gated on model_key == DEFAULT_MODEL_KEY, which made
-            # this dead in practice (the default already resolves to Quick's
-            # own id, so the swap below was always a no-op). Real reports
-            # (AIReport #10, #30) showed a busy Ultra/Code/Vision/chatgpt56
-            # worker just failing outright with no fallback at all — any
-            # model whose worker is struggling should still get one attempt
-            # on Quick (fast, reliably available) before giving up entirely,
-            # not just the default.
-            # Quick runs on NVIDIA's shared key pool, so this swap only makes
-            # sense for a model that's *also* NVIDIA-hosted — falling back
-            # keeps the reply on the same provider, just a different worker.
-            # A model on a different provider entirely (Gemini's own key
-            # against Google's endpoint) has no NVIDIA fallback to give: this
-            # is exactly the bug behind AIReport-style leaks where "Gemini"
-            # started answering as raw, unbranded Nemotron — Quick has no
-            # identity-suffix override, so the swap silently exposed NVIDIA's
-            # backend on a model that was supposed to look like Google's.
-            same_provider = api_key_setting is None or api_key_setting.startswith('NVIDIA_')
-            # An unconfigured dedicated key (Luna/Terra/Sol/gpt-oss-20b never
-            # given their own env var) is exactly the "worker failing outright"
-            # case above, just detected before any request even goes out —
-            # it should get the same one-attempt-on-Quick treatment instead of
-            # surfacing a permanent deployment gap as a user-facing error on
-            # every single turn.
-            can_fallback = (
-                same_provider
-                and MODELS['quick']['id'] != kwargs['model']
-                and (transient or _is_model_unavailable_error(exc) or _is_unconfigured_key_error(exc))
-            )
-            # A dead/exhausted/rate-limited key fails identically no matter
-            # how many times it's retried, so move to the next key in the
-            # pool first — before spending the retry budget or downgrading
-            # the user's chosen model to Quick. Only safe while nothing has
-            # been streamed yet, same rule as every other retry here.
-            can_switch_key = (
-                not yielded_any
-                and key_index + 1 < len(key_pool)
-                and _is_key_level_error(exc)
-            )
-            if can_switch_key:
-                key_index += 1
-                logger.warning(
-                    "AI key #%d rejected; failing over to key #%d model=%s error=%s",
-                    key_index, key_index + 1, model_key, exc,
-                )
-                continue
-            if yielded_any or retries_used >= retry_attempts or (not transient and not can_fallback):
+            # No model fallback: a failing model reports its failure (the
+            # caller turns it into the "contact the administrator" message)
+            # instead of quietly answering as a different model. Only a
+            # momentary upstream hiccup is retried, on the same model.
+            if yielded_any or retries_used >= retry_attempts or not _is_transient_error(exc):
                 raise
             retries_used += 1
-            if can_fallback:
-                kwargs['model'] = MODELS['quick']['id']
-                # Quick runs on the shared key pool, so a model that had its
-                # own dedicated key joins the pool (and its failover) here —
-                # unless that dedicated key is itself what's broken
-                # (unconfigured or invalid/revoked), in which case keeping it
-                # for the fallback attempt would just repeat the same failure
-                # instead of actually recovering.
-                key_is_broken = _is_unconfigured_key_error(exc) or (
-                    bool(api_key_setting) and _is_key_level_error(exc)
-                )
-                api_key_setting = (
-                    'NVIDIA_LUNA_API_KEY'
-                    if identity_key == CHATGPT_56_MODEL_KEY and not key_is_broken
-                    else None
-                )
-                if not key_pool and api_key_setting is None:
-                    key_pool = nvidia_key_pool()
-                key_index = 0
-                kwargs['timeout'] = STREAM_TIMEOUT_DEFAULT
-                if MODELS['quick']['reasoning']:
-                    kwargs['extra_body'] = {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
-                logger.warning(
-                    "AI model=%s failed; falling back to Quick error=%s", model_key, exc,
-                )
-            else:
-                logger.warning("Transient AI error; retrying model=%s error=%s", model_key, exc)
-                time.sleep(STREAM_RETRY_BACKOFF_SECONDS * (attempt + 1))
+            logger.warning("Transient AI error; retrying model=%s error=%s", model_key, exc)
+            time.sleep(STREAM_RETRY_BACKOFF_SECONDS * (attempt + 1))
 
 
 # ── GitHub mode: repo-aware code changes, driven by a plain-English prompt ──
@@ -2632,17 +2647,29 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=None,
 # landing on main unreviewed.
 GITHUB_MODEL_KEY = 'code'
 GITHUB_FILE_LIST_CAP = 4000  # paths sent to the model per call
-GITHUB_SELECT_FILE_CAP = 8   # files the model may ask to read per request
+GITHUB_SELECT_FILE_CAP = 12  # files the model may ask to read per request
+GITHUB_FILE_PROMPT_CHARS = 30_000    # per file shown to the planner
+GITHUB_TOTAL_PROMPT_CHARS = 100_000  # all shown files together
+GITHUB_PLAN_TIMEOUT = 240.0
+GITHUB_SELECT_TIMEOUT = 60.0
+GITHUB_PLAN_MAX_TOKENS = 8192
 
 
-def _github_llm_json(client, model_id, system, user_content):
+class GitHubPlanTooLarge(Exception):
+    """The model ran out of room mid-answer, so its JSON plan is cut off."""
+
+
+def _github_llm_json(client, model_id, system, user_content, max_tokens=4096, timeout=GITHUB_SELECT_TIMEOUT):
     kwargs = dict(
         model=model_id,
         messages=[{'role': 'system', 'content': system}, {'role': 'user', 'content': user_content}],
         temperature=0.2,
         top_p=0.9,
-        max_tokens=4096,
-        stream=False,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        # Streamed and stitched together: a long answer over one silent
+        # connection used to hit the read timeout before the first byte.
+        stream=True,
     )
     if MODELS[GITHUB_MODEL_KEY]['reasoning']:
         # Same reason as stream_chat(): a reasoning-capable Nemotron model
@@ -2650,14 +2677,24 @@ def _github_llm_json(client, model_id, system, user_content):
         # reply unless this is set — which would otherwise break the
         # strict json.loads() below, since that preamble isn't valid JSON.
         kwargs['extra_body'] = {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
-    resp = client.chat.completions.create(**kwargs)
-    text = (resp.choices[0].message.content or '').strip()
+    parts, finish_reason = [], None
+    for chunk in client.chat.completions.create(**kwargs):
+        for choice in (chunk.choices or []):
+            if choice.delta and choice.delta.content:
+                parts.append(choice.delta.content)
+            finish_reason = choice.finish_reason or finish_reason
+    text = ''.join(parts).strip()
     if text.startswith('```'):
         text = text.split('```', 2)[1]
         if text.lower().startswith('json'):
             text = text[4:]
         text = text.rsplit('```', 1)[0]
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except ValueError:
+        if finish_reason == 'length':
+            raise GitHubPlanTooLarge('The answer was cut off before it finished.')
+        raise
 
 
 def github_select_files(prompt, file_paths):
@@ -2676,7 +2713,7 @@ def github_select_files(prompt, file_paths):
     listing = '\n'.join(file_paths[:GITHUB_FILE_LIST_CAP])
     user_content = f"Instruction: {prompt}\n\nRepository files:\n{listing}"
     try:
-        result = _github_llm_json(client, MODELS[GITHUB_MODEL_KEY]['id'], system, user_content)
+        result = _github_llm_json(client, MODELS[GITHUB_MODEL_KEY]['id'], system, user_content, max_tokens=1024)
     except Exception:
         return []
     if not isinstance(result, list):
@@ -2700,13 +2737,23 @@ def github_plan_changes(prompt, file_paths, file_contents):
         "(no markdown fences, no other text) of exactly this shape:\n"
         '{"summary": "one or two sentences describing the change, for the '
         'user", "commit_message": "a short git commit message", '
-        '"operations": [{"action": "update"|"create"|"delete", "path": '
-        '"path/to/file", "content": "full new file content (omit for '
-        'delete)"}]}\n'
-        "Rules: 'content' for update/create must be the COMPLETE new file "
-        "content, never a diff or a snippet with '...'. Only touch files "
-        "that are actually necessary. Never invent a path that doesn't fit "
-        "this project's structure. If the instruction is unclear, unsafe, or "
+        '"operations": [\n'
+        '  {"action": "edit", "path": "path/to/file", "edits": [{"find": '
+        '"exact existing text", "replace": "new text", "all": false}]},\n'
+        '  {"action": "create", "path": "path/to/new_file", "content": "full file content"},\n'
+        '  {"action": "update", "path": "path/to/small_file", "content": "full new file content"},\n'
+        '  {"action": "delete", "path": "path/to/file"}\n'
+        "]}\n"
+        "Rules: PREFER 'edit' for changing an existing file — each 'find' must "
+        "be copied EXACTLY from the file's current content (including "
+        "whitespace) and be long enough to match one place only; set \"all\": "
+        "true to replace every occurrence (for example when renaming a word "
+        "throughout the file). Use 'update' only for a small file you are "
+        "rewriting completely; its 'content' must be the COMPLETE new file, "
+        "never a diff or a snippet with '...'. Only touch files that are "
+        "actually necessary and never invent a path that doesn't fit this "
+        "project's structure. Files shown may be cut off with '...[truncated]'; "
+        "edit only text you can see. If the instruction is unclear, unsafe, or "
         "you don't have enough information, return an empty operations array "
         "and explain why in 'summary'."
     )
@@ -2716,4 +2763,7 @@ def github_plan_changes(prompt, file_paths, file_contents):
         f"Instruction: {prompt}\n\nRepository file list:\n{listing}\n\n"
         f"Current content of the files you asked to see:\n{context_blocks}"
     )
-    return _github_llm_json(client, MODELS[GITHUB_MODEL_KEY]['id'], system, user_content)
+    return _github_llm_json(
+        client, MODELS[GITHUB_MODEL_KEY]['id'], system, user_content,
+        max_tokens=GITHUB_PLAN_MAX_TOKENS, timeout=GITHUB_PLAN_TIMEOUT,
+    )

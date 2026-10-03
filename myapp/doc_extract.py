@@ -7,14 +7,22 @@ import csv
 import io
 import os
 import re
+import time
+import zipfile
 from html.parser import HTMLParser
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 
-MAX_CHARS = 15_000     # extracted text is capped before it ever reaches the model
-MAX_PDF_PAGES = 50
+MAX_CHARS = 30_000         # extracted text per file is capped before it ever reaches the model
+MAX_CODING_CHARS = 15_000  # "Start coding" must return the whole file, so it takes a smaller one
+TOTAL_MAX_CHARS = 90_000   # all files of one message together (the page splits this fairly)
+MAX_PDF_PAGES = 300
 MAX_CSV_ROWS = 500
+CSV_SUMMARY_ROWS = 100_000          # rows pandas summarises; the rest are only counted
+MAX_HTML_BYTES = 1_500_000          # parsing a 50MB HTML page would stall the worker
+MAX_UNPACKED_BYTES = 800_000_000    # a .docx/.xlsx/.pptx is a zip; refuse zip bombs
+TIME_BUDGET_SECONDS = 20.0          # per file, so a huge one returns what it has instead of timing out
 
 
 class _PlainTextHTMLParser(HTMLParser):
@@ -71,6 +79,30 @@ class ExtractError(Exception):
     """Raised for any extraction failure with a message safe to show the user."""
 
 
+def _clip(text, limit=MAX_CHARS):
+    """Fit text into ``limit`` characters keeping its start and its end — for
+    logs, exports and long reports the ending matters as much as the opening."""
+    if len(text) <= limit:
+        return text
+    marker_room = 80
+    head = int((limit - marker_room) * 0.7)
+    tail = limit - marker_room - head
+    omitted = len(text) - head - tail
+    return f"{text[:head]}\n\n[... {omitted:,} characters omitted from the middle ...]\n\n{text[-tail:]}"
+
+
+def _check_unpacked_size(file_bytes):
+    """Office files are zip archives: reject ones that are damaged or that
+    would unpack to an absurd size (a zip bomb) before anything opens them."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+            unpacked = sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile:
+        raise ExtractError('That file looks damaged or is not a valid Office document.')
+    if unpacked > MAX_UNPACKED_BYTES:
+        raise ExtractError('That file is unsafe to open — it expands to an enormous size.')
+
+
 def extract_pdf(file_bytes):
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
@@ -85,13 +117,23 @@ def extract_pdf(file_bytes):
         if reader.is_encrypted:
             raise ExtractError('That PDF is password-protected — remove the password and try again.')
 
-    pages = []
+    pages, collected = [], 0
+    deadline = time.monotonic() + TIME_BUDGET_SECONDS
+    total_pages = len(reader.pages)
+    read_pages = 0
     for page in reader.pages[:MAX_PDF_PAGES]:
+        if collected > MAX_CHARS * 1.5 or time.monotonic() > deadline:
+            break  # already have more than the model will see, or out of time
+        read_pages += 1
         try:
-            pages.append(page.extract_text() or '')
+            page_text = page.extract_text() or ''
         except Exception:
             continue
+        pages.append(page_text)
+        collected += len(page_text)
     text = '\n\n'.join(p for p in pages if p.strip())
+    if text.strip() and read_pages < total_pages:
+        text += f"\n\n[... {total_pages - read_pages} more pages not read ...]"
     if not text.strip():
         # Render scanned pages and run the same local OCR used for images.
         try:
@@ -115,6 +157,7 @@ def extract_pdf(file_bytes):
 
 
 def extract_docx(file_bytes):
+    _check_unpacked_size(file_bytes)
     try:
         doc = DocxDocument(io.BytesIO(file_bytes))
     except Exception as e:
@@ -131,22 +174,33 @@ def extract_docx(file_bytes):
 
 
 def extract_csv(file_bytes):
+    # Streamed row by row: a 50MB CSV held as a list of lists would take
+    # gigabytes. Only the first rows are kept; the rest are counted.
+    lines, total, timed_out = [], 0, False
     try:
-        text_data = file_bytes.decode('utf-8-sig', errors='replace')
-        rows = list(csv.reader(io.StringIO(text_data)))
+        stream = io.TextIOWrapper(io.BytesIO(file_bytes), encoding='utf-8-sig', errors='replace', newline='')
+        deadline = time.monotonic() + TIME_BUDGET_SECONDS
+        for row in csv.reader(stream):
+            total += 1
+            if total <= MAX_CSV_ROWS:
+                lines.append(', '.join(cell.strip() for cell in row))
+            elif total % 20_000 == 0 and time.monotonic() > deadline:
+                timed_out = True
+                break
     except Exception as e:
         raise ExtractError(f"Could not read that CSV: {e}")
-    if not rows:
+    if not total:
         raise ExtractError('That CSV appears to be empty.')
-    truncated_rows = rows[:MAX_CSV_ROWS]
-    lines = [', '.join(cell.strip() for cell in row) for row in truncated_rows]
-    if len(rows) > MAX_CSV_ROWS:
-        lines.append(f'... ({len(rows) - MAX_CSV_ROWS} more rows not shown)')
+    if total > MAX_CSV_ROWS:
+        shown = f"{total - MAX_CSV_ROWS:,}{'+' if timed_out else ''}"
+        lines.append(f'... ({shown} more rows not shown)')
     try:
         import pandas as pd
-        frame = pd.read_csv(io.BytesIO(file_bytes))
-        summary = frame.describe(include='all').fillna('').to_string()
-        lines.extend(['', 'Data summary:', summary])
+        frame = pd.read_csv(io.BytesIO(file_bytes), nrows=CSV_SUMMARY_ROWS, low_memory=True)
+        if frame.shape[1] <= 60:
+            note = f"first {CSV_SUMMARY_ROWS:,} rows" if total > CSV_SUMMARY_ROWS else 'all rows'
+            summary = frame.describe(include='all').fillna('').to_string()
+            lines.extend(['', f'Data summary ({note}):', summary])
     except Exception:
         pass
     return '\n'.join(lines)
@@ -163,6 +217,7 @@ def extract_txt(file_bytes):
 
 
 def extract_xlsx(file_bytes):
+    _check_unpacked_size(file_bytes)
     try:
         from openpyxl import load_workbook
         book = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
@@ -180,6 +235,7 @@ def extract_xlsx(file_bytes):
 
 
 def extract_pptx(file_bytes):
+    _check_unpacked_size(file_bytes)
     try:
         from pptx import Presentation
         deck = Presentation(io.BytesIO(file_bytes))
@@ -198,6 +254,7 @@ def extract_html(file_bytes):
     # useful enough that it should not fail solely because an optional package
     # is missing from a partially provisioned environment. Python's standard
     # HTMLParser provides a safe local fallback with no network or subprocess.
+    file_bytes = file_bytes[:MAX_HTML_BYTES]
     try:
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(file_bytes, 'html.parser')
@@ -239,7 +296,7 @@ CODE_EXTENSIONS = (
     '.css', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.java',
     '.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.go', '.rs', '.swift',
     '.kt', '.kts', '.sql', '.json', '.xml', '.yaml', '.yml', '.md', '.vue',
-    '.svelte', '.sh', '.ps1', '.toml', '.ini',
+    '.svelte', '.sh', '.ps1', '.toml', '.ini', '.log', '.tsv', '.jsonl',
 )
 _EXTRACTORS.update({extension: extract_txt for extension in CODE_EXTENSIONS})
 
@@ -262,7 +319,7 @@ def extract(filename, file_bytes):
     text = extractor(file_bytes)
     truncated = len(text) > MAX_CHARS
     if truncated:
-        text = text[:MAX_CHARS]
+        text = _clip(text, MAX_CHARS)
     return text, truncated
 
 
@@ -277,8 +334,8 @@ def extract_editable_source(filename, file_bytes, extracted_text, extracted_trun
     ext = os.path.splitext(filename or '')[1].lower()
     if ext in EDITABLE_SOURCE_EXTENSIONS:
         source = file_bytes.decode('utf-8-sig', errors='replace')
-        truncated = len(source) > MAX_CHARS
+        truncated = len(source) > MAX_CODING_CHARS
     else:
         source = extracted_text
-        truncated = bool(extracted_truncated) or len(source) > MAX_CHARS
-    return source[:MAX_CHARS] if truncated else source, truncated
+        truncated = bool(extracted_truncated) or len(source) > MAX_CODING_CHARS
+    return source[:MAX_CODING_CHARS] if truncated else source, truncated

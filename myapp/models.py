@@ -713,6 +713,11 @@ class AIMessage(models.Model):
     # so history replay shows the same real cards, not anything the model
     # claimed.
     product_slugs = models.CharField(max_length=250, blank=True)
+    # Set when the user retries a reply or edits a sent message: that turn and
+    # everything after it is replaced by the new one. It is hidden from the
+    # chat and from the model's context but kept, so the admin AI Activity
+    # page still shows what was actually said.
+    superseded   = models.BooleanField(default=False)
     created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1001,6 +1006,91 @@ class AIAPIKey(models.Model):
         return cls.objects.select_related('user').filter(key_hash=cls._hash(raw_key)).first()
 
 
+class AICodingKey(models.Model):
+    """A key for the "Start coding" CLI (OpenCode pointed at /api/v1/code/).
+    Separate from AIAPIKey so the developer API and the coding CLI can be
+    rotated or revoked independently, and so coding access follows the in-app
+    AI plan rather than a staff grant. Like AIAPIKey only a hash is stored:
+    the raw ``vdc_…`` value is shown once.
+
+    A user has at most one *manual* key (label '', made from the panel's
+    "Create key" button) plus one *automatic* key per computer that ran the
+    one-line setup (label = that computer's name), so signing in a second
+    machine never signs out the first."""
+    MAX_PER_USER = 10
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_coding_keys')
+    label = models.CharField(max_length=60, blank=True, help_text="Empty for the manual key; otherwise the computer it was set up on.")
+    key_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    key_prefix = models.CharField(max_length=12)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    request_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'AI Coding Key'
+        verbose_name_plural = 'AI Coding Keys'
+
+    def __str__(self):
+        return f"{self.user} {self.label or 'manual'} ({self.key_prefix}…)"
+
+    @staticmethod
+    def _hash(raw_key):
+        return hashlib.sha256(raw_key.encode('utf-8')).hexdigest()
+
+    @classmethod
+    def generate_for(cls, user, label=''):
+        """Create (or replace the same-label) key and return the one-time raw
+        value; replacing immediately invalidates that label's previous key."""
+        raw_key = 'vdc_' + secrets.token_urlsafe(32)
+        cls.objects.update_or_create(
+            user=user, label=label,
+            defaults={'key_hash': cls._hash(raw_key), 'key_prefix': raw_key[:11],
+                      'last_used_at': None, 'request_count': 0, 'created_at': timezone.now()},
+        )
+        extra = cls.objects.filter(user=user).exclude(label='').order_by('-created_at')[cls.MAX_PER_USER:]
+        cls.objects.filter(pk__in=[row.pk for row in extra]).delete()
+        return raw_key
+
+    @classmethod
+    def resolve(cls, raw_key):
+        raw_key = (raw_key or '').strip()
+        if not raw_key:
+            return None
+        return cls.objects.select_related('user').filter(key_hash=cls._hash(raw_key)).first()
+
+
+class AICodingDeviceCode(models.Model):
+    """One run of the automatic setup script waiting for the user to approve
+    it in the browser (a "device login"). The script holds the secret
+    device code (only its hash is stored here); the user sees the short
+    user_code on the approval page and confirms it matches their terminal."""
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_DENIED = 'denied'
+    STATUS_USED = 'used'
+
+    device_hash = models.CharField(max_length=64, unique=True)
+    user_code = models.CharField(max_length=9, unique=True, db_index=True)
+    machine = models.CharField(max_length=60, blank=True)
+    requester_ip = models.CharField(max_length=64, blank=True)
+    status = models.CharField(max_length=10, default=STATUS_PENDING)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = 'AI Coding Device Code'
+        verbose_name_plural = 'AI Coding Device Codes'
+
+    def __str__(self):
+        return f"{self.user_code} ({self.status})"
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+
 class ProviderAPICredential(models.Model):
     """Dashboard-editable override for one of the outbound provider API keys
     normally hardcoded/env-configured in edutrellis/settings.py (see
@@ -1023,3 +1113,32 @@ class ProviderAPICredential(models.Model):
 
     def __str__(self):
         return self.setting_name
+
+
+class AIModelControl(models.Model):
+    """Dashboard on/off switch plus live usage counters for one picker model
+    (keyed by its ai_chat.MODELS key). No row means "enabled, never used" so
+    nothing breaks on a fresh database. Counters track real upstream requests
+    made through ai_chat.stream_chat, including ones that failed, which the
+    AIMessage-based totals on the API Data page cannot see."""
+    model_key = models.CharField(max_length=60, unique=True, db_index=True)
+    is_enabled = models.BooleanField(default=True)
+    # Blank means "use the built-in name/description from ai_chat.MODELS".
+    display_name = models.CharField(max_length=60, blank=True)
+    description = models.CharField(max_length=300, blank=True)
+    request_count = models.PositiveIntegerField(default=0)
+    success_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=300, blank=True)
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    last_test_ok = models.BooleanField(null=True, blank=True)
+    last_test_message = models.CharField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'AI Model Control'
+        verbose_name_plural = 'AI Model Controls'
+
+    def __str__(self):
+        return f"{self.model_key} ({'on' if self.is_enabled else 'off'})"
