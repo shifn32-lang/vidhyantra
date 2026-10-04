@@ -344,31 +344,7 @@ def _validate_image_bytes(content, *, service_name="The image service"):
     return GeneratedImage(content=content, extension=extension)
 
 
-def _generate_qwen_edit(prompt, source_image):
-    if not source_image:
-        raise ImageGenerationError('Attach an image and describe the changes you want.', status_code=400)
-    url = _get_key('QWEN_IMAGE_EDIT_API_URL').strip()
-    if not url:
-        raise ImageGenerationError('Qwen Image Edit is not connected yet. An image-editing server must be configured before uploads can be edited.')
-    key = _get_key('QWEN_IMAGE_EDIT_ENDPOINT_KEY').strip()
-    try:
-        response = requests.post(
-            url,
-            headers={'Accept': 'application/json', **({'Authorization': f'Bearer {key}'} if key else {})},
-            json={'prompt': prompt, 'image': _normalize_source_image(source_image), 'seed': 0},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        raise ImageGenerationError('Could not reach the image-editing server. Please try again.') from exc
-    if response.status_code != 200:
-        raise ImageGenerationError('The image-editing server could not complete this edit. Please try again later.')
-    try:
-        return _decode_artifact(response.json())
-    except ValueError as exc:
-        raise ImageGenerationError('The image-editing server returned an invalid response.') from exc
-
-
-def generate_image(prompt, source_image=None, *, model_key=None):
+def generate_image(prompt, source_image=None):
     """Generate an image, or edit ``source_image`` when one is supplied.
 
     ``source_image`` is the browser-provided PNG/JPEG data URI. It is decoded
@@ -388,17 +364,11 @@ def generate_image(prompt, source_image=None, *, model_key=None):
 
     # One attempt on the one configured service: a failure is reported, not
     # silently retried on another key or provider.
-    return _dispatch_generate(prompt, source_image, model_key)
+    return _dispatch_generate(prompt, source_image)
 
 
-def _dispatch_generate(prompt, source_image, model_key):
-    if model_key == 'qwen-image-edit':
-        return _generate_qwen_edit(prompt, source_image)
-
+def _dispatch_generate(prompt, source_image):
     editing = bool(source_image)
-    kontext = model_key == 'flux-kontext-dev'
-    if kontext and not editing:
-        raise ImageGenerationError('Attach an image and describe the changes you want.', status_code=400)
     edit_url = _get_key('FLUX_EDIT_API_URL').strip() if editing else ''
     # NVIDIA's hosted FLUX.2 Klein preview does not accept arbitrary uploads.
     # Its ``image`` field only accepts one of four NVIDIA-owned example IDs
@@ -407,7 +377,7 @@ def _dispatch_generate(prompt, source_image, model_key):
     # configured through FLUX_EDIT_API_URL.  Signal the caller immediately so
     # it can use the existing describe-and-regenerate fallback without making
     # a guaranteed-to-fail, potentially billable hosted request first.
-    if editing and not edit_url and not kontext:
+    if editing and not edit_url:
         raise ImageGenerationError(
             'Uploaded-image editing needs an upload-capable image-editing server.',
             status_code=503,
@@ -416,11 +386,8 @@ def _dispatch_generate(prompt, source_image, model_key):
     # A private deployment has its own optional credential. Never forward the
     # hosted NVIDIA credential to a separately configured server.
     key = _get_key('FLUX_EDIT_API_KEY').strip() if edit_url else _api_key(editing=editing)
-    if kontext:
-        edit_url = ''
-        key = _get_key('NVIDIA_FLUX_KONTEXT_API_KEY').strip()
     if not key and not edit_url:
-        setting_name = 'NVIDIA_FLUX_KONTEXT_API_KEY' if kontext else ("NVIDIA_FLUX_EDIT_API_KEY" if editing else "NVIDIA_FLUX_API_KEY")
+        setting_name = "NVIDIA_FLUX_EDIT_API_KEY" if editing else "NVIDIA_FLUX_API_KEY"
         raise ImageGenerationError(
             f"Image generation is not configured yet. Set {setting_name} on the server.",
         )
@@ -428,9 +395,8 @@ def _dispatch_generate(prompt, source_image, model_key):
     width, height = resolve_dimensions(prompt)
     # Dimensions are read from the full prompt (a size/ratio cue could sit
     # anywhere), but the text actually sent to FLUX is shortened — see
-    # FLUX_SAFE_PROMPT_CHARS above. Kontext edits keep the full prompt: it's
-    # already proven to accept longer text in practice.
-    flux_prompt = prompt if kontext else _shorten_prompt(prompt, FLUX_SAFE_PROMPT_CHARS)
+    # FLUX_SAFE_PROMPT_CHARS above.
+    flux_prompt = _shorten_prompt(prompt, FLUX_SAFE_PROMPT_CHARS)
     body = {
         "prompt": flux_prompt,
         "width": width,
@@ -443,17 +409,10 @@ def _dispatch_generate(prompt, source_image, model_key):
         # FLUX.2 supports multiple references; NVIDIA's current hosted
         # request template therefore expects an array even for one image.
         body["image"] = [_normalize_source_image(source_image)]
-    if kontext:
-        body['image'] = body['image'][0]
-        body['steps'] = 30
-        body.pop('width')
-        body.pop('height')
-        body['aspect_ratio'] = 'match_input_image'
 
     try:
         response = requests.post(
-            ('https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-kontext-dev'
-             if kontext else edit_url or FLUX_API_URL),
+            edit_url or FLUX_API_URL,
             headers={
                 **({"Authorization": f"Bearer {key}"} if key else {}),
                 "Content-Type": "application/json",
@@ -481,7 +440,7 @@ def test_connection():
     (and its backup, if set), so the dashboard can confirm the key works.
     Returns (ok, message)."""
     try:
-        image = _dispatch_generate('a small red circle on a plain white background', None, None)
+        image = _dispatch_generate('a small red circle on a plain white background', None)
     except ImageGenerationError as exc:
         return False, str(exc)[:250]
     except Exception as exc:

@@ -343,12 +343,9 @@ CODE_SYSTEM_SUFFIX = (
 )
 
 CHATGPT_56_MODEL_KEY = 'chatgpt56'
-NEMOTRON_SUPER_MODEL_KEY = 'nemotron-3-super'
 FLUX_KLEIN_4B_MODEL_KEY = 'flux-klein-4b'
 SOL_MODEL_KEY = 'sol'
 TERRA_MODEL_KEY = 'terra'
-FLUX_KONTEXT_DEV_MODEL_KEY = 'flux-kontext-dev'
-QWEN_IMAGE_EDIT_MODEL_KEY = 'qwen-image-edit'
 
 
 CHATGPT_56_SYSTEM_SUFFIX = (
@@ -437,12 +434,12 @@ CHATGPT_56_SYSTEM_SUFFIX = (
 # 'reasoning' models emit hidden chain-of-thought unless explicitly told not
 # to (chat_template_kwargs.enable_thinking=False) — without that flag they
 # dump raw "Let me think..." text into the reply instead of a clean answer.
+# The model picker lists the visible entries in this order.
 MODELS = {
     SOL_MODEL_KEY: {
-        # Product-facing name for the same Nemotron 3 Super endpoint as the
-        # 'nemotron-3-super' entry below, offered as its own picker option.
-        # Shares that entry's dedicated credential, so it is likewise outside
-        # the shared key pool's failover and hedging.
+        # Product-facing name for the Nemotron 3 Super endpoint. It has its
+        # own dedicated credential, so it is outside the shared key pool's
+        # failover and hedging.
         'id': 'nvidia/nemotron-3-ultra-550b-a55b',
         'label': 'ChatGPT 5.6 Sol',
         'description': "OpenAI's most powerful model — named for the sun, the brightest core model, built for complex, multi-step professional work.",
@@ -471,17 +468,6 @@ MODELS = {
         'router': True,
         'api_key_setting': 'NVIDIA_LUNA_API_KEY',
     },
-    'gpt-oss-20b': {
-        'id': 'openai/gpt-oss-20b',
-        'label': 'ChatGPT 5.5',
-        'description': 'OpenAI open-weight model for reasoning, coding, and general questions.',
-        'reasoning': False,  # Do not send Nemotron-specific template options.
-        'vision': False,
-        'api_key_setting': 'NVIDIA_GPT_OSS_API_KEY',
-        'timeout': 15.0,
-        'retry_attempts': 1,
-        'hidden_from_picker': True,  # Removed from the picker; retain existing chats/routing.
-    },
     'ultra': {
         'id': NVIDIA_CHAT_MODEL,
         'label': 'Vidhyora Ultra',
@@ -505,16 +491,6 @@ MODELS = {
         'reasoning': True,
         'vision': False,
     },
-    'reasoning': {
-        # The verified endpoint supports the no-thinking template parameters
-        # used below, preventing hidden reasoning from leaking into replies.
-        'id': NVIDIA_CHAT_MODEL,
-        'label': 'Nemotron Super',
-        'hidden_from_picker': True,  # Temporarily hidden; retain existing chats/routing.
-        'description': 'Excellent at complex, multi-step reasoning and planning — faster than Ultra, still very capable.',
-        'reasoning': True,
-        'vision': False,
-    },
     'vision': {
         # Verified against this account after the previous vision worker
         # became unavailable. VISION_CHECK_BUFFER_CHARS remains a safety net.
@@ -533,44 +509,6 @@ MODELS = {
         'vision': False,
         'image_generation': True,
     },
-    FLUX_KONTEXT_DEV_MODEL_KEY: {
-        'id': 'black-forest-labs/flux.1-kontext-dev',
-        'label': 'FLUX.1 Kontext Dev',
-        'hidden_from_picker': True,
-        'description': 'Edits an uploaded image in place based on your prompt, preserving its overall composition.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
-    QWEN_IMAGE_EDIT_MODEL_KEY: {
-        'id': 'qwen-image-edit',
-        'label': 'Qwen Image Edit',
-        'hidden_from_picker': True,
-        'description': 'Edits an uploaded image based on your prompt using a self-hosted Qwen endpoint.',
-        'reasoning': False,
-        'vision': False,
-        'image_generation': True,
-    },
-    # Last in this dict is last in the model picker — views.ai_page builds the
-    # list straight from this ordering.
-    NEMOTRON_SUPER_MODEL_KEY: {
-        # The only entry that actually runs NVIDIA's Nemotron 3 Super (120B)
-        # endpoint — the older 'reasoning' entry above is labelled "Nemotron
-        # Super" but has always pointed at the Lightning worker. Verified
-        # live against this account: it answers, and enable_thinking=False is
-        # honoured (without it the reply opens with raw "Okay, the user asked
-        # me to..." chain-of-thought), so it stays a 'reasoning' model here.
-        'id': 'nvidia/nemotron-3-ultra-550b-a55b',
-        'label': 'Nemotron 3 Super',
-        'hidden_from_picker': True,
-        'description': 'Largest reasoning model — best for hard, multi-step problems where depth matters more than speed.',
-        'reasoning': True,
-        'vision': False,
-        # Its own credential, so it is deliberately outside the shared key
-        # pool's failover and hedging — another key in that pool has no
-        # invoke access to this endpoint.
-        'api_key_setting': 'NVIDIA_NEMOTRON_SUPER_API_KEY',
-    },
 }
 DEFAULT_MODEL_KEY = CHATGPT_56_MODEL_KEY
 
@@ -579,7 +517,7 @@ DEFAULT_MODEL_KEY = CHATGPT_56_MODEL_KEY
 # SiteCustomization.ai_brand_name by _sync_brand() below, called once per
 # relevant request rather than read fresh on every dict access, since MODELS
 # is a plain module-level dict shared by many call sites that just do
-# MODELS[key]['label']. Sol/Terra/Luna/gpt-oss-20b intentionally excluded —
+# MODELS[key]['label']. Sol/Terra/Luna intentionally excluded —
 # their "ChatGPT 5.6 ..." labels represent OpenAI's product, not this one.
 _BRAND_MODEL_SUFFIXES = {'ultra': 'Ultra', 'quick': 'Quick', 'code': 'Code', 'vision': 'Vision'}
 _DEFAULT_BRAND_NAME = 'Vidhyora'
@@ -591,7 +529,7 @@ _DEFAULT_BRAND_NAME = 'Vidhyora'
 CHAT_GROUP_KEYS = ('ultra', 'quick', 'code')
 CHAT_CONTROL_KEY = 'vidhyora-chat'
 EDITABLE_MODEL_KEYS = (
-    CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY, 'gpt-oss-20b',
+    CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY,
     FLUX_KLEIN_4B_MODEL_KEY, *CHAT_GROUP_KEYS,
 )
 _MODEL_TEXT_DEFAULTS = {
@@ -2268,21 +2206,6 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
         # Generated by the server from a validated attachment-action choice;
         # it is not copied from the uploaded file or from arbitrary user text.
         mode_reminder += " " + document_instruction
-    if identity_key == 'gpt-oss-20b':
-        label = identity_cfg['label']
-        mode_reminder += (
-            f" Your display name in this app is {label}. When asked your "
-            f"name or identity, say: 'I am {label} in this app, powered by "
-            "a model developed by OpenAI.' Keep identity answers brief, without "
-            "bullet lists or an unsolicited explanation of the platform, "
-            "hosting company, routing, or infrastructure. Use this "
-            "current display name even if earlier messages name another mode. "
-            "This is an app display name, not an official model version: if "
-            "explicitly asked which model actually powers you, identify "
-            "OpenAI's GPT-OSS 20B briefly. Mention NVIDIA hosting only if "
-            "specifically asked who hosts the model. Do not claim this app "
-            "is owned by OpenAI or that GPT-OSS 20B is officially GPT-5.5."
-        )
     late_reminders = [{'role': 'system', 'content': mode_reminder}]
     # Same fix for the Sumudrika persona note: folded into the one giant
     # leading system message, EduTrellis Quick (a much smaller/faster model)

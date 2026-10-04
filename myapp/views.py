@@ -2420,16 +2420,13 @@ AI_CONVERSATION_TITLE_CHARS = 60
 AI_CURRENT_CONVERSATION_SESSION_KEY = 'ai_current_conversation_id'
 AI_GUEST_MESSAGE_LIMIT = 6        # free messages before a guest must log in/sign up
 AI_FREE_MESSAGE_LIMIT = 20        # free messages for a logged-in, non-staff, unsubscribed account before Vidhyora AI requires the paid plan
-AI_FREE_MODEL_KEYS = frozenset({
-    'quick', 'code', ai_chat.FLUX_KLEIN_4B_MODEL_KEY,
-    'flux-kontext-dev', 'qwen-image-edit',
-})
+AI_FREE_MODEL_KEYS = frozenset({'quick', 'code', ai_chat.FLUX_KLEIN_4B_MODEL_KEY})
 # Accounts that already have full model access (staff or an active AI
 # subscription) keep seeing the ChatGPT-branded picker entries as
 # before. New/free accounts and signed-out guests never see them at all (not
 # even locked/greyed-out) — they get the Vidhyora-branded lineup only.
 AI_FULL_ACCESS_ONLY_MODEL_KEYS = frozenset({
-    ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, 'gpt-oss-20b',
+    ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY,
 })
 # ~1.5MB of raw image data as a base64 data: URI (~2M chars) — well under
 # Django's default 2.5MB DATA_UPLOAD_MAX_MEMORY_SIZE for the whole request
@@ -3840,7 +3837,7 @@ def _vidhyora_public_reply(reply, mode_label):
 
 def _ai_public_routed_model_key(response_model_key, routed_model_key):
     """Never expose ChatGPT's private worker selection to the browser."""
-    if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY, 'gpt-oss-20b', 'flux-kontext-dev', 'qwen-image-edit'):
+    if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
         return response_model_key
     return routed_model_key
 
@@ -3884,16 +3881,10 @@ def _ai_chat_failure_reply(error, response_model_key, is_staff=False):
 def _ai_flux_response(conversation, prompt, source_image, response_model_key=None, owner_email=''):
     """Run a FLUX generation/editing turn and persist the real image URL."""
     display_model_key = response_model_key or ai_chat.FLUX_KLEIN_4B_MODEL_KEY
-    # Only FLUX-drawn images count towards the image panel's request numbers.
-    counts_for_flux = display_model_key not in ('flux-kontext-dev', 'qwen-image-edit')
-    if counts_for_flux:
-        model_controls.record_request(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
+    model_controls.record_request(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     try:
         try:
-            if display_model_key in ('flux-kontext-dev', 'qwen-image-edit'):
-                generated = image_generation.generate_image(prompt, source_image or None, model_key=display_model_key)
-            else:
-                generated = image_generation.generate_image(prompt, source_image or None)
+            generated = image_generation.generate_image(prompt, source_image or None)
         except image_generation.ImageGenerationError as exc:
             # The connected backend can't actually edit an uploaded reference
             # image at all (see ImageGenerationError.editing_unavailable) —
@@ -3914,12 +3905,11 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
         stored_name = default_storage.save(filename, ContentFile(generated.content))
         generated_url = default_storage.url(stored_name)
     except image_generation.ImageGenerationError as exc:
-        if counts_for_flux:
-            model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, str(exc))
+        model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, str(exc))
         service_down = exc.status_code == 503 and not exc.blocked and not exc.editing_unavailable
         detail = (
             _chatgpt_image_error_detail(exc, display_model_key)
-            if display_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, 'gpt-oss-20b')
+            if display_model_key == ai_chat.CHATGPT_56_MODEL_KEY
             else str(exc)
         )
         if service_down:
@@ -3935,8 +3925,7 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
         )
         return response
     except Exception as exc:
-        if counts_for_flux:
-            model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, f'{exc.__class__.__name__}: {exc}')
+        model_controls.record_error(ai_chat.FLUX_KLEIN_4B_MODEL_KEY, f'{exc.__class__.__name__}: {exc}')
         logger.exception("Failed to save generated FLUX image")
         response = JsonResponse(
             {'status': 'error', 'detail': 'The image was generated but could not be saved. Please try again.'},
@@ -3949,8 +3938,7 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
         )
         return response
 
-    if counts_for_flux:
-        model_controls.record_success(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
+    model_controls.record_success(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
 
     # Mirror the image into the owner's Dropbox archive, because local media
     # storage does not survive a redeploy. Placed after the try/except above
@@ -4384,7 +4372,7 @@ def _ai_chat_send(request):
     elif image_prompt_writing:
         model_key = 'vision' if image_data else 'quick'
         request_category = 'image' if image_data else 'writing'
-    elif selected_model_key in (ai_chat.FLUX_KLEIN_4B_MODEL_KEY, 'flux-kontext-dev', 'qwen-image-edit'):
+    elif selected_model_key == ai_chat.FLUX_KLEIN_4B_MODEL_KEY:
         if source_image_data or (message and not ai_chat.is_image_capability_question(message)) or not message:
             # Once the user deliberately selects FLUX, descriptive prompts
             # such as "a robot in a futuristic classroom" are valid even
@@ -4478,7 +4466,6 @@ def _ai_chat_send(request):
     # would be drawn by FLUX, whichever model the user picked.
     if (
         model_key == ai_chat.FLUX_KLEIN_4B_MODEL_KEY
-        and response_model_key not in ('flux-kontext-dev', 'qwen-image-edit')
         and not ai_chat.is_model_enabled(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     ):
         return JsonResponse({
@@ -5513,6 +5500,64 @@ def ai_notes_list(request):
     response = JsonResponse({'status': 'ok', 'notes': _ai_notes_snapshot(request)})
     response['Cache-Control'] = 'private, no-store'
     return response
+
+
+AI_NOTE_MAX_CHARS = 4000
+AI_NOTES_PER_OWNER = 200
+
+
+def _ai_note_response(request, status=200, **extra):
+    response = JsonResponse({'status': 'ok', 'notes': _ai_notes_snapshot(request), **extra}, status=status)
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+def _ai_note_input(request):
+    """(heading, content, error) from a create/update request."""
+    payload = _parse_json_body(request)
+    if not isinstance(payload, dict):
+        payload = {}
+    content = str(payload.get('content') or '').strip()
+    heading = str(payload.get('heading') or '').strip()[:120]
+    if not content and not heading:
+        return '', '', 'Write something in the note first.'
+    if not content:
+        content = heading
+    if len(content) > AI_NOTE_MAX_CHARS:
+        return '', '', f'A note can be at most {AI_NOTE_MAX_CHARS} characters.'
+    return heading or _ai_note_heading(content), content, ''
+
+
+def ai_note_create(request):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    heading, content, error = _ai_note_input(request)
+    if error:
+        return JsonResponse({'status': 'error', 'detail': error}, status=400)
+    if not request.user.is_authenticated and not request.session.session_key:
+        request.session.create()
+    if AINote.objects.filter(_ai_owner_filter(request)).count() >= AI_NOTES_PER_OWNER:
+        return JsonResponse({'status': 'error', 'detail': f'You can keep up to {AI_NOTES_PER_OWNER} notes. Delete one first.'}, status=400)
+    note = AINote.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        session_key='' if request.user.is_authenticated else (request.session.session_key or ''),
+        heading=heading, content=content,
+    )
+    return _ai_note_response(request, status=201, note_id=note.pk)
+
+
+def ai_note_update(request, note_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    note = AINote.objects.filter(_ai_owner_filter(request), pk=note_id).first()
+    if not note:
+        return JsonResponse({'status': 'error', 'detail': 'Note not found.'}, status=404)
+    heading, content, error = _ai_note_input(request)
+    if error:
+        return JsonResponse({'status': 'error', 'detail': error}, status=400)
+    note.heading, note.content = heading, content
+    note.save(update_fields=['heading', 'content'])
+    return _ai_note_response(request, note_id=note.pk)
 
 
 def ai_note_delete(request, note_id):

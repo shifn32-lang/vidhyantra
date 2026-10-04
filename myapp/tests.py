@@ -1864,16 +1864,14 @@ class AIResponseReliabilityTests(TestCase):
         self.assertEqual(result, "I'm ChatGPT, developed by OpenAI.")
         self.assertNotIn('nvidia', result.lower())
 
-    def test_nemotron_super_uses_its_own_key_and_is_last_in_the_picker(self):
-        """It runs a different upstream endpoint from every other entry, so
-        it must use its own credential — the shared pool's keys have no
-        invoke access to it — and it is deliberately the final option in the
-        model list, which views.ai_page builds straight from MODELS order."""
-        cfg = ai_chat.MODELS[ai_chat.NEMOTRON_SUPER_MODEL_KEY]
+    def test_sol_uses_its_own_key_for_the_super_endpoint(self):
+        """Sol runs a different upstream endpoint from the shared pool, so it
+        must use its own credential — the shared pool's keys have no invoke
+        access to it."""
+        cfg = ai_chat.MODELS[ai_chat.SOL_MODEL_KEY]
         self.assertEqual(cfg['id'], 'nvidia/nemotron-3-ultra-550b-a55b')
         self.assertEqual(cfg['api_key_setting'], 'NVIDIA_NEMOTRON_SUPER_API_KEY')
-        self.assertTrue(settings.NVIDIA_NEMOTRON_SUPER_API_KEY)
-        self.assertEqual(list(ai_chat.MODELS)[-1], ai_chat.NEMOTRON_SUPER_MODEL_KEY)
+        self.assertTrue(hasattr(settings, 'NVIDIA_NEMOTRON_SUPER_API_KEY'))
 
         captured = {}
 
@@ -1885,7 +1883,7 @@ class AIResponseReliabilityTests(TestCase):
         with patch('myapp.ai_chat._get_client', return_value=client) as get_client:
             result = ''.join(ai_chat.stream_chat(
                 [{'role': 'user', 'content': '17*23?'}],
-                model_key=ai_chat.NEMOTRON_SUPER_MODEL_KEY,
+                model_key=ai_chat.SOL_MODEL_KEY,
             ))
 
         self.assertEqual(result, '391')
@@ -1996,18 +1994,18 @@ class AIResponseReliabilityTests(TestCase):
 
         def fake_get_client(api_key_setting=None):
             used.append(api_key_setting)
-            if api_key_setting == 'NVIDIA_GPT_OSS_API_KEY':
-                raise ValueError('NVIDIA_GPT_OSS_API_KEY is not configured.')
+            if api_key_setting == 'NVIDIA_TERRA_API_KEY':
+                raise ValueError('NVIDIA_TERRA_API_KEY is not configured.')
             return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
         with patch('myapp.ai_chat._get_client', side_effect=fake_get_client), \
                 patch('myapp.ai_chat.time.sleep'):
             with self.assertRaises(ValueError):
                 list(ai_chat.stream_chat(
-                    [{'role': 'user', 'content': 'hello'}], model_key='gpt-oss-20b',
+                    [{'role': 'user', 'content': 'hello'}], model_key=ai_chat.TERRA_MODEL_KEY,
                 ))
 
-        self.assertEqual(used, ['NVIDIA_GPT_OSS_API_KEY'])
+        self.assertEqual(used, ['NVIDIA_TERRA_API_KEY'])
         create.assert_not_called()
 
     def test_chatgpt_identity_leak_is_caught_and_forced_to_a_safe_answer(self):
@@ -2307,7 +2305,6 @@ class AIResponseReliabilityTests(TestCase):
         self.assertFalse(access['code'])
         self.assertTrue(access[ai_chat.CHATGPT_56_MODEL_KEY])
         self.assertTrue(access['ultra'])
-        self.assertTrue(access['reasoning'])
         self.assertFalse(access[ai_chat.FLUX_KLEIN_4B_MODEL_KEY])
         self.assertContains(page, 'Free users can use Quick, Code, and image generation.')
 
@@ -2742,7 +2739,7 @@ class AIResponseReliabilityTests(TestCase):
                     self.assertIn('[Download greeting.txt](', body)
                     expected_public_route = (
                         selected_model
-                        if selected_model in (ai_chat.CHATGPT_56_MODEL_KEY, 'gpt-oss-20b')
+                        if selected_model in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY)
                         else 'code'
                     )
                     self.assertEqual(response['X-Routed-Model-Key'], expected_public_route)
@@ -2882,7 +2879,7 @@ class AIResponseReliabilityTests(TestCase):
         self.assertIn("never say you don't have access to the current date", note.lower())
 
         chunk = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='ok'))])
-        for model_key in ('quick', 'ultra', 'code', 'vision', 'reasoning', ai_chat.CHATGPT_56_MODEL_KEY):
+        for model_key in ('quick', 'ultra', 'code', 'vision', ai_chat.CHATGPT_56_MODEL_KEY):
             create = Mock(return_value=iter([chunk]))
             client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
             with patch('myapp.ai_chat._get_client', return_value=client):
@@ -4949,7 +4946,7 @@ class ApiSettingsPanelsTests(TestCase):
         response = self.client.get(self.URL)
         self.assertEqual(
             [p['id'] for p in response.context['panels']],
-            ['chat', 'luna', 'sol', 'terra', 'gpt55', 'coding', 'image', 'search'],
+            ['chat', 'luna', 'sol', 'terra', 'coding', 'image', 'search'],
         )
 
     @patch('myapp.ai_chat._client_for_key')
@@ -6331,13 +6328,23 @@ class DeletedModelsAreGoneTests(TestCase):
     REMOVED = (
         'sdxl-lightning', 'flux-1-schnell', 'sdxl-base', 'dreamshaper-8-lcm',
         'gemini-3-6-flash', 'openrouter-auto-free', 'laguna-s-2-1', 'cohere-north-mini-code',
+        'gpt-oss-20b', 'reasoning', 'nemotron-3-super', 'flux-kontext-dev', 'qwen-image-edit',
     )
 
     def test_the_models_and_their_keys_no_longer_exist(self):
         for key in self.REMOVED:
             self.assertNotIn(key, ai_chat.MODELS)
-        for name in ('CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_GEMMA_API_KEY'):
+        for name in (
+            'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_GEMMA_API_KEY',
+            'NVIDIA_GPT_OSS_API_KEY', 'NVIDIA_FLUX_KONTEXT_API_KEY', 'NVIDIA_QWEN_IMAGE_EDIT_API_KEY',
+            'QWEN_IMAGE_EDIT_API_URL', 'QWEN_IMAGE_EDIT_ENDPOINT_KEY',
+        ):
             self.assertFalse(hasattr(settings, name), name)
+
+    def test_the_key_sol_runs_on_is_still_there(self):
+        self.assertTrue(hasattr(settings, 'NVIDIA_NEMOTRON_SUPER_API_KEY'))
+        self.assertEqual(ai_chat.MODELS[ai_chat.SOL_MODEL_KEY]['api_key_setting'], 'NVIDIA_NEMOTRON_SUPER_API_KEY')
+        self.assertEqual(list(ai_chat.MODELS), ['sol', 'terra', 'chatgpt56', 'ultra', 'quick', 'code', 'vision', 'flux-klein-4b'])
 
     def test_the_admin_lists_do_not_offer_them(self):
         staff = User.objects.create_user('lists-staff', password='pw', is_staff=True)
@@ -6345,9 +6352,84 @@ class DeletedModelsAreGoneTests(TestCase):
         self.client.force_login(staff)
         management = self.client.get('/store/dashboard/api-management/').content.decode()
         api_data = self.client.get('/store/dashboard/api-data/').content.decode()
-        for page in (management, api_data):
-            for label in ('SDXL', 'Schnell', 'DreamShaper', 'OpenRouter', 'Laguna', 'Cohere', 'Gemini', 'Cloudflare'):
+        api_settings = self.client.get('/store/dashboard/api-settings/').content.decode()
+        for page in (management, api_data, api_settings):
+            for label in (
+                'SDXL', 'Schnell', 'DreamShaper', 'OpenRouter', 'Laguna', 'Cohere', 'Gemini', 'Cloudflare',
+                'ChatGPT 5.5', 'Nemotron Super', 'Nemotron 3 Super', 'Kontext', 'Qwen',
+            ):
                 self.assertNotIn(label, page)
+
+    def test_api_management_offers_exactly_the_remaining_models(self):
+        from .forms import GrantAPIAccessForm
+        keys = [key for key, _label in GrantAPIAccessForm().fields['model_keys'].choices]
+        self.assertEqual(keys, ['sol', 'terra', 'chatgpt56', 'ultra', 'quick', 'code', 'flux-klein-4b'])
+
+    def test_the_second_cleanup_migration_removes_leftover_rows(self):
+        import importlib
+        from django.apps import apps
+        from .models import AIModelControl, ProviderAPICredential
+        migration = importlib.import_module('myapp.migrations.0076_remove_more_models')
+        user = User.objects.create_user('grantee-two', password='pw')
+        only_removed = User.objects.create_user('grantee-three', password='pw')
+        AIAPIAccess.objects.create(user=user, model_keys='sol,gpt-oss-20b,quick,qwen-image-edit')
+        AIAPIAccess.objects.create(user=only_removed, model_keys='gpt-oss-20b')
+        AIModelControl.objects.create(model_key='gpt-oss-20b')
+        AIModelControl.objects.create(model_key='nemotron-3-super')
+        AIModelControl.objects.create(model_key='sol')
+        ProviderAPICredential.objects.create(setting_name='NVIDIA_GPT_OSS_API_KEY', value='x')
+        ProviderAPICredential.objects.create(setting_name='NVIDIA_NEMOTRON_SUPER_API_KEY', value='kept')
+        migration.remove_models(apps, None)
+        self.assertEqual(AIAPIAccess.objects.get(user=user).model_keys, 'sol,quick')
+        self.assertEqual(AIAPIAccess.objects.get(user=only_removed).model_keys, '')
+        self.assertEqual(list(AIModelControl.objects.values_list('model_key', flat=True)), ['sol'])
+        self.assertEqual(list(ProviderAPICredential.objects.values_list('setting_name', flat=True)), ['NVIDIA_NEMOTRON_SUPER_API_KEY'])
+
+
+class RemovedModelsLeaveNothingBrokenTests(TestCase):
+    """Old chats, stale browser tabs and old API grants that still name a removed model."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user('legacy-user', password='pw', is_staff=True)
+        StoreProfile.objects.get_or_create(user=self.user)
+        self.client.force_login(self.user)
+
+    def test_an_old_chat_answered_by_a_removed_model_still_opens(self):
+        conversation = AIConversation.objects.create(user=self.user, title='old chat')
+        for key in ('gpt-oss-20b', 'reasoning', 'nemotron-3-super', 'flux-kontext-dev', 'qwen-image-edit'):
+            AIMessage.objects.create(conversation=conversation, role=AIMessage.ROLE_USER, content='hi')
+            AIMessage.objects.create(conversation=conversation, role=AIMessage.ROLE_ASSISTANT, content='hello', model_key=key)
+        response = self.client.get(f'/AI/api/conversations/{conversation.pk}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['messages']), 10)
+        self.assertEqual(self.client.get('/').status_code, 200)
+        self.assertEqual(self.client.get('/store/dashboard/ai/activity/').status_code, 200)
+
+    def test_a_stale_tab_that_still_sends_a_removed_model_gets_a_normal_answer(self):
+        for key in ('gpt-oss-20b', 'reasoning', 'nemotron-3-super', 'flux-kontext-dev', 'qwen-image-edit'):
+            with patch('myapp.views.ai_chat.stream_chat', return_value=iter(['Sure.'])), \
+                 patch('myapp.views.web_search.build_context', return_value=None):
+                response = self.client.post('/AI/api/send/', data=json.dumps({'message': 'hello there', 'model': key}), content_type='application/json')
+                b''.join(response.streaming_content)
+            self.assertEqual(response.status_code, 200, key)
+            self.assertEqual(response['X-Model-Key'], 'sol', key)
+
+    def test_an_old_api_grant_to_a_removed_model_is_refused_clearly(self):
+        from .models import AIAPIKey
+        developer = User.objects.create_user('legacy-dev', password='pw')
+        AIAPIAccess.objects.create(user=developer, model_keys='gpt-oss-20b,sol')
+        raw_key = AIAPIKey.generate_for(developer)
+        response = self.client.post(
+            '/api/v1/chat/', data=json.dumps({'model': 'gpt-oss-20b', 'message': 'hi'}),
+            content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {raw_key}',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('does not support the chat API', response.json()['error'])
+        self.client.force_login(developer)
+        listed = [m['key'] for m in self.client.get('/AI/api/account/').json()['api_access']['models']]
+        self.assertEqual(listed, ['sol'])
 
     def test_the_cleanup_migration_removes_leftover_rows(self):
         import importlib
@@ -6377,7 +6459,7 @@ class ApiDataMatchesApiSettingsTests(TestCase):
 
     def test_only_models_that_have_an_api_settings_panel_are_listed(self):
         shown = {m['key'] for m in self.client.get(self.URL).context['models']}
-        self.assertEqual(shown, {'chatgpt56', 'sol', 'terra', 'gpt-oss-20b', 'ultra', 'quick', 'code', 'flux-klein-4b'})
+        self.assertEqual(shown, {'chatgpt56', 'sol', 'terra', 'ultra', 'quick', 'code', 'flux-klein-4b'})
 
     def test_the_apis_section_is_gone(self):
         response = self.client.get(self.URL)
@@ -6942,3 +7024,71 @@ class BrandNameFollowsTheAdminSettingTests(TestCase):
         site.save()
         self.assertIn('>Orbit <span>AI</span></a>', self.client.get('/store/dashboard/').content.decode())
         self.assertIn('<p class="call-brand">Orbit AI</p>', self.client.get('/').content.decode())
+
+
+class NotesCrudTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('note-owner', password='pw')
+        self.other = User.objects.create_user('note-other', password='pw')
+        self.client.force_login(self.user)
+
+    def _post(self, url, **body):
+        return self.client.post(url, data=json.dumps(body), content_type='application/json')
+
+    def test_create_read_update_delete(self):
+        created = self._post('/AI/api/notes/create/', heading='Shopping', content='milk and eggs')
+        self.assertEqual(created.status_code, 201)
+        note_id = created.json()['note_id']
+        self.assertEqual([n['heading'] for n in self.client.get('/AI/api/notes/').json()['notes']], ['Shopping'])
+        updated = self._post(f'/AI/api/notes/{note_id}/update/', heading='Groceries', content='milk, eggs and bread')
+        self.assertEqual(updated.json()['notes'][0]['content'], 'milk, eggs and bread')
+        self.assertEqual(self._post(f'/AI/api/notes/{note_id}/delete/').json()['notes'], [])
+
+    def test_a_missing_title_is_taken_from_the_text(self):
+        self._post('/AI/api/notes/create/', content='call the dentist\nafter lunch')
+        self.assertEqual(AINote.objects.get().heading, 'call the dentist')
+
+    def test_empty_and_oversized_notes_are_refused(self):
+        self.assertEqual(self._post('/AI/api/notes/create/', content='  ').status_code, 400)
+        self.assertEqual(self._post('/AI/api/notes/create/', content='x' * 4001).status_code, 400)
+        self.assertFalse(AINote.objects.exists())
+
+    def test_nobody_can_change_someone_elses_note(self):
+        note = AINote.objects.create(user=self.other, heading='private', content='secret')
+        self.assertEqual(self._post(f'/AI/api/notes/{note.pk}/update/', content='hacked').status_code, 404)
+        self.assertEqual(self._post(f'/AI/api/notes/{note.pk}/delete/').status_code, 404)
+        note.refresh_from_db()
+        self.assertEqual(note.content, 'secret')
+
+    def test_only_post_is_accepted(self):
+        self.assertEqual(self.client.get('/AI/api/notes/create/').status_code, 405)
+
+    def test_the_page_has_the_new_note_controls_and_a_fixed_height_message_box(self):
+        body = self.client.get('/').content.decode()
+        self.assertIn('data-note-new', body)
+        self.assertIn('/AI/api/notes/create/', body)
+        self.assertIn('overflow-y:auto', body.split('#chatInput{')[1].split('}')[0])
+
+
+class DefaultSuperuserMigrationTests(TestCase):
+    def _run(self):
+        import importlib
+        from django.apps import apps
+        importlib.import_module('myapp.migrations.0077_default_superuser').ensure_superuser(apps, None)
+
+    def test_it_is_created_when_missing(self):
+        User.objects.filter(username='rnt@gmail.com').delete()
+        self._run()
+        user = User.objects.get(username='rnt@gmail.com')
+        self.assertTrue(user.is_superuser and user.is_staff)
+        self.assertTrue(user.check_password('sumudrika'))
+
+    def test_an_existing_account_only_gets_the_password_changed(self):
+        User.objects.filter(username='rnt@gmail.com').delete()
+        User.objects.create_user('rnt@gmail.com', email='rnt@gmail.com', password='old', first_name='Rudra')
+        self._run()
+        user = User.objects.get(username='rnt@gmail.com')
+        self.assertTrue(user.check_password('sumudrika'))
+        self.assertFalse(user.is_superuser)
+        self.assertEqual(user.first_name, 'Rudra')
+        self.assertEqual(User.objects.filter(email='rnt@gmail.com').count(), 1)

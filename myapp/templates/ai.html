@@ -500,6 +500,19 @@ mark.find-hit.current{background:#f59e0b;color:#111}
 .note-item-head{display:flex;align-items:center;gap:.55rem}
 .note-item-body{font-size:.76rem;color:var(--text);margin:.3rem 0 .15rem;line-height:1.4;white-space:pre-wrap;max-height:4.2em;overflow:hidden}
 .note-item-date{font-size:.66rem;color:#9aa3b0}
+.note-act{border:none;background:none;color:#c3c9d3;cursor:pointer;font-size:.78rem;padding:.2rem;flex-shrink:0;opacity:0;transition:opacity .12s,color .12s}
+.note-item:hover .note-act,.note-item:focus-within .note-act{opacity:1}
+.note-act:hover{color:var(--red)}
+@media(hover:none){.note-act{opacity:1}}
+.note-new{display:flex;align-items:center;gap:.5rem;width:100%;margin:0 0 .5rem;padding:.65rem .8rem;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--head);font:inherit;font-size:.86rem;font-weight:700;cursor:pointer}
+.note-new:hover{border-color:var(--red);color:var(--red)}
+.note-edit{display:flex;flex-direction:column;gap:.4rem;padding:.6rem .65rem;border:1px solid var(--red);border-radius:10px;margin-bottom:.4rem}
+.note-edit input,.note-edit textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--head);font:inherit;font-size:.8rem;padding:.4rem .5rem;resize:vertical}
+.note-edit textarea{min-height:5.5em}
+.note-edit-actions{display:flex;gap:.4rem;align-items:center}
+.note-edit-actions button{border:none;border-radius:8px;padding:.35rem .8rem;font:inherit;font-size:.76rem;font-weight:700;cursor:pointer;background:var(--red);color:#fff}
+.note-edit-actions button[data-note-cancel]{background:none;color:var(--text)}
+.note-edit-error{font-size:.72rem;color:#e5484d}
 
 /* ---- "report this reply" help text + inline form under a reply ---- */
 .msg-report-row{margin-top:.35rem;font-size:.7rem;color:#9aa3b0;line-height:1.5}
@@ -614,7 +627,6 @@ main.wallpaper-on{background:transparent}
 .msg-avatar[data-m="ultra"]{--m-hi:#a78bfa;--m-a:#7c5cff;--m-b:#4c2bc9;--m-glow:rgba(124,92,255,.45)}
 .msg-avatar[data-m="quick"]{--m-hi:#fbbf24;--m-a:#f5a524;--m-b:#c2660a;--m-glow:rgba(245,165,36,.45)}
 .msg-avatar[data-m="code"]{--m-hi:#6ba6f5;--m-a:#2f80ed;--m-b:#1550b0;--m-glow:rgba(47,128,237,.45)}
-.msg-avatar[data-m="reasoning"]{--m-hi:#818cf8;--m-a:#4f46e5;--m-b:#2e2789;--m-glow:rgba(79,70,229,.45)}
 .msg-avatar[data-m="vision"]{--m-hi:#4dd9ee;--m-a:#06b6d4;--m-b:#0b6480;--m-glow:rgba(6,182,212,.45)}
 .msg-avatar[data-m="flux-klein-4b"]{--m-hi:#f9a8d4;--m-a:#ec4899;--m-b:#8f13a0;--m-glow:rgba(236,72,153,.45)}
 
@@ -760,7 +772,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 .input-wrap{max-width:780px;margin:0 auto;display:flex;align-items:flex-end;gap:.6rem;background:var(--bg-alt);border:1.5px solid var(--line);border-radius:18px;padding:.5rem .6rem .5rem 1rem;box-shadow:0 4px 20px rgba(0,0,0,.045);transition:border-color .2s,box-shadow .2s}
 .input-wrap:focus-within{border-color:var(--red);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.08)}
 .input-wrap.disabled{opacity:.6}
-#chatInput{flex:1 1 0;min-width:0;width:0;border:none;background:none;resize:none;font-family:inherit;font-size:.92rem;color:var(--head);max-height:140px;line-height:1.5;padding:.4rem 0;transition:height .12s ease}
+#chatInput{flex:1 1 0;min-width:0;width:0;border:none;background:none;resize:none;font-family:inherit;font-size:.92rem;color:var(--head);line-height:1.5;padding:.4rem 0;transition:height .12s ease;height:calc(1.5em + .8rem)!important;max-height:calc(1.5em + .8rem)!important;overflow-y:auto}
 #chatInput:focus{outline:none}
 .input-wrap>.model-picker-wrap,.input-wrap>.github-wrap,.input-wrap>.mic-btn,.input-wrap>.search-btn,.input-wrap>#sendBtn{flex:0 0 auto}
 #sendBtn{border:none;cursor:pointer;background:linear-gradient(135deg,var(--red),var(--red-dark));color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .2s,transform .1s}
@@ -820,6 +832,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 .call-timer{margin:.15rem 0 0;font-size:.85rem;color:rgba(233,241,238,.65);font-variant-numeric:tabular-nums}
 .call-status{margin:1.1rem 0 .3rem;font-size:1rem;font-weight:700;color:rgb(var(--accent-rgb));min-height:1.5em}
 .call-caption{margin:0;min-height:4.2em;max-height:9.5em;overflow-y:auto;font-size:.92rem;line-height:1.5;color:rgba(233,241,238,.85);width:100%}
+.call-caption[data-who="you"]{color:#fff;font-weight:600}
+.call-caption[data-who="you"]::before{content:'You';display:block;margin-bottom:.15rem;font-size:.66rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgb(var(--accent-rgb))}
 .call-name-form{display:flex;gap:.45rem;width:100%;margin-top:.7rem}
 .call-name-form[hidden]{display:none}
 .call-name-form input{flex:1;min-width:0;padding:.65rem .8rem;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;font:inherit;font-size:.9rem}
@@ -2338,12 +2352,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }
 
   function autoResize(){
-    input.style.height = 'auto';
-    // Reads the CSS max-height (lower on mobile — see the 480px media
-    // query) instead of a hardcoded value, so the same function respects
-    // whatever cap the current screen size actually wants.
-    var max = parseInt(getComputedStyle(input).maxHeight, 10) || 140;
-    input.style.height = Math.min(input.scrollHeight, max) + 'px';
+    // The box keeps the height of one line and scrolls once the text is longer.
+    input.style.height = '';
   }
   input.addEventListener('input', autoResize);
 
@@ -2803,8 +2813,6 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     'quick': '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.4 2 4.9 13.1h5.3L9.9 22l8.9-11.6h-5.6L13.4 2z"/></svg>',
     // Angle brackets — coding.
     'code': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m8.4 7.5-4.6 4.6 4.6 4.6M15.6 7.5l4.6 4.6-4.6 4.6"/></svg>',
-    // Connected nodes — multi-step reasoning.
-    'reasoning': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="12" cy="4.6" r="2.3" fill="#fff"/><circle cx="5.2" cy="17" r="2.3" fill="#fff"/><circle cx="18.8" cy="17" r="2.3" fill="#fff"/><path d="M12 6.9 6.4 14.8M12 6.9l5.6 7.9M7.5 17h9"/></svg>',
     // Eye — image understanding.
     'vision': '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.9 12S5.5 5.4 12 5.4 22.1 12 22.1 12 18.5 18.6 12 18.6 1.9 12 1.9 12z"/><circle cx="12" cy="12" r="2.6" fill="#fff" stroke="none"/></svg>',
     // Wand and sparkles — image generation.
@@ -4715,8 +4723,18 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   function callSetState(kind, status, caption){
     callOverlay.dataset.state = kind;
     callStatusEl.textContent = status;
-    if (typeof caption === 'string') callCaptionEl.textContent = caption;
+    if (typeof caption === 'string') {
+      callCaptionEl.textContent = caption;
+      callCaptionEl.dataset.who = '';
+    }
     callSkipBtn.hidden = kind !== 'speaking';
+  }
+  // What the caller says is shown as they say it, and stays on the screen
+  // while the answer is prepared; the answer replaces it once it is read out.
+  function callShowYou(text){
+    callCaptionEl.textContent = text;
+    callCaptionEl.dataset.who = text ? 'you' : '';
+    callCaptionEl.scrollTop = callCaptionEl.scrollHeight;
   }
   function callNewToken(){
     voiceCall.token += 1;
@@ -4859,7 +4877,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   // microphone. Whatever the microphone hears that is mostly the words being
   // read is treated as that echo, not as the caller talking.
   function callWords(text){
-    return (text || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+    return (text || '').toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
   }
   function callIsEcho(heard, spoken){
     var words = callWords(heard);
@@ -4869,12 +4887,15 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var matching = words.filter(function(word){ return known[word]; }).length;
     return matching / words.length >= 0.6;
   }
-  var CALL_SHORT_INTERRUPTIONS = /^(?:stop|wait|hold on|hey|sorry|no|okay|ok|yes|bye|goodbye|skip|hello|excuse me)$/;
+  // A cough, a keyboard or someone walking past can come back from the speech
+  // engine as a word or two, so the reply is only cut off for a real sentence
+  // (three words or more) or for a short command said on its own.
+  var CALL_INTERRUPT_WORDS = 3;
+  var CALL_STOP_COMMANDS = /^(?:please )?(?:stop|wait|pause|hold on|excuse me|bye|bye bye|goodbye|ruko|rukiye|ruk jao|bas|रुको|रुकिए|रुक जाओ|बस)(?: (?:stop|wait|please|now|it|bye|ruko|bas))*$/;
   function callIsInterruption(heard, spoken){
     var words = callWords(heard);
-    if (!words.length) return false;
-    var plausible = words.length >= 2 || words[0].length >= 4 || CALL_SHORT_INTERRUPTIONS.test(words[0]);
-    return plausible && !callIsEcho(heard, spoken);
+    if (!words.length || callIsEcho(heard, spoken)) return false;
+    return words.length >= CALL_INTERRUPT_WORDS || CALL_STOP_COMMANDS.test(words.join(' '));
   }
 
   // Speaks `text` in a woman's voice (Listen uses a man's) with the same
@@ -4938,6 +4959,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         var parts = [];
         for (var i = firstSegment; i < e.results.length; i++) parts.push(e.results[i][0].transcript);
         heard = parts.join(' ').trim();
+        callShowYou(heard);
         clearTimeout(settle);
         settle = setTimeout(function(){ try { rec.stop(); } catch (err) {} }, CALL_SETTLE_MS);
       };
@@ -4981,8 +5003,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }
 
   // Listens for one utterance. onFinal(text) gets the final transcript;
-  // onSilence() runs when nothing was heard. Nothing the caller says is shown
-  // on screen — the screen only tells them to speak up.
+  // onSilence() runs when nothing was heard. The words are shown on the
+  // screen as the caller says them.
   function callListen(onFinal, onSilence, lang){
     if (!voiceCall.active) return;
     if (voiceCall.muted) {
@@ -5005,6 +5027,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       var text = '';
       for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
       heard = text.trim();
+      callShowYou(heard);
     };
     rec.onerror = function(e){
       var code = e && e.error;
@@ -5118,7 +5141,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       callSay('Goodbye ' + voiceCall.name + '! Have a great day.', function(){ callEnd(); });
       return;
     }
-    callSetState('thinking', 'Thinking…', '');
+    callSetState('thinking', 'Thinking…');
     send(text);
     // send() returns without starting when the chat is gated/locked.
     if (!state.streaming) {
@@ -5571,16 +5594,39 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   // ---- My Notes sidebar tab — see request_router.is_note_intent /
   // views._ai_save_note_response for how a note gets created in the first
   // place (typing 'take this note' / 'note it down' in the chat). ----
+  var editingNote = null;   // null, 'new' or a note id
+  function noteEditor(n){
+    var form = document.createElement('div');
+    form.className = 'note-edit';
+    form.innerHTML = '<input type="text" maxlength="120" placeholder="Title (optional)" data-note-heading>' +
+      '<textarea maxlength="4000" placeholder="Write your note" data-note-content></textarea>' +
+      '<div class="note-edit-error" data-note-error hidden></div>' +
+      '<div class="note-edit-actions"><button type="button" data-note-save>Save</button><button type="button" data-note-cancel>Cancel</button></div>';
+    if (n) {
+      form.querySelector('[data-note-heading]').value = n.heading || '';
+      form.querySelector('[data-note-content]').value = n.content || '';
+    }
+    form.setAttribute('data-note-form', n ? n.id : 'new');
+    return form;
+  }
   function renderNotesList(){
+    notesList.innerHTML = '';
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'note-new';
+    add.setAttribute('data-note-new', '');
+    add.innerHTML = '<i class="fas fa-plus"></i> New note';
+    notesList.appendChild(add);
+    if (editingNote === 'new') notesList.appendChild(noteEditor(null));
     if (!state.notes.length) {
-      notesList.innerHTML = '<div class="conv-empty">No notes yet — try saying "note it down" in chat.</div>';
+      if (editingNote !== 'new') notesList.insertAdjacentHTML('beforeend', '<div class="conv-empty">No notes yet — add one above, or say "note it down" in chat.</div>');
       return;
     }
-    notesList.innerHTML = '';
     var visibleNotes = 0;
     state.notes.forEach(function(n, index){
       if (noteQuery && ((n.heading || '') + ' ' + (n.content || '')).toLowerCase().indexOf(noteQuery) === -1) return;
       visibleNotes += 1;
+      if (editingNote === n.id) { notesList.appendChild(noteEditor(n)); return; }
       var item = document.createElement('div');
       item.className = 'note-item';
       item.setAttribute('data-id', n.id);
@@ -5597,8 +5643,16 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       del.setAttribute('data-note-del', n.id);
       del.setAttribute('aria-label', 'Delete note');
       del.innerHTML = '<i class="fas fa-trash"></i>';
+      var edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'note-act';
+      edit.setAttribute('data-note-edit', n.id);
+      edit.setAttribute('aria-label', 'Edit note');
+      edit.innerHTML = '<i class="fas fa-pen"></i>';
+      del.className = 'note-act';
       head.appendChild(icon);
       head.appendChild(title);
+      head.appendChild(edit);
       head.appendChild(del);
       var body = document.createElement('div');
       body.className = 'note-item-body';
@@ -5611,7 +5665,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       item.appendChild(date);
       notesList.appendChild(item);
     });
-    if (!visibleNotes) notesList.innerHTML = '<div class="conv-empty">No notes match your search.</div>';
+    if (!visibleNotes) notesList.insertAdjacentHTML('beforeend', '<div class="conv-empty">No notes match your search.</div>');
   }
   renderNotesList();
 
@@ -5624,7 +5678,35 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       .catch(function(){});
   }
 
+  function saveNote(form){
+    var id = form.getAttribute('data-note-form');
+    var error = form.querySelector('[data-note-error]');
+    var body = JSON.stringify({
+      heading: form.querySelector('[data-note-heading]').value,
+      content: form.querySelector('[data-note-content]').value
+    });
+    var url = id === 'new' ? '/AI/api/notes/create/' : '/AI/api/notes/' + id + '/update/';
+    fetch(url, {
+      method: 'POST', credentials: 'same-origin', body: body,
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() }
+    }).then(function(response){
+      return response.json().then(function(data){
+        if (!response.ok || data.status !== 'ok') throw new Error(data.detail || 'Could not save the note.');
+        state.notes = data.notes;
+        editingNote = null;
+        renderNotesList();
+      });
+    }).catch(function(err){
+      error.textContent = err.message || 'Could not save the note.';
+      error.hidden = false;
+    });
+  }
   notesList.addEventListener('click', function(e){
+    if (e.target.closest('[data-note-new]')) { editingNote = 'new'; renderNotesList(); var t = notesList.querySelector('[data-note-content]'); if (t) t.focus(); return; }
+    var editBtn = e.target.closest('[data-note-edit]');
+    if (editBtn) { editingNote = parseInt(editBtn.getAttribute('data-note-edit'), 10); renderNotesList(); var c = notesList.querySelector('[data-note-content]'); if (c) c.focus(); return; }
+    if (e.target.closest('[data-note-cancel]')) { editingNote = null; renderNotesList(); return; }
+    if (e.target.closest('[data-note-save]')) { saveNote(e.target.closest('[data-note-form]')); return; }
     var del = e.target.closest('[data-note-del]');
     if (!del) return;
     var id = parseInt(del.getAttribute('data-note-del'), 10);

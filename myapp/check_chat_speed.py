@@ -20,4 +20,4 @@ def probe(key):
 
 def run():
     with ThreadPoolExecutor(2) as pool:
-        list(pool.map(probe, ['gpt-oss-20b', 'quick']))
+        list(pool.map(probe, ['sol', 'quick']))
