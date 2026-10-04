@@ -12,6 +12,7 @@ import re
 import time
 import sqlite3
 import tempfile
+import threading
 import zipfile
 from contextlib import closing
 from pathlib import Path
@@ -244,6 +245,7 @@ def account_info(settings_obj, *, refresh=False):
 
 def forget_account(settings_obj):
     cache.delete(f'dropbox-account-{credentials_fingerprint(settings_obj)}')
+    forget_listing(settings_obj)
 
 
 def _ensure_folder(dbx, path):
@@ -254,9 +256,60 @@ def _ensure_folder(dbx, path):
             raise _connection_error(exc, f"Could not create the Dropbox folder '{path}'.")
 
 
-def create_backup(settings_obj, *, missing_images=None):
+UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024
+
+
+def _snapshot(path, target):
+    """A compact copy of the database: VACUUM INTO leaves out the free pages a
+    busy database accumulates (often half the file). The plain SQLite backup
+    copy is the fallback for a SQLite too old to have it."""
+    try:
+        with closing(sqlite3.connect(str(path))) as source:
+            source.execute('VACUUM INTO ?', (str(target),))
+    except sqlite3.Error:
+        Path(target).unlink(missing_ok=True)
+        with closing(sqlite3.connect(str(path))) as source, closing(sqlite3.connect(str(target))) as copy:
+            source.backup(copy)
+
+
+def _upload_file(dbx, file_path, remote_path, mode, progress=None):
+    """Upload a file in pieces read from disk, so a large backup never has to
+    sit in memory. Each piece is tried up to three times."""
+    chunk_size = UPLOAD_CHUNK_BYTES
+    total = Path(file_path).stat().st_size
+    with open(file_path, 'rb') as handle:
+        if total <= chunk_size:
+            return dbx.files_upload(handle.read(), remote_path, mode=mode)
+
+        def attempt(action):
+            for number in range(3):
+                try:
+                    return action()
+                except Exception:
+                    if number == 2:
+                        raise
+                    time.sleep(1 + number)
+
+        first = handle.read(chunk_size)
+        session = attempt(lambda: dbx.files_upload_session_start(first))
+        offset = len(first)
+        while total - offset > chunk_size:
+            piece = handle.read(chunk_size)
+            cursor = dropbox.files.UploadSessionCursor(session.session_id, offset)
+            attempt(lambda: dbx.files_upload_session_append_v2(piece, cursor))
+            offset += len(piece)
+            if progress:
+                progress(f'Uploading to Dropbox: {offset // (1024 * 1024)} of {total // (1024 * 1024)} MB')
+        last = handle.read()
+        cursor = dropbox.files.UploadSessionCursor(session.session_id, offset)
+        commit = dropbox.files.CommitInfo(path=remote_path, mode=mode)
+        return attempt(lambda: dbx.files_upload_session_finish(last, cursor, commit))
+
+
+def create_backup(settings_obj, *, missing_images=None, progress=None):
     """Upload a database-and-images ZIP and refresh the latest copies."""
     started = time.monotonic()
+    say = progress or (lambda text: None)
     try:
         dbx = _client(settings_obj)
         _ensure_folder(dbx, BACKUP_ROOT)
@@ -265,31 +318,32 @@ def create_backup(settings_obj, *, missing_images=None):
         path = db_path()
         if not path.exists():
             raise BackupError('Local database file was not found.')
-        # SQLite's backup API includes committed WAL data in a consistent copy.
-        with tempfile.TemporaryDirectory() as folder:
-            snapshot = Path(folder) / 'db.sqlite3'
-            with closing(sqlite3.connect(str(path))) as source, closing(sqlite3.connect(str(snapshot))) as target:
-                source.backup(target)
-            data = snapshot.read_bytes()
-        bundle = io.BytesIO()
-        logger.info('Dropbox database snapshot ready: %d bytes', len(data))
         skipped = []
-        with zipfile.ZipFile(bundle, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
-            archive.writestr('db.sqlite3', data)
-            for name, storage in _image_files():
-                try:
-                    with storage.open(name, 'rb') as image:
-                        image_data = image.read()
-                except FileNotFoundError:
-                    skipped.append(name)
-                    continue
-                archive.writestr('media/' + name.replace('\\', '/'), image_data, compress_type=zipfile.ZIP_STORED)
-            archive.writestr('backup_manifest.json', json.dumps({'version': 1, 'missing_images': skipped}))
+        with tempfile.TemporaryDirectory() as folder:
+            say('Preparing the database…')
+            snapshot = Path(folder) / 'db.sqlite3'
+            _snapshot(path, snapshot)
+            logger.info('Dropbox database snapshot ready: %d bytes', snapshot.stat().st_size)
+            say('Packing the database and images…')
+            bundle_path = Path(folder) / 'bundle.zip'
+            with zipfile.ZipFile(bundle_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+                archive.write(snapshot, 'db.sqlite3')
+                for name, storage in _image_files():
+                    try:
+                        with storage.open(name, 'rb') as image:
+                            image_data = image.read()
+                    except FileNotFoundError:
+                        skipped.append(name)
+                        continue
+                    archive.writestr('media/' + name.replace('\\', '/'), image_data, compress_type=zipfile.ZIP_STORED)
+                archive.writestr('backup_manifest.json', json.dumps({'version': 1, 'missing_images': skipped}))
 
-        stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        filename = f'backup_{stamp}.zip'
-        logger.info('Dropbox archive ready: %d bytes; starting upload', bundle.tell())
-        _upload(dbx, bundle.getvalue(), f'{BACKUP_FOLDER}/{filename}', dropbox.files.WriteMode.add)
+            stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            filename = f'backup_{stamp}.zip'
+            size = bundle_path.stat().st_size
+            logger.info('Dropbox archive ready: %d bytes; starting upload', size)
+            say(f'Uploading to Dropbox: 0 of {size // (1024 * 1024)} MB')
+            _upload_file(dbx, bundle_path, f'{BACKUP_FOLDER}/{filename}', dropbox.files.WriteMode.add, progress=say)
         # The timestamped bundle is the backup. A tiny pointer replaces two
         # redundant full uploads; restore always selects the actual bundle.
         try:
@@ -297,8 +351,9 @@ def create_backup(settings_obj, *, missing_images=None):
                              f'{BACKUP_FOLDER}/latest.json', mode=dropbox.files.WriteMode.overwrite)
         except Exception:
             logger.warning('Backup saved, but latest pointer could not be updated', exc_info=True)
+        forget_listing(settings_obj)
         logger.info('Dropbox backup saved: bytes=%d elapsed=%.1fs missing=%d',
-                    bundle.tell(), time.monotonic() - started, len(skipped))
+                    size, time.monotonic() - started, len(skipped))
         if missing_images is not None:
             missing_images.extend(skipped)
         return filename
@@ -306,6 +361,92 @@ def create_backup(settings_obj, *, missing_images=None):
         raise
     except Exception as exc:
         raise _connection_error(exc, 'The backup was not saved to Dropbox.')
+
+
+# ---- running a backup in the background -----------------------------------
+# A backup of a large database takes minutes, longer than a web request is
+# allowed to run, so it runs in a thread and the page shows its progress. The
+# status lives in a small file so every server process sees the same state.
+STATUS_FILE = Path(tempfile.gettempdir()) / 'vidhyora_dropbox_backup.json'
+JOB_STALE_SECONDS = 60 * 60
+_job_lock = threading.Lock()
+
+
+def _write_status(**fields):
+    try:
+        current = job_status() or {}
+        current.update(fields)
+        STATUS_FILE.write_text(json.dumps(current), encoding='utf-8')
+    except OSError:
+        logger.warning('Could not write the backup status file', exc_info=True)
+
+
+def job_status():
+    """{'state': 'running'|'done'|'error', 'message', 'seen', ...} or None."""
+    try:
+        status = json.loads(STATUS_FILE.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if status.get('state') == 'running' and time.time() - status.get('started', 0) > JOB_STALE_SECONDS:
+        status.update(state='error', message='The backup stopped before it finished. Please start it again.', seen=False)
+    return status
+
+
+def mark_status_seen():
+    _write_status(seen=True)
+
+
+def start_backup_job(settings_obj):
+    """Start a backup in the background. False when one is already running."""
+    with _job_lock:
+        status = job_status()
+        if status and status.get('state') == 'running':
+            return False
+        _write_status(state='running', started=time.time(), message='Starting…', seen=False, filename='', skipped=[])
+
+    def run():
+        try:
+            skipped = []
+            filename = create_backup(settings_obj, missing_images=skipped, progress=lambda text: _write_status(message=text))
+            _write_status(state='done', message=f'Backup saved to Dropbox as "{filename}".', filename=filename, skipped=skipped[:20], seen=False)
+        except BackupError as exc:
+            _write_status(state='error', message=str(exc), seen=False)
+        except Exception as exc:
+            logger.exception('Background Dropbox backup failed')
+            _write_status(state='error', message=f'The backup failed unexpectedly ({exc.__class__.__name__}). Please try again.', seen=False)
+        finally:
+            from django.db import connection
+            connection.close()
+
+    threading.Thread(target=run, name='dropbox-backup', daemon=True).start()
+    return True
+
+
+LISTING_CACHE_SECONDS = 120
+
+
+def _listing_key(settings_obj):
+    return f'dropbox-listing-{credentials_fingerprint(settings_obj)}'
+
+
+def forget_listing(settings_obj):
+    try:
+        cache.delete(_listing_key(settings_obj))
+    except AttributeError:
+        pass
+
+
+def list_backup_entries(settings_obj, *, refresh=False):
+    """[(name, client_modified)] newest first; kept for two minutes so opening
+    the page does not ask Dropbox every time."""
+    key = _listing_key(settings_obj)
+    if not refresh:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+    entries = [(f.name, f.client_modified) for f in list_backups(settings_obj)]
+    cache.set(key, entries, LISTING_CACHE_SECONDS)
+    return entries
 
 
 def list_backups(settings_obj):
@@ -364,6 +505,7 @@ def delete_all_backups(settings_obj):
                 continue
             dbx.files_delete_v2(path)
             deleted += 1
+        forget_listing(settings_obj)
         return deleted
     except BackupError:
         raise

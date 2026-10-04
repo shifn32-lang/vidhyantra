@@ -82,3 +82,84 @@ class BackupBundleTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder), patch.object(backup, '_client', return_value=dbx):
             with self.assertRaises(backup.BackupError):
                 backup.restore_backup(SimpleNamespace(), 'backup.zip')
+
+
+class LargeBackupTests(SimpleTestCase):
+    def test_a_large_file_is_uploaded_in_pieces_read_from_disk(self):
+        data = bytes(range(256)) * 10
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'big.zip'
+            path.write_bytes(data)
+            dbx = Mock()
+            dbx.files_upload_session_start.return_value = SimpleNamespace(session_id='s1')
+            progress = []
+            with patch.object(backup, 'UPLOAD_CHUNK_BYTES', 1000):
+                backup._upload_file(dbx, path, '/x/big.zip', backup.dropbox.files.WriteMode.add, progress=progress.append)
+        sent = dbx.files_upload_session_start.call_args.args[0]
+        sent += b''.join(call.args[0] for call in dbx.files_upload_session_append_v2.call_args_list)
+        sent += dbx.files_upload_session_finish.call_args.args[0]
+        self.assertEqual(sent, data)
+        dbx.files_upload.assert_not_called()
+        self.assertTrue(progress)
+
+    def test_a_failed_piece_is_retried(self):
+        data = b'x' * 2500
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'big.zip'
+            path.write_bytes(data)
+            dbx = Mock()
+            dbx.files_upload_session_start.return_value = SimpleNamespace(session_id='s1')
+            dbx.files_upload_session_append_v2.side_effect = [OSError('reset'), None, None]
+            with patch.object(backup, 'UPLOAD_CHUNK_BYTES', 1000), patch.object(backup.time, 'sleep'):
+                backup._upload_file(dbx, path, '/x/big.zip', backup.dropbox.files.WriteMode.add)
+        self.assertEqual(dbx.files_upload_session_append_v2.call_count, 2)
+
+    def test_the_snapshot_leaves_out_free_space(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'db.sqlite3'
+            with closing(sqlite3.connect(source)) as connection:
+                connection.execute('CREATE TABLE blobs (data BLOB)')
+                connection.executemany('INSERT INTO blobs VALUES (?)', [(b'x' * 50000,)] * 40)
+                connection.commit()
+                connection.execute('DELETE FROM blobs')
+                connection.commit()
+            copy = Path(folder) / 'copy.sqlite3'
+            backup._snapshot(source, copy)
+            self.assertLess(copy.stat().st_size, source.stat().st_size / 4)
+            with closing(sqlite3.connect(copy)) as connection:
+                self.assertEqual(connection.execute('SELECT count(*) FROM blobs').fetchone()[0], 0)
+
+    def test_the_background_job_reports_progress_and_the_result(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status_file = Path(folder) / 'status.json'
+
+            def fake_create(settings_obj, *, missing_images=None, progress=None):
+                progress('Uploading to Dropbox: 5 of 10 MB')
+                missing_images.append('avatars/gone.png')
+                return 'backup_x.zip'
+
+            with patch.object(backup, 'STATUS_FILE', status_file), patch.object(backup, 'create_backup', side_effect=fake_create):
+                self.assertTrue(backup.start_backup_job(SimpleNamespace()))
+                for thread in __import__('threading').enumerate():
+                    if thread.name == 'dropbox-backup':
+                        thread.join(5)
+                status = backup.job_status()
+        self.assertEqual(status['state'], 'done')
+        self.assertIn('backup_x.zip', status['message'])
+        self.assertEqual(status['skipped'], ['avatars/gone.png'])
+
+    def test_a_second_backup_cannot_start_while_one_is_running(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status_file = Path(folder) / 'status.json'
+            import time as _time
+            status_file.write_text(json.dumps({'state': 'running', 'started': _time.time(), 'message': 'Uploading'}))
+            with patch.object(backup, 'STATUS_FILE', status_file), patch.object(backup, 'create_backup') as create:
+                self.assertFalse(backup.start_backup_job(SimpleNamespace()))
+            create.assert_not_called()
+
+    def test_a_backup_that_never_finished_is_not_shown_as_running_forever(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status_file = Path(folder) / 'status.json'
+            status_file.write_text(json.dumps({'state': 'running', 'started': 1, 'message': 'Uploading'}))
+            with patch.object(backup, 'STATUS_FILE', status_file):
+                self.assertEqual(backup.job_status()['state'], 'error')

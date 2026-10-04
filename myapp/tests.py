@@ -6278,6 +6278,32 @@ class DropboxStoragePanelTests(TestCase):
         body = self._save(app_key='k', refresh_token='new-token').content.decode()
         self.assertIn('still missing: App Secret', body)
 
+    def test_backup_now_starts_a_background_job_and_returns_at_once(self):
+        with patch('myapp.dropbox_backup.start_backup_job', return_value=True) as start:
+            response = self.client.post('/store/dashboard/backup/run/', follow=True)
+        start.assert_called_once()
+        self.assertIn('has started', response.content.decode())
+
+    def test_the_page_shows_progress_and_blocks_a_second_backup(self):
+        status = {'state': 'running', 'started': 1e12, 'message': 'Uploading to Dropbox: 40 of 130 MB', 'seen': False}
+        with patch('myapp.dropbox_backup.job_status', return_value=status):
+            body = self.client.get(self.URL).content.decode()
+        self.assertIn('Uploading to Dropbox: 40 of 130 MB', body)
+        self.assertIn('Backup in progress', body)
+        self.assertIn('location.reload', body)
+
+    def test_a_finished_backup_is_reported_once(self):
+        status = {'state': 'done', 'message': 'Backup saved to Dropbox as "backup_x.zip".', 'seen': False, 'skipped': []}
+        with patch('myapp.dropbox_backup.job_status', return_value=status), patch('myapp.dropbox_backup.mark_status_seen') as seen:
+            body = self.client.get(self.URL).content.decode()
+        self.assertIn('backup_x.zip', body)
+        seen.assert_called_once()
+
+    def test_the_backup_list_is_cached_between_page_loads(self):
+        self.client.get(self.URL)
+        self.client.get(self.URL)
+        self.assertEqual(self.accounts['server-token'].files_list_folder.call_count, 1)
+
     def test_the_page_offers_a_get_code_link_for_the_app_key(self):
         body = self.client.get(self.URL).content.decode()
         self.assertIn('Get Dropbox code', body)

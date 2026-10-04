@@ -2197,6 +2197,16 @@ def _dropbox_sources(settings_obj):
 def dashboard_backup(request):
     settings_obj = DropboxSettings.get_solo()
     installed = dropbox_backup.dropbox is not None
+    backup_job = dropbox_backup.job_status()
+    if backup_job and backup_job.get('state') in ('done', 'error') and not backup_job.get('seen'):
+        dropbox_backup.mark_status_seen()
+        dropbox_backup.forget_listing(settings_obj)
+        if backup_job['state'] == 'done':
+            messages.success(request, backup_job.get('message', 'Backup saved.'))
+            if backup_job.get('skipped'):
+                messages.warning(request, f"Skipped {len(backup_job['skipped'])} missing image(s): {', '.join(backup_job['skipped'][:5])}. The database and the other images were saved.")
+        else:
+            messages.error(request, backup_job.get('message', 'The backup failed.'))
     backups = []
     list_error = None
     account = None
@@ -2215,14 +2225,16 @@ def dashboard_backup(request):
                 # timezone-*aware* values to the local (IST) timezone, so left
                 # naive this rendered as raw UTC clock time mislabeled as local.
                 backups = [
-                    {'name': f.name, 'client_modified': timezone.localtime(f.client_modified.replace(tzinfo=dt_timezone.utc))}
-                    for f in dropbox_backup.list_backups(settings_obj)
+                    {'name': name, 'client_modified': timezone.localtime(modified.replace(tzinfo=dt_timezone.utc))}
+                    for name, modified in dropbox_backup.list_backup_entries(settings_obj)
                 ]
             except dropbox_backup.BackupError as exc:
                 list_error = str(exc)
 
     sources = _dropbox_sources(settings_obj)
+    running_job = backup_job if backup_job and backup_job.get('state') == 'running' else None
     return render(request, 'dashboard/backup.html', {
+        'backup_running': running_job,
         'active': 'backup', 'settings_obj': settings_obj, 'backups': backups,
         'list_error': list_error, 'dropbox_installed': installed,
         'backup_folder': dropbox_backup.BACKUP_FOLDER,
@@ -2329,15 +2341,12 @@ def dashboard_backup_settings(request):
 def dashboard_backup_run(request):
     if request.method == 'POST':
         settings_obj = DropboxSettings.get_solo()
-        try:
-            missing_images = []
-            filename = dropbox_backup.create_backup(settings_obj, missing_images=missing_images)
-            messages.success(request, f'Backup saved to Dropbox as "{filename}".')
-            if missing_images:
-                examples = ', '.join(missing_images[:5])
-                messages.warning(request, f'Skipped {len(missing_images)} missing image(s): {examples}. Available images and the database were saved; skipped files are listed in the backup manifest.')
-        except dropbox_backup.BackupError as exc:
-            messages.error(request, str(exc))
+        if not settings_obj.is_configured or dropbox_backup.dropbox is None:
+            messages.error(request, 'Connect Dropbox first, then start the backup.')
+        elif dropbox_backup.start_backup_job(settings_obj):
+            messages.info(request, 'The backup has started. You can leave this page — it keeps running and the result shows here when it is done.')
+        else:
+            messages.info(request, 'A backup is already running. Its progress is shown on this page.')
     return redirect('dashboard_backup')
 
 
