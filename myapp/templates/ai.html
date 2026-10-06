@@ -4790,6 +4790,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
   function callRecordingWanted(){
     try { if (localStorage.getItem('ai_call_record') === '0') return false; } catch (e) {}
+    // Chrome on Android lets only one thing use the microphone at a time, and
+    // Google's speech engine (which hears the caller) needs it, so recording
+    // alongside it makes Chrome say "cannot record now as Chrome is recording".
+    if (/Android/i.test(navigator.userAgent)) return false;
     return !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   }
   function callQueueChunk(session, blob){
@@ -4843,6 +4847,17 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       .catch(function(){ return null; });
     if (callRecordingWanted()) callStartRecording(session);
     return session;
+  }
+  // If the speech engine cannot get the microphone because the recording holds
+  // it (some phones and sound cards allow only one user), the recording is
+  // dropped so the call itself keeps working. Returns true when it did so.
+  function callDropRecording(){
+    var session = voiceCall.session;
+    if (!session || !session.recorder || session.recorder.state === 'inactive') return false;
+    try { session.recorder.stop(); } catch (e) {}
+    session.uploadStopped = true;
+    if (callRecEl) callRecEl.hidden = true;
+    return true;
   }
   function callFinishSession(session){
     if (callRecEl) callRecEl.hidden = true;
@@ -5038,6 +5053,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     rec.onend = function(){
       if (token !== voiceCall.token || !voiceCall.active) return;
       voiceCall.recognition = null;
+      if (fatal === 'No microphone was found.' && callDropRecording()) {
+        setTimeout(function(){ callListen(onFinal, onSilence, lang); }, 300);
+        return;
+      }
       if (fatal) { callFail(fatal); return; }
       if (heard) onFinal(heard); else onSilence();
     };
@@ -7502,7 +7521,13 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 // sensitive should ever depend on this. Right-click and the common
 // inspect/view-source shortcuts are blocked to raise the bar for casual
 // copying; F12/Ctrl+Shift+I/J/C/Ctrl+U are the ones actually worth catching.
-document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+// Text boxes are left alone: on phones a long-press fires this same event, and
+// blocking it there removes the Paste / Select / Copy popup, so nobody can paste.
+document.addEventListener('contextmenu', function(e){
+  var t = e.target;
+  if (t && t.closest && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+  e.preventDefault();
+});
 document.addEventListener('keydown', function(e){
   var k = e.key;
   if (k === 'F12') { e.preventDefault(); return; }
