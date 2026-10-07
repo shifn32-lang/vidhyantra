@@ -122,6 +122,23 @@ a{color:var(--red);text-decoration:none}
 .loader-progress{width:min(260px,62vw);height:5px;border-radius:99px;background:var(--line);overflow:hidden}
 .loader-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--red),var(--red-dark));transition:width .18s linear}
 .loader-pct{font-family:var(--font-head);font-size:.85rem;font-weight:700;color:var(--red)}
+/* ---- signed-out welcome: shown instead of the boot loader ---- */
+#authWelcome{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:1.25rem 1rem;overflow-y:auto;background:radial-gradient(ellipse at 28% 22%,rgba(var(--accent-rgb),.22),transparent 55%),radial-gradient(ellipse at 76% 80%,rgba(var(--accent-rgb),.14),transparent 50%),color-mix(in srgb,var(--bg) 62%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);transition:opacity .35s ease,visibility .35s ease}
+#authWelcome.done{opacity:0;visibility:hidden}
+.aw-card{width:min(400px,100%);margin:auto;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid var(--line);border-radius:22px;padding:2rem 1.6rem 1.6rem;box-shadow:0 24px 60px rgba(8,12,18,.18),0 0 0 1px rgba(var(--accent-rgb),.06);text-align:center;animation:aw-in .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes aw-in{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.aw-badge{width:58px;height:58px;margin:0 auto 1rem;border-radius:17px;display:flex;align-items:center;justify-content:center;font-size:1.45rem;color:#fff;background:linear-gradient(135deg,var(--red),var(--red-dark));box-shadow:0 10px 24px rgba(var(--accent-rgb),.32)}
+.aw-logo{font-family:var(--font-head);font-size:1.65rem;font-weight:900;letter-spacing:-.03em;color:var(--head);line-height:1.15}
+.aw-logo span{color:var(--red)}
+.aw-sub{font-size:.86rem;color:var(--text);margin:.45rem 0 1.4rem;line-height:1.55}
+.aw-card .auth-form input{padding:.8rem .9rem;font-size:.9rem}
+.aw-card .auth-submit{padding:.82rem 0;font-size:.92rem}
+.aw-details{list-style:none;margin:0 0 1.3rem;border:1px solid var(--line);border-radius:14px;background:var(--bg-alt);text-align:left;overflow:hidden}
+.aw-details li{display:flex;justify-content:space-between;gap:1rem;padding:.7rem .95rem;font-size:.84rem}
+.aw-details li+li{border-top:1px solid var(--line)}
+.aw-details span{color:var(--text);flex-shrink:0}
+.aw-details strong{color:var(--head);font-weight:650;text-align:right;word-break:break-word}
+@media (prefers-reduced-motion:reduce){.aw-card{animation:none}}
 
 /* ---- brand logo ---- */
 .logo-wrap{display:flex;flex-direction:column;justify-content:center;text-decoration:none;flex:none;line-height:1.15}
@@ -1485,6 +1502,79 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 </style>
 </head>
 <body>
+{% if not ai_user %}
+{# Signed-out visitors get a login welcome instead of the boot loader. #}
+<div id="authWelcome" role="dialog" aria-modal="true" aria-labelledby="awTitle">
+  <div class="aw-card" id="awCard">
+    <div class="aw-badge"><i class="fas fa-wand-magic-sparkles"></i></div>
+    <h1 class="aw-logo" id="awTitle">Welcome <span>User</span></h1>
+    <p class="aw-sub">Log in to continue. Your chats are saved to your account.</p>
+    <form class="auth-form" id="awLoginForm">
+      <input type="text" name="identifier" placeholder="Email or phone number" required autocomplete="username">
+      <input type="password" name="password" placeholder="Password" required autocomplete="current-password">
+      <p class="auth-error" id="awLoginError"></p>
+      <button type="submit" class="auth-submit">Log In</button>
+    </form>
+  </div>
+</div>
+<script>
+(function authWelcome(){
+  var card = document.getElementById('awCard');
+  var form = document.getElementById('awLoginForm'), err = document.getElementById('awLoginError');
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function csrf(){
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    if (m) return decodeURIComponent(m[1]);
+    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return input ? input.value : '';
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var btn = form.querySelector('.auth-submit');
+    err.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Logging in…';
+    fetch('/AI/api/login/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+      body: JSON.stringify({ identifier: form.identifier.value.trim(), password: form.password.value })
+    }).then(function(resp){ return resp.json(); })
+      .then(function(data){
+        if (data.status !== 'ok') {
+          err.textContent = data.errors ? Object.values(data.errors)[0] : (data.detail || 'Something went wrong — please try again.');
+          btn.disabled = false;
+          btn.textContent = 'Log In';
+          return;
+        }
+        var u = data.user || {};
+        var rows = [['Name', u.name], ['Email', u.email], ['Phone', u.phone]]
+          .filter(function(r){ return r[1]; })
+          .map(function(r){ return '<li><span>' + r[0] + '</span><strong>' + esc(r[1]) + '</strong></li>'; })
+          .join('');
+        card.innerHTML =
+          '<div class="aw-badge"><i class="fas fa-check"></i></div>' +
+          '<h1 class="aw-logo">Welcome, <span>' + esc(u.name || 'there') + '</span></h1>' +
+          '<p class="aw-sub">You are logged in.</p>' +
+          (rows ? '<ul class="aw-details">' + rows + '</ul>' : '') +
+          '<button type="button" class="auth-submit" id="awContinueBtn" style="width:100%">Continue</button>';
+        document.getElementById('awContinueBtn').addEventListener('click', function(){ window.location.reload(); });
+      })
+      .catch(function(){
+        err.textContent = 'Something went wrong — please try again.';
+        btn.disabled = false;
+        btn.textContent = 'Log In';
+      });
+  });
+})();
+</script>
+{% else %}
 <div id="loader">
   <div class="loader-logo">{{ SITE_AI_BRAND_NAME }} <span>AI</span></div>
   <div class="loader-tag">A Fun, Powerful AI</div>
@@ -1503,6 +1593,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }, 70);
 })();
 </script>
+{% endif %}
 <header>
   <div class="hd-wrap">
     <div class="hd-left">
