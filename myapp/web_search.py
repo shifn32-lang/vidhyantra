@@ -35,6 +35,10 @@ MAX_RESULTS = 4
 # Enough for the model to extract a fact and cite a source, short enough that
 # five of them don't crowd out the actual conversation in the context window.
 MAX_SNIPPET_CHARS = 320
+# Deep research (see deep_research.py) is a multi-step job the person has already
+# chosen to wait for, so each lookup may take longer and keeps a longer extract.
+DEEP_SEARCH_TIMEOUT_SECONDS = 15
+DEEP_MAX_SNIPPET_CHARS = 900
 CACHE_SECONDS = 900
 # Row key in models.AIModelControl for the dashboard's search on/off switch and counters.
 SEARCH_CONTROL_KEY = 'web-search'
@@ -161,8 +165,11 @@ def needs_search(text):
     return bool(_RECENT_YEAR_RE.search(text) and '?' in text)
 
 
-def search(query, max_results=MAX_RESULTS):
+def search(query, max_results=MAX_RESULTS, *, deep=False):
     """Return ``[{title, url, snippet}, ...]``, or ``[]`` on any failure.
+
+    ``deep`` is for deep research only: Tavily's thorough search, a longer wait
+    and a longer extract per result. Everything else uses the quick lookup.
 
     Imports ddgs lazily, the same way doc_extract.py imports fitz — a search
     backend that is missing or broken must degrade to an ungrounded answer,
@@ -174,6 +181,8 @@ def search(query, max_results=MAX_RESULTS):
     from myapp import model_controls
     if not model_controls.is_enabled(SEARCH_CONTROL_KEY):
         return []
+    timeout = DEEP_SEARCH_TIMEOUT_SECONDS if deep else SEARCH_TIMEOUT_SECONDS
+    snippet_chars = DEEP_MAX_SNIPPET_CHARS if deep else MAX_SNIPPET_CHARS
 
     # hashlib, not hash(): Python randomises string hashing per process, so
     # built-in hash() would give every gunicorn worker a different key for the
@@ -181,7 +190,7 @@ def search(query, max_results=MAX_RESULTS):
     # cache on restart — and a collision would hand back another query's
     # results as if they were this one's.
     digest = hashlib.sha256(query.lower().encode('utf-8')).hexdigest()[:32]
-    cache_key = f'websearch:{digest}:{max_results}'
+    cache_key = f'websearch:{digest}:{max_results}' + (':deep' if deep else '')
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -196,12 +205,12 @@ def search(query, max_results=MAX_RESULTS):
                 json={
                     'api_key': tavily_key,
                     'query': query,
-                    'search_depth': 'basic',
+                    'search_depth': 'advanced' if deep else 'basic',
                     'max_results': max_results,
                     'include_answer': False,
                     'include_raw_content': False,
                 },
-                timeout=SEARCH_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
             response.raise_for_status()
             raw = response.json().get('results', [])
@@ -218,7 +227,7 @@ def search(query, max_results=MAX_RESULTS):
             model_controls.record_error(SEARCH_CONTROL_KEY, 'No Tavily key is set.')
             return []
         try:
-            raw = DDGS(timeout=SEARCH_TIMEOUT_SECONDS).text(query, max_results=max_results)
+            raw = DDGS(timeout=timeout).text(query, max_results=max_results)
         except Exception as exc:
             logger.warning('Web search failed for %r: %s', query[:80], exc)
             model_controls.record_error(SEARCH_CONTROL_KEY, f'{exc.__class__.__name__}: {exc}')
@@ -230,7 +239,7 @@ def search(query, max_results=MAX_RESULTS):
         url = (item.get('url') or item.get('href') or '').strip()
         snippet = ' '.join(
             (item.get('content') or item.get('body') or '').split()
-        )[:MAX_SNIPPET_CHARS]
+        )[:snippet_chars]
         if title and url:
             results.append({'title': title, 'url': url, 'snippet': snippet})
 

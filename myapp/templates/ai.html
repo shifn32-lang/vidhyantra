@@ -200,6 +200,68 @@ header{background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px s
 .acct-menu-item:hover i{color:var(--red)}
 .acct-menu-logout{border-top:1px solid var(--line);border-radius:0 0 9px 9px;margin-top:.3rem;padding-top:.7rem}
 .support-modal{z-index:52}
+/* "More images" style gallery. */
+.styles-backdrop{z-index:51}
+.styles-modal{z-index:52;width:min(940px,calc(100vw - 24px));max-height:min(860px,calc(100vh - 32px));max-height:min(860px,calc(100dvh - 32px));padding:0;flex-direction:column;overflow:hidden}
+.feature-modal.styles-modal:not([hidden]){display:flex}
+.styles-head{flex:none;padding:1.05rem 1.15rem .8rem;border-bottom:1px solid var(--line)}
+.styles-head .feature-modal-title{margin-bottom:.3rem;font-size:1.05rem}
+.styles-intro{margin:0 1.6rem 0 0;font-size:.78rem;line-height:1.5;color:var(--text)}
+.styles-photo-note i{color:var(--red)}
+.styles-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:1rem 1.15rem 1.2rem}
+.styles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem}
+.style-card{position:relative;display:block;padding:0;border:none;border-radius:16px;overflow:hidden;aspect-ratio:360/463;background:var(--bg-alt);cursor:pointer;isolation:isolate;transition:transform .18s,box-shadow .18s}
+.style-card img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}
+.style-card::after{content:"";position:absolute;inset:45% 0 0;background:linear-gradient(to bottom,transparent,rgba(0,0,0,.72));z-index:0;pointer-events:none}
+.style-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.28)}
+.style-card:hover img{transform:scale(1.05)}
+.style-card:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.style-title{position:absolute;left:.7rem;right:.7rem;bottom:.6rem;z-index:1;color:#fff;font-size:.82rem;font-weight:700;text-align:left;line-height:1.25;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.style-badge{position:absolute;top:.5rem;left:.5rem;z-index:1;display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .5rem;border-radius:50px;background:rgba(0,0,0,.55);color:#fff;font-size:.64rem;font-weight:700;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+@media (max-width:520px){
+  .styles-modal{width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}
+  .styles-scroll{padding:.8rem}
+  .styles-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+  .style-card{border-radius:13px}
+}
+/* "How to use" guide: a fixed head with topic chips, the topics scrolling below. */
+.guide-backdrop{z-index:51}
+.guide-modal{z-index:52;width:min(720px,calc(100vw - 24px));max-height:min(780px,calc(100vh - 32px));max-height:min(780px,calc(100dvh - 32px));padding:0;flex-direction:column;overflow:hidden}
+.feature-modal.guide-modal:not([hidden]){display:flex}
+.guide-head{flex:none;padding:1.05rem 1.15rem .75rem;border-bottom:1px solid var(--line);position:relative}
+.guide-head .feature-modal-title{margin-bottom:.3rem;font-size:1.05rem}
+.guide-intro{margin:0 1.6rem .7rem 0;font-size:.78rem;line-height:1.5;color:var(--text)}
+.guide-topics{display:flex;flex-wrap:wrap;gap:.35rem}
+.guide-topics button{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--line);background:var(--bg-alt);color:var(--head);font:600 .72rem var(--font-body),sans-serif;padding:.32rem .65rem;border-radius:50px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.guide-topics button i{font-size:.7rem;color:var(--red)}
+.guide-topics button:hover,.guide-topics button.active{border-color:var(--red);color:var(--red);background:rgba(var(--accent-rgb),.08)}
+.guide-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:.4rem 1.15rem 1.2rem;scroll-behavior:smooth}
+.guide-section{padding:.95rem 0 .4rem;border-bottom:1px dashed var(--line);scroll-margin-top:.4rem}
+.guide-section:last-child{border-bottom:none}
+.guide-section h3{display:flex;align-items:center;gap:.55rem;margin:0 0 .6rem;font-size:.95rem;font-weight:800;color:var(--head)}
+.guide-icon{flex:none;width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.13);color:var(--red);font-size:.82rem}
+.guide-icon.violet{background:rgba(139,92,246,.14);color:#8b5cf6}
+.guide-icon.blue{background:rgba(59,130,246,.14);color:#3b82f6}
+.guide-icon.amber{background:rgba(217,119,6,.14);color:#d97706}
+.guide-steps,.guide-tips{margin:0 0 .7rem;padding-left:1.25rem;display:flex;flex-direction:column;gap:.35rem}
+.guide-steps li,.guide-tips li{font-size:.8rem;line-height:1.55;color:var(--text)}
+.guide-steps li::marker{color:var(--red);font-weight:800}
+.guide-steps b,.guide-tips b{color:var(--head)}
+.guide-prompts{display:flex;flex-direction:column;gap:.45rem;margin-bottom:.6rem}
+.guide-prompt{display:flex;align-items:center;gap:.6rem;padding:.55rem .6rem .55rem .75rem;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;background:var(--bg-alt)}
+.guide-prompt p{flex:1;min-width:0;margin:0;font-size:.79rem;line-height:1.5;color:var(--head)}
+.guide-prompt-actions{flex:none;display:flex;align-items:center;gap:.3rem}
+.guide-try{border:none;border-radius:8px;padding:.38rem .7rem;background:var(--red);color:#fff;font:700 .72rem var(--font-body),sans-serif;cursor:pointer;white-space:nowrap;transition:filter .15s,transform .12s}
+.guide-try:hover{filter:brightness(1.08)}
+.guide-try:active{transform:scale(.95)}
+.guide-copy{border:1px solid var(--line);border-radius:8px;width:30px;height:30px;background:var(--surface);color:#9aa3b0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem}
+.guide-copy:hover{color:var(--red);border-color:var(--red)}
+.guide-copy.copied{color:#1fa855;border-color:#1fa855}
+@media (max-width:520px){
+  .guide-modal{width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}
+  .guide-prompt{flex-direction:column;align-items:stretch;gap:.45rem}
+  .guide-prompt-actions{justify-content:flex-end}
+}
 .support-modal-backdrop{z-index:51}
 .support-contact-list{display:flex;flex-direction:column;gap:.7rem;margin:.9rem 0 .25rem}
 .support-contact-action{display:flex;align-items:center;gap:.75rem;padding:.8rem;border:1px solid var(--line);border-radius:11px;background:var(--bg-alt);color:var(--head);text-decoration:none;transition:border-color .15s,background .15s}
@@ -392,12 +454,13 @@ header{background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px s
 /* ---- layout: sidebar + chat ---- */
 .body-row{flex:1;display:flex;overflow:hidden;position:relative}
 .sidebar{width:270px;flex:none;background:var(--bg-alt);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
-.sidebar-tools{display:flex;gap:.5rem;padding:.9rem .9rem 0}
+/* Bottom bar: reply language, file converter, theme. */
+.sidebar-tools{flex:none;display:flex;gap:.4rem;padding:.6rem .9rem .75rem;border-top:1px solid var(--line);background:color-mix(in srgb,var(--bg-alt) 70%,var(--surface))}
 .sidebar-tool-wrap{position:relative;flex:1}
 .sidebar-tool-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;border:1.5px solid var(--line);background:var(--surface);color:var(--head);font-weight:700;font-size:.78rem;padding:.5rem;border-radius:10px;cursor:pointer;transition:border-color .15s,color .15s,transform .12s}
 .sidebar-tool-btn:hover{border-color:var(--red);color:var(--red);transform:translateY(-1px)}
 .sidebar-tool-btn:active{transform:translateY(0) scale(.97)}
-.lang-dropdown{position:absolute;top:calc(100% + .5rem);left:0;width:max(100%,236px);max-width:calc(270px - 1.8rem);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(17,20,24,.16);padding:.4rem;z-index:30;display:flex;flex-direction:column;max-height:min(68vh,400px)}
+.lang-dropdown{position:absolute;bottom:calc(100% + .5rem);left:0;width:max(100%,236px);max-width:calc(270px - 1.8rem);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(17,20,24,.16);padding:.4rem;z-index:30;display:flex;flex-direction:column;max-height:min(68vh,400px)}
 .lang-dropdown[hidden]{display:none}
 .lang-search{width:100%;border:1.5px solid var(--line);background:var(--bg-alt);color:var(--head);border-radius:9px;padding:.45rem .6rem;font:inherit;font-size:.78rem;margin-bottom:.35rem;outline:none;flex-shrink:0}
 .lang-search:focus{border-color:var(--red)}
@@ -408,9 +471,15 @@ header{background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px s
 .lang-option{display:block;width:100%;text-align:left;border:none;background:none;padding:.5rem .6rem;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:600;color:var(--head);transition:background .12s}
 .lang-option:hover{background:var(--bg-alt)}
 .lang-option.active{background:var(--tint);color:var(--red)}
-.new-chat-btn{margin:.7rem .9rem .5rem;border:1.5px solid var(--line);background:var(--surface);color:var(--head);font-weight:700;font-size:.85rem;padding:.65rem .8rem;border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:border-color .15s,color .15s,transform .12s}
-.new-chat-btn:hover{border-color:var(--red);color:var(--red);transform:translateY(-1px)}
+/* Top of the side panel: New chat (the main action) and More images. */
+.sidebar-top{flex:none;display:flex;flex-direction:column;gap:.3rem;padding:.9rem .9rem .35rem}
+.new-chat-btn{border:none;background:linear-gradient(135deg,var(--red),var(--red-dark));color:#fff;font-weight:700;font-size:.85rem;padding:.68rem .85rem;border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:.55rem;box-shadow:0 6px 16px rgba(var(--accent-rgb),.25);transition:filter .15s,transform .12s,box-shadow .15s}
+.new-chat-btn[hidden]{display:none}
+.new-chat-btn:hover{filter:brightness(1.07);transform:translateY(-1px);box-shadow:0 8px 20px rgba(var(--accent-rgb),.32)}
 .new-chat-btn:active{transform:translateY(0) scale(.98)}
+.side-nav-btn{display:flex;align-items:center;gap:.6rem;width:100%;border:none;background:none;color:var(--head);font:inherit;font-size:.82rem;font-weight:650;text-align:left;padding:.45rem .5rem;border-radius:10px;cursor:pointer;transition:background .15s,color .15s}
+.side-nav-btn:hover{background:var(--line)}
+.side-nav-icon{flex:none;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(236,72,153,.18));color:#a78bfa;font-size:.8rem}
 .conv-list{flex:1;overflow-y:auto;padding:.3rem .6rem 1rem}
 /* ---- sidebar search + filters ---- */
 .conv-search-wrap{padding:.6rem .9rem 0}
@@ -459,7 +528,7 @@ mark.find-hit.current{background:#f59e0b;color:#111}
 .conv-icon{font-size:.72rem;color:#9aa3b0;flex-shrink:0}
 .conv-item.active .conv-icon{color:var(--red)}
 .conv-item:hover{background:var(--line)}
-.conv-item.active{background:var(--surface);box-shadow:0 1px 3px rgba(17,20,24,.08)}
+.conv-item.active{background:var(--surface);box-shadow:inset 3px 0 0 var(--red),0 1px 3px rgba(17,20,24,.08)}
 .conv-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv-del{border:none;background:none;color:#c3c9d3;cursor:pointer;font-size:.78rem;padding:.2rem;flex-shrink:0;opacity:0;transition:opacity .12s,color .12s,transform .12s}
 .conv-item:hover .conv-del{opacity:1}
@@ -491,10 +560,10 @@ mark.find-hit.current{background:#f59e0b;color:#111}
 .export-all-option small{display:block;font-size:.72rem;color:#9aa3b0;margin-top:.1rem}
 
 /* ---- sidebar Chats/My Notes tabs + note cards (Google-Keep style) ---- */
-.sidebar-tabs{display:flex;gap:.35rem;padding:.7rem .9rem 0}
-.sidebar-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:.35rem;border:none;background:none;color:#9aa3b0;font-weight:700;font-size:.76rem;padding:.5rem 0;border-radius:9px;cursor:pointer;transition:background .12s,color .12s}
+.sidebar-tabs{display:flex;gap:2px;margin:.45rem .9rem 0;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
+.sidebar-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:.35rem;border:none;background:none;color:#9aa3b0;font-weight:700;font-size:.76rem;padding:.42rem 0;border-radius:8px;cursor:pointer;transition:background .12s,color .12s}
 .sidebar-tab:hover{color:var(--head)}
-.sidebar-tab.active{background:var(--bg-alt);color:var(--red)}
+.sidebar-tab.active{background:rgba(var(--accent-rgb),.12);color:var(--red)}
 .note-item{padding:.6rem .65rem;border-radius:10px;margin-bottom:.15rem;transition:background .12s}
 .note-item:hover{background:var(--line)}
 .note-item-head{display:flex;align-items:center;gap:.55rem}
@@ -560,6 +629,29 @@ main.wallpaper-on{background:transparent}
 .hl-model{background:linear-gradient(135deg,var(--red),var(--red-dark));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:var(--red);font-weight:800;white-space:nowrap}
 .empty-lead{font-size:.95rem;line-height:1.6}
 .empty-lead .hl-model{white-space:normal}
+/* Greeting and quick-start cards on the welcome screen. */
+.empty-state .empty-greet{margin:-.2rem 0 .05rem;max-width:none;font-family:var(--font-head);font-size:clamp(1.25rem,2.4vw,1.6rem);line-height:1.25;font-weight:700;letter-spacing:-.02em;color:var(--head);min-height:1.2em}
+.empty-state .empty-greet:empty{display:none}
+.start-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;width:min(560px,100%);margin-top:.85rem}
+.start-card{--tone-rgb:var(--accent-rgb);display:flex;align-items:center;gap:.7rem;padding:.75rem .85rem;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--bg-alt) 85%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:var(--head);font:inherit;text-align:left;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s}
+.start-card:hover{border-color:rgba(var(--tone-rgb),.55);transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.16),0 0 0 3px rgba(var(--tone-rgb),.08)}
+.start-card:active{transform:translateY(0) scale(.98)}
+.start-card:focus-visible{outline:2px solid rgb(var(--tone-rgb));outline-offset:2px}
+.start-card[data-tone="violet"]{--tone-rgb:139,92,246}
+.start-card[data-tone="blue"]{--tone-rgb:59,130,246}
+.start-card[data-tone="amber"]{--tone-rgb:217,119,6}
+.start-icon{flex:none;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:rgba(var(--tone-rgb),.14);color:rgb(var(--tone-rgb));font-size:.95rem;transition:transform .18s}
+.start-card:hover .start-icon{transform:scale(1.07) rotate(-4deg)}
+.start-text{min-width:0;display:flex;flex-direction:column;gap:.1rem}
+.start-text b{font-size:.84rem;font-weight:700}
+.start-text small{font-size:.72rem;line-height:1.35;color:var(--text)}
+@media (max-width:480px){
+  .start-grid{gap:.45rem;margin-top:.6rem}
+  .start-card{padding:.6rem .65rem;gap:.55rem;border-radius:12px}
+  .start-icon{width:30px;height:30px;border-radius:9px;font-size:.82rem}
+  .start-text b{font-size:.78rem}
+  .start-text small{display:none}
+}
 
 /* Decorative motion stays inside the welcome area and uses only transforms
    and opacity. The isolated layer cannot cover controls or create scrollbars. */
@@ -576,6 +668,8 @@ main.wallpaper-on{background:transparent}
 .empty-state>*:nth-child(2){animation-delay:.10s}
 .empty-state>*:nth-child(3){animation-delay:.18s}
 .empty-state>*:nth-child(4){animation-delay:.26s}
+.empty-state>*:nth-child(5){animation-delay:.34s}
+.empty-state>*:nth-child(6){animation-delay:.42s}
 @keyframes empty-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
 @media (prefers-reduced-motion:reduce){
@@ -665,7 +759,27 @@ main.wallpaper-on{background:transparent}
 .msg-bubble.md > p + ol{margin-top:.7rem}
 .msg-bubble.md > ol + p{margin-top:.3rem}
 .msg-bubble.md .code-block{margin:.5rem 0;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
-.msg-row.assistant .msg-bubble:has(.code-block){max-width:min(900px,calc(100% - 48px));width:min(900px,calc(100% - 48px))}
+.msg-row.assistant .msg-bubble:has(.code-block),.msg-row.assistant .msg-bubble:has(.copy-card){max-width:min(900px,calc(100% - 48px));width:min(900px,calc(100% - 48px))}
+/* Ready-to-copy text (a rewritten message, a translation, a prompt, a drafted
+   email): its own card, with its own Copy button, so the user copies exactly
+   that text and not the sentence around it. */
+.msg-bubble.md .copy-card{margin:.55rem 0;border:1px solid rgba(var(--accent-rgb),.38);border-radius:12px;overflow:hidden;background:var(--surface)}
+.msg-bubble.md .copy-card-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.4rem .5rem .4rem .8rem;background:rgba(var(--accent-rgb),.1);font-size:.72rem;font-weight:800;color:var(--head);letter-spacing:.02em}
+.msg-bubble.md .copy-card-label{display:inline-flex;align-items:center;gap:.4rem;min-width:0}
+.msg-bubble.md .copy-card-label i{color:var(--red)}
+.copy-card-btn{display:inline-flex;align-items:center;gap:.35rem;border:1px solid rgba(var(--accent-rgb),.42);background:var(--surface);color:var(--red-dark);font:700 .72rem var(--font-body),sans-serif;border-radius:8px;padding:.3rem .65rem;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.copy-card-btn:hover{background:var(--red);border-color:var(--red);color:#fff}
+.copy-card-btn:active{transform:scale(.95)}
+.copy-card-btn.copied{background:#1fa855;border-color:#1fa855;color:#fff}
+.msg-bubble.md .copy-card-body{padding:.75rem .9rem;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;font-size:.93rem;line-height:1.65;color:var(--head);-webkit-user-select:text;user-select:text}
+/* Copy table: sits quietly under a table, like the other message actions. */
+.msg-table-block{margin:.6rem 0}
+.msg-table-block .msg-table-wrap{margin:0}
+.msg-table-tools{display:flex;justify-content:flex-end;margin-top:.15rem}
+.table-copy-btn{display:inline-flex;align-items:center;gap:.35rem;border:none;background:none;color:#9aa3b0;font:700 .72rem var(--font-body),sans-serif;cursor:pointer;padding:.25rem .5rem;border-radius:6px;transition:background .15s,color .15s}
+.table-copy-btn:hover{background:rgba(var(--accent-rgb),.1);color:var(--red)}
+.table-copy-btn:active{transform:scale(.94)}
+.table-copy-btn.copied{color:#1fa855}
 .msg-bubble.md .code-block-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.35rem .7rem;background:rgba(17,20,24,.08);font-size:.72rem;font-weight:700;color:var(--text)}
 .msg-bubble.md .code-language-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :root[data-theme="dark"] .msg-bubble.md .code-block-head{background:rgba(255,255,255,.08)}
@@ -674,10 +788,23 @@ main.wallpaper-on{background:transparent}
 .code-copy-btn:hover{background:rgba(var(--accent-rgb),.12);color:var(--red)}
 .code-copy-btn:active{transform:scale(.94)}
 .msg-actions{display:flex;align-items:center;gap:.15rem;margin-top:.5rem;padding-top:.4rem;border-top:1px solid var(--line)}
-.msg-copy-btn,.msg-speak-btn,.msg-retry-btn{display:inline-flex;align-items:center;gap:.35rem;border:none;background:none;color:#9aa3b0;font-size:.72rem;font-weight:700;cursor:pointer;padding:.25rem .5rem;border-radius:6px;transition:background .15s,color .15s}
+.msg-copy-btn,.msg-speak-btn,.msg-retry-btn,.msg-reply-btn{display:inline-flex;align-items:center;gap:.35rem;border:none;background:none;color:#9aa3b0;font-size:.72rem;font-weight:700;cursor:pointer;padding:.25rem .5rem;border-radius:6px;transition:background .15s,color .15s}
 .msg-actions>:first-child{margin-left:-.5rem;margin-top:-.25rem}
-.msg-copy-btn:hover,.msg-speak-btn:hover,.msg-retry-btn:hover{background:rgba(var(--accent-rgb),.1);color:var(--red)}
-.msg-copy-btn:active,.msg-speak-btn:active,.msg-retry-btn:active{transform:scale(.94)}
+.msg-copy-btn:hover,.msg-speak-btn:hover,.msg-retry-btn:hover,.msg-reply-btn:hover{background:rgba(var(--accent-rgb),.1);color:var(--red)}
+.msg-copy-btn:active,.msg-speak-btn:active,.msg-retry-btn:active,.msg-reply-btn:active{transform:scale(.94)}
+/* Reply to one answer: the bar above the message box while a reply is being
+   written, and the quote shown inside the sent message. */
+.reply-bar{max-width:780px;margin:0 auto .45rem;display:flex;align-items:center;gap:.6rem;background:var(--bg-alt);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;padding:.35rem .4rem .35rem .7rem;font-size:.76rem}
+.reply-bar[hidden]{display:none}
+.reply-bar>i{flex:none;color:var(--red)}
+.reply-bar-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:.1rem}
+.reply-bar-text b{font-size:.7rem;font-weight:800;color:var(--red)}
+.reply-bar-quote{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.reply-bar-close{flex:none;width:28px;height:28px;border:none;border-radius:50%;background:none;color:#9aa3b0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.reply-bar-close:hover{background:rgba(var(--accent-rgb),.12);color:var(--red)}
+.msg-quote{display:flex;flex-direction:column;gap:.1rem;margin:0 0 .45rem;padding:.35rem .6rem;border-left:3px solid rgba(255,255,255,.75);border-radius:6px;background:rgba(255,255,255,.15);font-size:.8rem;line-height:1.4}
+.msg-quote b{font-size:.66rem;font-weight:800;letter-spacing:.02em;opacity:.85}
+.msg-quote span{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;opacity:.95}
 /* Copy / Edit under a sent message: tucked away until the row is hovered
    (always shown on touch screens, where there is no hover). */
 .msg-user-actions{display:flex;justify-content:flex-end;gap:.15rem;margin:.4rem -.3rem -.2rem 0;opacity:0;transition:opacity .15s}
@@ -1173,7 +1300,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 }
 @media (max-width:640px){
   .msg-bubble{max-width:88%}
-  .msg-row.assistant .msg-bubble:has(.code-block){max-width:calc(100% - 36px);width:calc(100% - 36px)}
+  .msg-row.assistant .msg-bubble:has(.code-block),.msg-row.assistant .msg-bubble:has(.copy-card){max-width:calc(100% - 36px);width:calc(100% - 36px)}
   main{padding:1.1rem .9rem .8rem}
   /* On phones the empty-state's rounded, inset card read as a small boxed
      square floating in the middle of the screen with dead space around it.
@@ -1244,6 +1371,117 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   .gate-card{padding:1.2rem .9rem;border-radius:14px}
   .msg-avatar{width:26px;height:26px}
 }
+
+/* ---- Deep research: the composer switch, the plan card, live progress and the
+   finished report. The report is laid out like a GitHub README (ruled headings,
+   framed tables, tinted call-outs). ---- */
+.research-btn{display:flex;align-items:center;gap:.4rem;height:32px;flex:0 0 auto;align-self:center;padding:0 .7rem;border-radius:50px;border:1.5px solid var(--line);background:var(--surface);color:var(--text);font:700 .74rem var(--font-body),sans-serif;cursor:pointer;white-space:nowrap;transition:color .16s,background .16s,border-color .16s,box-shadow .16s,transform .12s}
+.research-btn i{font-size:.82rem}
+.research-btn:hover:not(:disabled):not(.active){color:var(--red);border-color:var(--red);transform:translateY(-1px)}
+.research-btn:active:not(:disabled){transform:translateY(0) scale(.96)}
+.research-btn:disabled{opacity:.45;cursor:default}
+.research-btn.active{color:#fff;background:linear-gradient(135deg,var(--red),var(--red-dark));border-color:var(--red);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22),0 5px 15px rgba(var(--accent-rgb),.3)}
+.research-btn.active:hover:not(:disabled){color:#fff;filter:brightness(1.06)}
+.input-wrap.research-mode{border-color:var(--red);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.14),0 4px 20px rgba(0,0,0,.045)}
+.research-mode-bar{max-width:780px;margin:0 auto .45rem;display:flex;align-items:center;gap:.5rem;font-size:.74rem;font-weight:700;color:var(--red);background:rgba(var(--accent-rgb),.1);border:1px solid rgba(var(--accent-rgb),.3);border-radius:10px;padding:.38rem .65rem}
+.research-mode-bar[hidden]{display:none}
+.research-mode-bar b{color:var(--head)}
+.research-mode-bar .rs-exit{margin-left:auto;border:none;background:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;white-space:nowrap}
+.msg-row.user .msg-bubble[data-mode="research"]{box-shadow:inset 3px 0 0 var(--red)}
+.msg-row.user .msg-bubble[data-mode="research"]::before{content:attr(data-mode-label);display:block;font-size:.62rem;font-weight:800;letter-spacing:.03em;opacity:.8;margin-bottom:.25rem;color:var(--red)}
+@media (max-width:640px){
+  .research-btn{width:32px;padding:0;justify-content:center;border-radius:50%}
+  .research-btn-label{display:none}
+}
+@media (max-width:480px){.research-btn{width:30px;height:30px}}
+
+.msg-row.assistant .msg-bubble:has(.rs-plan),.msg-row.assistant .msg-bubble:has(.rs-run){width:min(640px,calc(100% - 48px));max-width:none}
+.msg-bubble.md .rs-plan-title,.msg-bubble.md .rs-run-title{margin:0 0 .7rem;font-size:1.02rem;font-weight:800;line-height:1.35;color:var(--head)}
+.rs-steps{list-style:none;margin:0!important;padding:0!important;display:flex;flex-direction:column;gap:.6rem}
+.rs-steps li{display:flex;align-items:flex-start;gap:.7rem;margin:0!important;font-size:.9rem;line-height:1.45;color:var(--head)}
+.rs-mark{flex:none;position:relative;width:18px;height:18px;margin-top:.1rem;box-sizing:border-box;border-radius:50%;border:2px dashed #9aa3b0}
+.rs-steps li[data-state="active"] .rs-mark{border:2px solid rgba(var(--accent-rgb),.22);border-top-color:var(--red);animation:rsSpin .8s linear infinite}
+.rs-steps li[data-state="done"] .rs-mark{border:0;background:var(--red)}
+.rs-steps li[data-state="done"] .rs-mark::after{content:'';position:absolute;left:6px;top:2.5px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.rs-steps li[data-state="pending"] .rs-step-text{color:var(--text)}
+.rs-step-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.rs-step-meta{flex:none;margin-left:auto;padding-left:.4rem;font-size:.7rem;font-weight:700;color:#9aa3b0;white-space:nowrap}
+@keyframes rsSpin{to{transform:rotate(360deg)}}
+.rs-step-input{display:block;width:100%;box-sizing:border-box;min-width:0;font:inherit;font-size:.88rem;color:var(--head);background:var(--surface);border:1.5px solid var(--line);border-radius:8px;padding:.3rem .55rem}
+.rs-step-input:focus{outline:none;border-color:var(--red)}
+.rs-step-remove{flex:none;border:none;background:none;color:#9aa3b0;cursor:pointer;padding:.25rem .4rem;border-radius:6px;font-size:.8rem}
+.rs-step-remove:hover{color:var(--red);background:rgba(var(--accent-rgb),.1)}
+.rs-add-step{margin:.2rem 0 0 1.55rem;border:none;background:none;color:var(--red);font:700 .78rem var(--font-body),sans-serif;cursor:pointer;padding:.2rem 0;text-align:left}
+.rs-add-step:hover{text-decoration:underline}
+.msg-bubble.md .rs-plan-note{margin:.8rem 0 0;font-size:.74rem;line-height:1.4;color:#9aa3b0}
+.rs-plan-actions{display:flex;align-items:center;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
+.rs-spacer{flex:1}
+.rs-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1.5px solid var(--line);background:var(--surface);color:var(--head);font:700 .8rem var(--font-body),sans-serif;border-radius:50px;padding:.45rem 1rem;cursor:pointer;transition:border-color .15s,color .15s,background .15s,transform .12s}
+.rs-btn:hover{border-color:var(--red);color:var(--red)}
+.rs-btn:active{transform:scale(.96)}
+.rs-btn.primary{background:var(--head);border-color:var(--head);color:var(--bg)}
+.rs-btn.primary:hover{background:var(--red);border-color:var(--red);color:#fff}
+.rs-count{position:relative;display:inline-block;width:24px;height:24px;flex:none}
+.rs-count svg{display:block;width:24px;height:24px}
+.rs-count-fg{transition:stroke-dashoffset 1s linear}
+.rs-count-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;font-variant-numeric:tabular-nums}
+.rs-run-head{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem}
+.rs-run-time{flex:none;font-size:.74rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.rs-status{display:flex;align-items:center;gap:.55rem;margin:.9rem 0 0;font-size:.82rem}
+.rs-sources{margin-top:.85rem;padding-top:.7rem;border-top:1px solid var(--line)}
+.rs-sources-label{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9aa3b0}
+.rs-sources-label b{color:var(--head)}
+.rs-chips{list-style:none;margin:.5rem 0 0!important;padding:0!important;display:flex;flex-wrap:wrap;gap:.4rem}
+.rs-chips li{margin:0!important}
+.msg-bubble.md .rs-chips a{display:inline-flex;align-items:center;gap:.4rem;max-width:210px;padding:.2rem .6rem .2rem .25rem;border-radius:50px;border:1px solid var(--line);background:var(--surface);color:var(--head);font-size:.72rem;font-weight:650;text-decoration:none}
+.msg-bubble.md .rs-chips a:hover{border-color:var(--red);color:var(--red)}
+.rs-fav{flex:none;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;color:#fff;background:var(--fav,#64748b)}
+.rs-chip-host{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rs-chips-more{font-size:.72rem;font-weight:700;color:#9aa3b0;align-self:center;padding-left:.2rem}
+.rs-done{margin:0 0 1rem;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.rs-done summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:.55rem;padding:.6rem .85rem;font-size:.8rem;font-weight:750;color:var(--head)}
+.rs-done summary::-webkit-details-marker{display:none}
+.rs-done summary .fa-circle-check{color:var(--red)}
+.rs-done summary::after{content:'\f078';font-family:'Font Awesome 6 Free';font-weight:900;margin-left:auto;font-size:.62rem;color:#9aa3b0;transition:transform .15s}
+.rs-done[open] summary::after{transform:rotate(180deg)}
+.rs-done-body{padding:.3rem .95rem .9rem}
+.rs-report-live{min-height:1px}
+.research-report .rs-run{margin-bottom:1.15rem;padding-bottom:1rem;border-bottom:1px solid var(--line)}
+
+.msg-row.assistant .msg-bubble.research-report{width:min(860px,calc(100% - 48px));max-width:none;padding:1.15rem 1.4rem 1.05rem;font-size:.94rem;line-height:1.7}
+.research-report h1,.research-report h2,.research-report h3,.research-report h4{color:var(--head);font-weight:750;line-height:1.3}
+.research-report h1{font-size:1.65rem;margin:.1rem 0 .9rem;padding-bottom:.45rem;border-bottom:1px solid var(--line)}
+.research-report h2{font-size:1.28rem;margin:1.6rem 0 .75rem;padding-bottom:.32rem;border-bottom:1px solid var(--line)}
+.research-report h3{font-size:1.06rem;margin:1.25rem 0 .5rem}
+.research-report h4{font-size:.96rem;margin:1rem 0 .4rem}
+.research-report p{margin:.65rem 0}
+.research-report ul,.research-report ol{margin:.55rem 0 .75rem 1.5rem}
+.research-report li{margin:.32rem 0}
+.research-report hr{border:none;border-top:1px solid var(--line);margin:1.3rem 0 .9rem}
+/* Columns keep whole words (the bubble's break-anywhere rule would split "Enterprise" across lines); a wide table scrolls inside its frame. */
+.research-report .msg-table-wrap th,.research-report .msg-table-wrap td{overflow-wrap:break-word;word-break:normal;min-width:6.5rem}
+.research-report > p > em:only-child{font-size:.8rem;color:#9aa3b0}
+.msg-bubble.md.research-report blockquote{margin:.95rem 0;padding:.7rem 1rem;border-left:4px solid #c3cad4;background:rgba(127,127,127,.07);border-radius:0 9px 9px 0;color:var(--text);font-style:normal}
+.msg-bubble.md.research-report blockquote.callout-summary,.msg-bubble.md.research-report blockquote.callout-tip{border-left-color:var(--red);background:rgba(var(--accent-rgb),.09);color:var(--head)}
+.msg-bubble.md.research-report blockquote.callout-note{border-left-color:#2563eb;background:rgba(37,99,235,.08);color:var(--head)}
+.msg-bubble.md.research-report blockquote.callout-warning{border-left-color:#d97706;background:rgba(217,119,6,.1);color:var(--head)}
+.msg-bubble.md.research-report blockquote.callout-important{border-left-color:#dc2626;background:rgba(220,38,38,.08);color:var(--head)}
+.research-report .cite{font-size:.7em;font-weight:750;vertical-align:super;line-height:0;border-bottom:none!important;white-space:nowrap;padding:0 .05em}
+.research-report .cite::before{content:'['}
+.research-report .cite::after{content:']'}
+.research-report .src-host{margin-left:.35rem;font-size:.82em;color:#9aa3b0}
+.research-downloads{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:0 0 1.1rem;padding:.65rem .8rem;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.research-downloads .rd-label{margin-right:.3rem;font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9aa3b0}
+.msg-bubble.md .research-downloads a.rd-btn{display:inline-flex;align-items:center;gap:.45rem;margin:0;padding:.45rem .85rem;border:0;border-radius:9px;background:var(--red);color:#fff;font-size:.8rem;font-weight:750;text-decoration:none;transition:background .15s,transform .12s}
+.msg-bubble.md .research-downloads a.rd-btn::before{content:none}
+.msg-bubble.md .research-downloads a.rd-btn:hover{background:var(--red-dark);opacity:1}
+.msg-bubble.md .research-downloads a.rd-btn:active{transform:scale(.96)}
+@media (max-width:640px){
+  .msg-row.assistant .msg-bubble.research-report{width:calc(100% - 40px);padding:.95rem 1rem}
+  .research-report h1{font-size:1.4rem}
+  .research-report h2{font-size:1.15rem}
+}
+@media (prefers-reduced-motion:reduce){.rs-steps li[data-state="active"] .rs-mark{animation:none;border-top-color:rgba(var(--accent-rgb),.22);background:var(--red)}}
 </style>
 </head>
 <body>
@@ -1294,6 +1532,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           <button type="button" class="acct-menu-item" data-account-panel="coding" role="menuitem"><i class="fas fa-terminal"></i> Start coding</button>
           <button type="button" class="acct-menu-item" id="exportAllMenuBtn" role="menuitem"><i class="fas fa-file-export"></i> Export all chats</button>
           {% if ai_pwa_ready %}<button type="button" class="acct-menu-item" id="installAppMenuBtn" role="menuitem"><i class="fas fa-mobile-screen-button"></i> Install app</button>{% endif %}
+          <button type="button" class="acct-menu-item" id="guideMenuBtn" role="menuitem"><i class="fas fa-circle-question"></i> How to use</button>
           <button type="button" class="acct-menu-item" id="supportMenuBtn" role="menuitem"><i class="fas fa-headset"></i> Support</button>
           {% if ai_user.is_superuser %}<a class="acct-menu-item" href="{% url 'dashboard_home' %}" role="menuitem"><i class="fas fa-gauge-high"></i> Admin Panel</a>{% endif %}
           <button type="button" class="acct-menu-item acct-menu-logout" id="logoutBtn" role="menuitem"><i class="fas fa-arrow-right-from-bracket"></i> Log out</button>
@@ -1397,7 +1636,187 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   <button type="button" class="feature-modal-btn" id="featureModalGotIt">Got it</button>
 </div>
 
+{# "More images": ready-made picture styles (myapp/image_styles.py). A card puts its prompt in the message box. #}
+<div class="feature-modal-backdrop styles-backdrop" id="stylesBackdrop" hidden></div>
+<section class="feature-modal styles-modal" id="stylesModal" hidden role="dialog" aria-modal="true" aria-labelledby="stylesTitle">
+  <div class="styles-head">
+    <button type="button" class="feature-modal-close" id="stylesClose" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    <p class="feature-modal-title" id="stylesTitle">More images</p>
+    <p class="styles-intro">Pick a style — its prompt goes into your message box. Add what you want in the picture and send. <span class="styles-photo-note"><i class="fas fa-camera"></i> styles ask you to choose a photo.</span></p>
+  </div>
+  <div class="styles-scroll">
+  <div class="styles-grid" id="stylesGrid">
+    {% for style in ai_image_styles %}
+    <button type="button" class="style-card" data-prompt="{{ style.prompt }}"{% if style.photo %} data-photo="1"{% endif %}>
+      <img src="{% static style.thumb %}" alt="" loading="lazy" decoding="async" width="360" height="463">
+      {% if style.photo %}<span class="style-badge"><i class="fas fa-camera"></i> Your photo</span>{% endif %}
+      <span class="style-title">{{ style.title }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  </div>
+</section>
+
 {% if ai_user %}
+{# "How to use": every feature in short steps, with example prompts that can be tried in one click. #}
+<div class="feature-modal-backdrop guide-backdrop" id="guideBackdrop" hidden></div>
+<section class="feature-modal guide-modal" id="guideModal" hidden role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+  <div class="guide-head">
+    <button type="button" class="feature-modal-close" id="guideClose" aria-label="Close guide"><i class="fas fa-xmark"></i></button>
+    <p class="feature-modal-title" id="guideTitle">How to use {{ SITE_AI_BRAND_NAME }} AI</p>
+    <p class="guide-intro">Pick a topic. Each one has the steps and example prompts — press <b>Try it</b> to put a prompt in your message box, change the details, and send.</p>
+    <nav class="guide-topics" aria-label="Guide topics">
+      <button type="button" data-guide-jump="guide-chat"><i class="fas fa-comments"></i> Chat</button>
+      <button type="button" data-guide-jump="guide-images"><i class="fas fa-wand-magic-sparkles"></i> Images &amp; posters</button>
+      <button type="button" data-guide-jump="guide-files"><i class="fas fa-file-lines"></i> Files</button>
+      <button type="button" data-guide-jump="guide-research"><i class="fas fa-magnifying-glass-chart"></i> Deep research</button>
+      <button type="button" data-guide-jump="guide-web"><i class="fas fa-globe"></i> Web search</button>
+      <button type="button" data-guide-jump="guide-attach"><i class="fas fa-paperclip"></i> Attachments</button>
+      <button type="button" data-guide-jump="guide-reply"><i class="fas fa-reply"></i> Reply</button>
+      <button type="button" data-guide-jump="guide-voice"><i class="fas fa-microphone"></i> Voice</button>
+      <button type="button" data-guide-jump="guide-github"><i class="fab fa-github"></i> GitHub</button>
+      <button type="button" data-guide-jump="guide-notes"><i class="fas fa-note-sticky"></i> Notes</button>
+      <button type="button" data-guide-jump="guide-tips"><i class="fas fa-lightbulb"></i> Tips</button>
+    </nav>
+  </div>
+  <div class="guide-body" id="guideBody">
+    <article class="guide-section" id="guide-chat">
+      <h3><span class="guide-icon"><i class="fas fa-comments"></i></span> Chat and models</h3>
+      <ol class="guide-steps">
+        <li>Choose a model from the picker at the left of the message box — each one says what it is best at. Starting a different model opens a new chat.</li>
+        <li>Type your question in plain words and press <b>Enter</b> (Shift + Enter for a new line).</li>
+        <li>Under every answer: <b>Copy</b>, <b>Listen</b>, <b>Retry</b> for a fresh answer, and <b>Reply</b>. Hover your own message to <b>Edit</b> it.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Explain blockchain in simple words with one real-life example.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Make a 7-day study plan for my maths exam, 2 hours a day, with topics for each day in a table.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-images">
+      <h3><span class="guide-icon violet"><i class="fas fa-wand-magic-sparkles"></i></span> Images and posters</h3>
+      <ol class="guide-steps">
+        <li>Say what to draw: start with <b>Create an image of…</b>, or just name the design — <b>Instagram poster for…</b>, <b>logo for…</b>, <b>YouTube thumbnail for…</b>.</li>
+        <li>Describe the subject, style, colours and mood. Add a size if you need one: <b>1080×1350</b>, <b>16:9</b>, <b>phone wallpaper</b>.</li>
+        <li>For posters, write the exact words to show — brand name, price, email, phone, website. They are printed exactly as you typed them.</li>
+        <li>To change the picture, reply straight after it with a few words: <b>hands up pose</b>, <b>make the background a beach</b>, <b>red dress</b>.</li>
+        <li>Attach a photo with the paperclip and say what to change, e.g. <b>put this girl in a cafe</b>.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Create an image of a cozy reading corner by a rainy window, warm lamp light, watercolour style.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Instagram poster for my bakery Sweet Crumbs – Fresh Cakes Daily, cakes from ₹299. Call 9876543210, visit sweetcrumbs.in. Warm pastel background. 1080×1350.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Phone wallpaper of a calm mountain lake at sunrise, soft pastel colours.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-files">
+      <h3><span class="guide-icon blue"><i class="fas fa-file-lines"></i></span> PDF, Word, Excel and slides</h3>
+      <ol class="guide-steps">
+        <li>Ask for the file by its format: <b>PDF</b>, <b>Word</b>, <b>Excel</b>, <b>presentation</b>, or give a file name like <b>plan.docx</b>.</li>
+        <li>Say what goes in it: topic, sections, number of slides or rows, and any figures you already have.</li>
+        <li>You get a <b>Download</b> link. Ask again with changes to get a new version.</li>
+        <li>To put an image from the chat into a file, ask right after it: <b>add this image inside a PDF</b> (or Word / PowerPoint).</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Make a PDF report on renewable energy in India with an introduction, key facts, a table of sources by share, and a conclusion.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Create an Excel sheet of a monthly household budget with columns Item, Category, Planned, Actual and Difference.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Make a 6-slide presentation on time management for college students.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Add this image inside a PDF and give me the download link.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-research">
+      <h3><span class="guide-icon"><i class="fas fa-magnifying-glass-chart"></i></span> Deep research</h3>
+      <ol class="guide-steps">
+        <li>Press <b>Deep research</b> in the message box (it lights up), then type your question.</li>
+        <li>A research plan appears. <b>Edit</b> the steps if you like, then press <b>Start</b> — or it starts by itself after a minute.</li>
+        <li>It searches the web, reads the pages and writes a report with numbered sources. Download it as PDF, Word or Markdown.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt" data-research="1"><p>Compare electric scooters available in India under ₹1.5 lakh: range, price, charging time and service network.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-web">
+      <h3><span class="guide-icon"><i class="fas fa-globe"></i></span> Web search</h3>
+      <ol class="guide-steps">
+        <li>Press the <b>globe</b> button — the message box turns green.</li>
+        <li>Ask about anything recent: news, prices, results, dates. The answer uses live web results.</li>
+        <li>Press the globe again to turn it off.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>What are the latest updates on the Indian stock market today?</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-attach">
+      <h3><span class="guide-icon"><i class="fas fa-paperclip"></i></span> Attach files and photos</h3>
+      <ol class="guide-steps">
+        <li>Press the <b>paperclip</b> to attach images, PDFs, Word, Excel, PowerPoint, code files or audio (up to 50 MB each), or the <b>camera</b> to take a photo.</li>
+        <li>For a document, choose <b>Show details</b> to ask about it, or <b>Start coding</b> to have it changed.</li>
+        <li>Then say what you want: summarise it, explain it, find mistakes, translate it.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Summarise this file in 5 bullet points and list any dates or deadlines in it.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Read the text in this photo and solve the question step by step.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-reply">
+      <h3><span class="guide-icon"><i class="fas fa-reply"></i></span> Reply to one answer</h3>
+      <ol class="guide-steps">
+        <li>Press <b>Reply</b> under any answer — it is quoted above the message box.</li>
+        <li>To quote only part of it, select that text first, then press Reply.</li>
+        <li>Type your follow-up (“why?”, “shorter”, “give an example”) and send. Press <b>×</b> or Esc to cancel.</li>
+      </ol>
+    </article>
+
+    <article class="guide-section" id="guide-voice">
+      <h3><span class="guide-icon"><i class="fas fa-microphone"></i></span> Voice</h3>
+      <ol class="guide-steps">
+        <li>Press the <b>microphone</b> and speak — your words are typed into the box.</li>
+        <li>Press the <b>phone</b> to start a voice call and talk with the AI; you can interrupt it while it speaks.</li>
+        <li>Press <b>Listen</b> under any answer to hear it read aloud.</li>
+      </ol>
+    </article>
+
+    <article class="guide-section" id="guide-github">
+      <h3><span class="guide-icon"><i class="fab fa-github"></i></span> GitHub</h3>
+      <ol class="guide-steps">
+        <li>Press the <b>GitHub</b> button, connect your account and choose a repository.</li>
+        <li>Turn on <b>Use GitHub for my next message</b>.</li>
+        <li>Describe the change in plain words. The AI edits the code on a new branch and opens a pull request for you to review — your main branch is never touched.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Add a dark mode toggle to the website header and remember the choice.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-notes">
+      <h3><span class="guide-icon"><i class="fas fa-note-sticky"></i></span> Notes</h3>
+      <ol class="guide-steps">
+        <li>Say <b>take this note:</b> followed by the text to save it.</li>
+        <li>Say <b>show my notes</b> to see them, or open <b>My Notes</b> in the sidebar to edit or delete.</li>
+      </ol>
+      <div class="guide-prompts">
+        <div class="guide-prompt"><p>Take this note: pay the electricity bill before the 15th.</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+        <div class="guide-prompt"><p>Show my notes</p><div class="guide-prompt-actions"><button type="button" class="guide-try">Try it</button><button type="button" class="guide-copy" aria-label="Copy prompt"><i class="fas fa-copy"></i></button></div></div>
+      </div>
+    </article>
+
+    <article class="guide-section" id="guide-tips">
+      <h3><span class="guide-icon amber"><i class="fas fa-lightbulb"></i></span> Tips for better results</h3>
+      <ul class="guide-tips">
+        <li><b>Be specific.</b> Say who it is for, how long, and the format: “a 200-word email to my manager asking for leave on Friday”.</li>
+        <li><b>Give the facts you have.</b> Names, prices, dates and figures you type are used as they are; nothing is made up for them.</li>
+        <li><b>Build on the answer.</b> Ask “shorter”, “more formal”, “as a table” or “add examples” instead of starting over.</li>
+        <li><b>Start a New chat for a new topic,</b> so earlier messages don’t mix in.</li>
+        <li><b>Something wrong?</b> Press <b>Retry</b>, <b>Edit</b> your message, or <b>Report it</b> under the answer.</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
 <div class="feature-modal-backdrop support-modal-backdrop" id="supportModalBackdrop" hidden></div>
 <section class="feature-modal support-modal" id="supportModal" hidden role="dialog" aria-modal="true" aria-labelledby="supportModalTitle">
   <button type="button" class="feature-modal-close" id="supportModalClose" aria-label="Close support"><i class="fas fa-xmark"></i></button>
@@ -1612,31 +2031,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 <div class="body-row">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-tools">
-      <div class="sidebar-tool-wrap">
-        <button type="button" class="sidebar-tool-btn" id="langBtn" aria-haspopup="true" aria-expanded="false" title="Reply language">
-          <i class="fas fa-language"></i> <span id="langBtnLabel">English</span>
-        </button>
-        <div class="lang-dropdown" id="langDropdown" hidden>
-          <input type="search" class="lang-search" id="langSearch" placeholder="Search language" autocomplete="off" aria-label="Search language">
-          <div class="lang-scroll" id="langScroll">
-            {% regroup ai_languages by group as lang_groups %}
-            {% for group in lang_groups %}
-            <div class="lang-group-label">{{ group.grouper }}</div>
-            {% for lang in group.list %}
-            <button type="button" class="lang-option{% if lang.code == 'en' %} active{% endif %}" data-lang="{{ lang.code }}" data-label="{{ lang.short }}" data-speech="{{ lang.speech }}" data-search="{{ lang.search }}">{{ lang.label }}</button>
-            {% endfor %}
-            {% endfor %}
-            <div class="lang-empty" id="langEmpty" hidden>No language found</div>
-          </div>
-        </div>
-      </div>
-      <button type="button" class="sidebar-tool-btn" id="convertBtn" title="Convert a file to another format">
-        <i class="fas fa-right-left"></i>
-      </button>
-      <button type="button" class="sidebar-tool-btn" id="themeToggleBtn" title="Toggle dark mode">
-        <i class="fas fa-moon" id="themeToggleIcon"></i>
-      </button>
+    <div class="sidebar-top">
+      <button type="button" class="new-chat-btn" id="newChatBtn"><i class="fas fa-pen-to-square"></i> New chat</button>
+      <button type="button" class="side-nav-btn" id="moreImagesBtn"><span class="side-nav-icon"><i class="fas fa-images"></i></span> More images</button>
     </div>
     <div class="sidebar-tabs" id="sidebarTabs">
       <button type="button" class="sidebar-tab active" data-tab="chats"><i class="fas fa-message"></i> Chats</button>
@@ -1673,9 +2070,34 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         <button type="button" class="conv-filter-reset" id="convFilterReset">Reset filters</button>
       </div>
     </div>
-    <button type="button" class="new-chat-btn" id="newChatBtn"><i class="fas fa-plus"></i> New chat</button>
     <div class="conv-list" id="convList"><div class="conv-empty">No conversations yet</div></div>
     <div class="conv-list" id="notesList" hidden><div class="conv-empty">No notes yet — try saying "note it down" in chat.</div></div>
+    <div class="sidebar-tools" id="sidebarTools">
+      <div class="sidebar-tool-wrap">
+        <button type="button" class="sidebar-tool-btn" id="langBtn" aria-haspopup="true" aria-expanded="false" title="Reply language">
+          <i class="fas fa-language"></i> <span id="langBtnLabel">English</span>
+        </button>
+        <div class="lang-dropdown" id="langDropdown" hidden>
+          <input type="search" class="lang-search" id="langSearch" placeholder="Search language" autocomplete="off" aria-label="Search language">
+          <div class="lang-scroll" id="langScroll">
+            {% regroup ai_languages by group as lang_groups %}
+            {% for group in lang_groups %}
+            <div class="lang-group-label">{{ group.grouper }}</div>
+            {% for lang in group.list %}
+            <button type="button" class="lang-option{% if lang.code == 'en' %} active{% endif %}" data-lang="{{ lang.code }}" data-label="{{ lang.short }}" data-speech="{{ lang.speech }}" data-search="{{ lang.search }}">{{ lang.label }}</button>
+            {% endfor %}
+            {% endfor %}
+            <div class="lang-empty" id="langEmpty" hidden>No language found</div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="sidebar-tool-btn" id="convertBtn" title="Convert a file to another format">
+        <i class="fas fa-right-left"></i>
+      </button>
+      <button type="button" class="sidebar-tool-btn" id="themeToggleBtn" title="Toggle dark mode">
+        <i class="fas fa-moon" id="themeToggleIcon"></i>
+      </button>
+    </div>
   </aside>
 
   <div class="chat-shell">
@@ -1691,10 +2113,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     <main id="chatMain">
       <div class="chat-col" id="chatCol">
         <div class="empty-state" id="emptyState">
-          <div class="brand-mark">
-            <span class="logo-txt">{{ SITE_AI_BRAND_NAME }} <span>AI</span></span>
-            <span class="logo-sub">A Fun, Powerful AI</span>
-          </div>
+          <p class="empty-greet" data-name="{% if ai_user %}{{ ai_user.name }}{% endif %}"></p>
           {% if ai_full_model_access %}
           {# Only accounts that already have full model access keep seeing the ChatGPT-branded call-out. #}
           <p class="empty-lead">
@@ -1716,6 +2135,24 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
             <li>{{ SITE_AI_BRAND_NAME }} Code</li>
           </ul>
           {% endif %}
+          <div class="start-grid">
+            <button type="button" class="start-card" data-tone="violet" data-fill="Create a poster for ">
+              <span class="start-icon"><i class="fas fa-wand-magic-sparkles"></i></span>
+              <span class="start-text"><b>Design a poster</b><small>Posters, logos and social posts</small></span>
+            </button>
+            <button type="button" class="start-card" data-tone="green" data-action="research">
+              <span class="start-icon"><i class="fas fa-magnifying-glass-chart"></i></span>
+              <span class="start-text"><b>Deep research</b><small>A web-backed report to download</small></span>
+            </button>
+            <button type="button" class="start-card" data-tone="blue" data-fill="Make a PDF report on ">
+              <span class="start-icon"><i class="fas fa-file-lines"></i></span>
+              <span class="start-text"><b>Make a document</b><small>PDF, Word, Excel or slides</small></span>
+            </button>
+            <button type="button" class="start-card" data-tone="amber" data-fill="Write code to ">
+              <span class="start-icon"><i class="fas fa-code"></i></span>
+              <span class="start-text"><b>Write code</b><small>Build, fix or explain code</small></span>
+            </button>
+          </div>
           <p class="empty-hint">Bring a question, an idea, or your next big project.</p>
         </div>
       </div>
@@ -1739,6 +2176,16 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         <i class="fab fa-github"></i>
         <span>GitHub mode — your message will change the repository <b id="githubModeRepo"></b> and open a pull request</span>
         <button type="button" class="gh-exit" id="githubModeExit">Exit</button>
+      </div>
+      <div class="research-mode-bar" id="researchModeBar" hidden>
+        <i class="fas fa-magnifying-glass-chart"></i>
+        <span><b>Deep research</b> is on — your next message gets a research plan, a web search and a report you can download</span>
+        <button type="button" class="rs-exit" id="researchModeExit">Turn off</button>
+      </div>
+      <div class="reply-bar" id="replyBar" hidden>
+        <i class="fas fa-reply"></i>
+        <span class="reply-bar-text"><b>Replying to AI</b><span class="reply-bar-quote" id="replyBarQuote"></span></span>
+        <button type="button" class="reply-bar-close" id="replyBarClose" aria-label="Cancel reply" title="Cancel reply"><i class="fas fa-xmark"></i></button>
       </div>
       <div class="input-wrap" id="inputWrap">
         <div class="model-picker-wrap">
@@ -1840,6 +2287,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           </div>
         </div>
         {% endif %}
+        <button type="button" id="researchBtn" class="research-btn" aria-label="Turn on deep research" aria-pressed="false" title="Deep research — plan, search the web and write a report you can download"><i class="fas fa-magnifying-glass-chart"></i><span class="research-btn-label">Deep research</span></button>
         <button type="button" id="webSearchBtn" class="search-btn" aria-label="Enable web search" aria-pressed="false" title="Search the web for this message"><i class="fas fa-globe"></i></button>
         <button type="button" id="attachBtn" class="mic-btn" aria-label="Attach a file" title="Attach files — images, documents, spreadsheets, presentations, HTML or audio (up to 50 MB each; several documents at once)"><i class="fas fa-paperclip"></i></button>
         <input type="file" id="imageInput" multiple accept="image/*,audio/*,.pdf,.docx,.csv,.txt,.xlsx,.xlsm,.pptx,.html,.htm,.css,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.java,.c,.cpp,.h,.hpp,.cs,.php,.rb,.go,.rs,.swift,.kt,.kts,.sql,.json,.xml,.yaml,.yml,.md,.vue,.svelte,.sh,.ps1,.toml,.ini,.log,.tsv,.jsonl,.mp3,.wav,.m4a,.webm,.ogg" hidden>
@@ -1908,6 +2356,11 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     // Set by Retry/Edit: the sent message the next send() replaces.
     pendingReplace: null,
     webSearch: false,
+    // Deep research: the composer switch, and the plan card waiting to be started.
+    research: false,
+    researchPending: null,
+    // Set by the Reply button under an answer: { text, bubble } the next message answers.
+    replyTo: null,
     conversations: JSON.parse(document.getElementById('boot-conversations').textContent || '[]'),
     notes: JSON.parse(document.getElementById('boot-notes').textContent || '[]'),
     streaming: false,
@@ -1968,31 +2421,39 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var main = document.getElementById('chatMain');
   var col = document.getElementById('chatCol');
   col.addEventListener('click', function(e){
+    var startCard = e.target.closest('.start-card');
+    if (startCard) {
+      useStartCard(startCard);
+      return;
+    }
     var codeBtn = e.target.closest('.code-copy-btn');
     if (codeBtn) {
       var block = codeBtn.closest('.code-block');
       var codeEl = block && block.querySelector('code');
-      if (!codeEl || !navigator.clipboard) return;
-      navigator.clipboard.writeText(codeEl.textContent).then(function(){
-        var original = codeBtn.textContent;
-        codeBtn.textContent = 'Copied!';
-        setTimeout(function(){ codeBtn.textContent = original; }, 1500);
-      }).catch(function(){});
+      if (codeEl) copyWithFeedback(codeBtn, codeEl.textContent, COPY_LABELS_PLAIN);
+      return;
+    }
+    var cardBtn = e.target.closest('.copy-card-btn');
+    if (cardBtn) {
+      var card = cardBtn.closest('.copy-card');
+      var cardBody = card && card.querySelector('.copy-card-body');
+      if (cardBody) copyWithFeedback(cardBtn, cardBody.textContent, COPY_LABELS_ICON);
+      return;
+    }
+    var tableBtn = e.target.closest('.table-copy-btn');
+    if (tableBtn) {
+      var tableBlock = tableBtn.closest('.msg-table-block');
+      var tableEl = tableBlock && tableBlock.querySelector('table');
+      if (tableEl) copyWithFeedback(tableBtn, tableToTsv(tableEl), COPY_LABELS_TABLE);
       return;
     }
     var copyBtn = e.target.closest('.msg-copy-btn');
     if (copyBtn) {
       var msgBubble = copyBtn.closest('.msg-bubble');
       var rawText = msgBubble && msgBubble.dataset.rawText;
-      if (!rawText || !navigator.clipboard) return;
-      navigator.clipboard.writeText(rawText).then(function(){
-        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        copyBtn.classList.add('copied');
-        setTimeout(function(){
-          copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
-          copyBtn.classList.remove('copied');
-        }, 1500);
-      }).catch(function(){});
+      // A rewritten-text / prompt card is copied as its own text, not with the
+      // fence markers it was written with.
+      if (rawText) copyWithFeedback(copyBtn, plainReplyText(rawText), COPY_LABELS_ICON);
       return;
     }
     var speakBtn = e.target.closest('.msg-speak-btn');
@@ -2007,19 +2468,16 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       retryReply(retryBtn.closest('.msg-bubble'));
       return;
     }
+    var replyBtn = e.target.closest('.msg-reply-btn');
+    if (replyBtn) {
+      startReply(replyBtn.closest('.msg-bubble'));
+      return;
+    }
     var userCopyBtn = e.target.closest('.msg-user-copy');
     if (userCopyBtn) {
       var userCopyBubble = userCopyBtn.closest('.msg-bubble');
       var userText = userCopyBubble && userCopyBubble.dataset.rawText;
-      if (!userText || !navigator.clipboard) return;
-      navigator.clipboard.writeText(userText).then(function(){
-        userCopyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        userCopyBtn.classList.add('copied');
-        setTimeout(function(){
-          userCopyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
-          userCopyBtn.classList.remove('copied');
-        }, 1500);
-      }).catch(function(){});
+      if (userText) copyWithFeedback(userCopyBtn, userText, COPY_LABELS_ICON);
       return;
     }
     var userEditBtn = e.target.closest('.msg-user-edit');
@@ -2071,6 +2529,12 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   var cameraInput = document.getElementById('cameraInput');
   var githubBtn = document.getElementById('githubBtn');
   var githubBtnLabel = document.getElementById('githubBtnLabel');
+  var researchBtn = document.getElementById('researchBtn');
+  var researchModeBar = document.getElementById('researchModeBar');
+  var researchModeExit = document.getElementById('researchModeExit');
+  var replyBar = document.getElementById('replyBar');
+  var replyBarQuote = document.getElementById('replyBarQuote');
+  var replyBarClose = document.getElementById('replyBarClose');
   var githubPanel = document.getElementById('githubPanel');
   var githubDisconnected = document.getElementById('githubDisconnected');
   var githubConnected = document.getElementById('githubConnected');
@@ -2135,6 +2599,92 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     });
   }
 
+  // ---- copying ----
+  // navigator.clipboard only exists on secure pages (and is missing in some
+  // in-app browsers), and can refuse when the page is not focused. A hidden
+  // textarea plus the old execCommand('copy') is the fallback: a Copy button
+  // that silently does nothing is worse than no button.
+  function copyText(text){
+    text = String(text == null ? '' : text);
+    function viaTextarea(){
+      return new Promise(function(resolve, reject){
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';
+        document.body.appendChild(area);
+        var ok = false;
+        try {
+          area.focus();
+          area.select();
+          area.setSelectionRange(0, text.length);
+          ok = document.execCommand('copy');
+        } catch (err) {}
+        document.body.removeChild(area);
+        if (ok) resolve(); else reject(new Error('copy failed'));
+      });
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext !== false) {
+      return navigator.clipboard.writeText(text).catch(viaTextarea);
+    }
+    return viaTextarea();
+  }
+  var COPY_LABELS_PLAIN = { idle: 'Copy', done: 'Copied!', fail: 'Copy failed' };
+  var COPY_LABELS_ICON = {
+    idle: '<i class="fas fa-copy"></i> Copy', done: '<i class="fas fa-check"></i> Copied!',
+    fail: '<i class="fas fa-triangle-exclamation"></i> Copy failed'
+  };
+  var COPY_LABELS_TABLE = {
+    idle: '<i class="fas fa-table"></i> Copy table', done: '<i class="fas fa-check"></i> Copied!',
+    fail: '<i class="fas fa-triangle-exclamation"></i> Copy failed'
+  };
+  // Copies `text`, then shows "Copied!" (or "Copy failed") on the button for a
+  // moment before it goes back to its normal label.
+  function copyWithFeedback(button, text, labels){
+    function show(html, ok){
+      button.innerHTML = html;
+      button.classList.toggle('copied', ok);
+      clearTimeout(button._copyTimer);
+      button._copyTimer = setTimeout(function(){
+        button.innerHTML = labels.idle;
+        button.classList.remove('copied');
+      }, 1600);
+    }
+    return copyText(text).then(function(){ show(labels.done, true); }, function(){ show(labels.fail, false); });
+  }
+  // A table as tab-separated text: pasted into Excel or Google Sheets it lands
+  // in separate cells.
+  function tableToTsv(table){
+    return Array.prototype.map.call(table.querySelectorAll('tr'), function(row){
+      return Array.prototype.map.call(row.children, function(cell){
+        return cell.textContent.replace(/\s+/g, ' ').trim();
+      }).join('\t');
+    }).join('\n');
+  }
+
+  // A fenced block with one of these language tags is a piece of ready-to-copy
+  // text — a rewritten message, a translation, a prompt for another AI tool, a
+  // drafted email — and is drawn as a card with its own Copy button instead of
+  // a code block (the server asks the model for these tags: ai_chat.py,
+  // copy_card_reminder).
+  var COPY_CARDS = {
+    prompt: 'Prompt', rewrite: 'Rewritten text', rephrased: 'Rewritten text', translation: 'Translation',
+    message: 'Message', email: 'Email', caption: 'Caption', draft: 'Draft', reply: 'Reply'
+  };
+  // The card label for a fence's language tag, or '' when it is ordinary code.
+  // hasOwnProperty, so a tag like "constructor" is not mistaken for a card.
+  function cardLabelFor(lang){
+    var key = String(lang || '').toLowerCase();
+    return Object.prototype.hasOwnProperty.call(COPY_CARDS, key) ? COPY_CARDS[key] : '';
+  }
+  // A reply with cards, as plain text: the card's words without its fences.
+  function plainReplyText(raw){
+    return String(raw || '').replace(/```([^\s`]*)[ \t]*\r?\n?([\s\S]*?)```/g, function(whole, lang, body){
+      return cardLabelFor(lang) ? body.replace(/\r?\n$/, '') : whole;
+    // A research report's "Download this report" line is buttons, not words to copy or read aloud.
+    }).replace(/\n*\*\*Download this report:\*\*[^\n]*\s*$/, '').trim();
+  }
+
   function downloadNameFor(url){
     try {
       var last = new URL(url, window.location.href).pathname.split('/').pop();
@@ -2192,6 +2742,17 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   function extractCodeBlocks(raw, blocks){
     return String(raw || '').replace(/```([^\s`]*)[ \t]*\r?\n?([\s\S]*?)```/g, function(_, lang, code){
       code = code.replace(/\n$/, '');
+      var cardLabel = cardLabelFor(lang);
+      if (cardLabel) {
+        // Ready-to-copy text: a card with its own Copy button. The words are
+        // set in the normal reading font (not monospace) and wrap like text.
+        var cardHtml = '<div class="copy-card"><div class="copy-card-head">' +
+          '<span class="copy-card-label"><i class="fas fa-wand-magic-sparkles"></i> ' + escHtml(cardLabel) + '</span>' +
+          '<button type="button" class="copy-card-btn" aria-label="Copy ' + escHtml(cardLabel.toLowerCase()) + '"><i class="fas fa-copy"></i> Copy</button>' +
+          '</div><div class="copy-card-body">' + escHtml(code.replace(/^\r?\n/, '').replace(/\s+$/, '')) + '</div></div>';
+        blocks.push(cardHtml);
+        return 'CB' + (blocks.length - 1) + '';
+      }
       var label = escHtml(cleanCodeLanguage(lang));
       var head = '<div class="code-block-head"><span class="code-language-label">' + label + '</span><button type="button" class="code-copy-btn" aria-label="Copy code">Copy</button></div>';
       var html = '<div class="code-block">' + head + '<pre><code>' + escHtml(code) + '</code></pre></div>';
@@ -2241,7 +2802,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   // `|...|` body rows) are collapsed into real HTML up front, in one
   // lookahead pass over the split lines — simpler than threading table
   // state through the line-by-line block loop below, which then only has
-  // to recognize the resulting <div class="msg-table-wrap">... line and
+  // to recognize the resulting <div class="msg-table-block">... line and
   // emit it as-is.
   function extractTables(lines){
     var i = 0;
@@ -2256,11 +2817,14 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           body.push(parseTableRow(lines[j].trim()));
           j++;
         }
-        var html = '<div class="msg-table-wrap"><table><thead><tr>' +
+        // The wrapper keeps the framed, scrollable table and adds a Copy table
+        // button (tab-separated, so it pastes into Excel / Google Sheets).
+        var html = '<div class="msg-table-block"><div class="msg-table-wrap"><table><thead><tr>' +
           header.map(function(c){ return '<th>' + c + '</th>'; }).join('') +
           '</tr></thead><tbody>' +
           body.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') +
-          '</tbody></table></div>';
+          '</tbody></table></div>' +
+          '<div class="msg-table-tools"><button type="button" class="table-copy-btn"><i class="fas fa-table"></i> Copy table</button></div></div>';
         lines.splice(i, j - i, html);
       }
       i++;
@@ -2268,13 +2832,85 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     return lines;
   }
 
-  function formatMd(raw){
+  // ---- research reports ----
+  // A finished deep-research reply is a whole document, so it is drawn with real
+  // headings, tinted call-outs, clickable [n] citations and a download row (the
+  // server writes it in a fixed shape: a title, a Summary call-out, sections, a
+  // numbered Sources list and a "Download this report" line — views.ai_research_run).
+  var CALLOUT_KINDS = {
+    summary: 'summary', 'executive summary': 'summary', note: 'note', info: 'note', tip: 'tip',
+    'key takeaway': 'tip', 'key takeaways': 'tip', warning: 'warning', caution: 'warning',
+    important: 'important', disclaimer: 'important'
+  };
+  function isResearchReport(raw){
+    var text = String(raw || '');
+    return /^\s*#\s+\S/.test(text) && /\*\*Download this report:\*\*/.test(text);
+  }
+  // {1: {url, title}, ...} from the numbered list under the "Sources" heading.
+  function citationLinks(raw){
+    var map = {};
+    var inSources = false;
+    String(raw || '').split('\n').forEach(function(line){
+      var head = /^#{1,6}\s+(.+?)\s*$/.exec(line.trim());
+      if (head) {
+        inSources = /^sources(?: reviewed)?$/i.test(head[1].replace(/[*_`:]/g, '').trim());
+      } else if (inSources) {
+        var item = /^\s*(\d{1,3})[.)]\s+\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/.exec(line);
+        if (item) map[item[1]] = { url: item[3], title: item[2] };
+      }
+    });
+    return map;
+  }
+  function hostOfUrl(url){
+    return String(url || '').replace(/^https?:\/\/(?:www\.)?/i, '').split(/[\/?#]/)[0];
+  }
+  function downloadIconFor(label){
+    return /pdf/i.test(label) ? 'fa-file-pdf' : (/word|doc/i.test(label) ? 'fa-file-word' : 'fa-file-lines');
+  }
+  // The finished report's HTML: the download line becomes buttons under the
+  // title, and each source shows the site it lives on.
+  function polishReport(html){
+    var bar = '';
+    html = html.replace(/<p><strong>Download this report:<\/strong>([\s\S]*?)<\/p>/, function(_, rest){
+      var buttons = '';
+      rest.replace(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g, function(_a, href, label){
+        buttons += '<a class="rd-btn" href="' + href + '" target="_blank" rel="noopener noreferrer"><i class="fas ' +
+          downloadIconFor(label) + '"></i> ' + label + '</a>';
+        return '';
+      });
+      if (buttons) bar = '<div class="research-downloads"><span class="rd-label">Download this report</span>' + buttons + '</div>';
+      return '';
+    });
+    if (bar) {
+      var titleEnd = html.indexOf('</h1>');
+      html = titleEnd >= 0 ? html.slice(0, titleEnd + 5) + bar + html.slice(titleEnd + 5) : bar + html;
+    }
+    return html.replace(/(<h[1-4]>Sources(?: reviewed)?<\/h[1-4]><ol[^>]*>)([\s\S]*?)(<\/ol>)/, function(_, open, items, close){
+      return open + items.replace(/<li>(<a href="([^"]+)"[^>]*>[\s\S]*?<\/a>)<\/li>/g, function(_li, anchor, href){
+        return '<li>' + anchor + '<span class="src-host">' + escHtml(hostOfUrl(href)) + '</span></li>';
+      }) + close;
+    });
+  }
+
+  function formatMd(raw, opts){
+    var report = !!(opts && opts.report);
     var codeBlocks = [];
     var text = extractCodeBlocks(raw, codeBlocks);
     text = normalizeEquationText(text);
     text = escHtml(text);
     var links = [];
     text = linkifyStash(text, links);
+    if (report) {
+      // [3] becomes a link to the third source — only when that source is listed.
+      var cites = citationLinks(raw);
+      text = text.replace(/\[(\d{1,3})\]/g, function(whole, number){
+        var cite = cites[number];
+        if (!cite) return whole;
+        links.push('<a class="cite" href="' + escHtml(cite.url) + '" target="_blank" rel="noopener noreferrer" title="' +
+          escHtml(cite.title) + '">' + number + '</a>');
+        return '\u0001L' + (links.length - 1) + '\u0001';
+      });
+    }
     text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
@@ -2286,10 +2922,16 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     var quote = [];
     function closeList(){ if (listType) { out.push('</' + listType + '>'); listType = null; } }
     function flushPara(){ if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } }
-    function flushQuote(){ if (quote.length) { out.push('<blockquote>' + quote.join('<br>') + '</blockquote>'); quote = []; } }
+    function flushQuote(){
+      if (!quote.length) return;
+      var label = report ? /^<strong>([A-Za-z ]{2,24}):<\/strong>/.exec(quote[0]) : null;
+      var kind = label ? (CALLOUT_KINDS[label[1].toLowerCase()] || '') : '';
+      out.push('<blockquote' + (kind ? ' class="callout-' + kind + '"' : '') + '>' + quote.join('<br>') + '</blockquote>');
+      quote = [];
+    }
     lines.forEach(function(line){
       var trimmed = line.trim();
-      if (/^CB\d+$/.test(trimmed) || trimmed.indexOf('<div class="msg-table-wrap">') === 0) {
+      if (/^CB\d+$/.test(trimmed) || trimmed.indexOf('<div class="msg-table-block">') === 0) {
         closeList(); flushPara(); flushQuote();
         out.push(trimmed);
         return;
@@ -2297,6 +2939,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       var ul = /^[-*•◆●▪‣➤»]\s+(.+)$/.exec(trimmed);
       var ol = /^(\d+)[.)]\s+(.+)$/.exec(trimmed);
       var heading = /^#{1,6}\s+(.+)$/.exec(trimmed);
+      var headingLevel = heading ? Math.min(/^#+/.exec(trimmed)[0].length, 4) : 0;
       var quoteLine = /^&gt;\s?(.*)$/.exec(trimmed);
       // A bare line of 3+ =/-/*/_ is decorative: '===' is a Setext heading
       // underline artifact (drop it silently — the heading text itself was
@@ -2323,7 +2966,10 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         lastOrderedNumber = displayNumber;
       } else if (heading) {
         closeList(); flushPara(); flushQuote();
-        out.push('<p><strong>' + heading[1] + '</strong></p>');
+        // A report keeps its heading levels; an ordinary reply shows a heading as bold text.
+        out.push(report
+          ? '<h' + headingLevel + '>' + heading[1] + '</h' + headingLevel + '>'
+          : '<p><strong>' + heading[1] + '</strong></p>');
       } else if (rule) {
         closeList(); flushPara(); flushQuote();
         if (rule[1] !== '=') out.push('<hr>');
@@ -2348,7 +2994,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (codeBlocks.length) {
       result = result.replace(/CB(\d+)/g, function(_, i){ return codeBlocks[Number(i)]; });
     }
-    return result;
+    return report ? polishReport(result) : result;
   }
 
   function autoResize(){
@@ -2392,6 +3038,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     code: ['Reading your code', 'Generating answer'],
     file_generation: ['Reading your request', 'Writing your file', 'Almost done'],
     github: ['Checking repository', 'Planning changes', 'Applying changes'],
+    research: ['Drafting your research plan', 'Choosing what to look up'],
   };
   // Ambient request descriptions, not claims about measured server progress.
   var STATUS_VARIANTS = {
@@ -2414,7 +3061,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     file_generation: ['Working on your file request', 'Preparing your requested content', 'Developing the document content',
       'Organizing your file response', 'Your file request is in progress', 'Working through the requested details'],
     github: ['Your repository request is processing', 'Working on your repository task', 'Preparing the repository response',
-      'Your coding task is in progress', 'Waiting for the repository task', 'Working through your requested changes']
+      'Your coding task is in progress', 'Waiting for the repository task', 'Working through your requested changes'],
+    research: ['Drafting your research plan', 'Choosing what to look up', 'Outlining the investigation',
+      'Working out where to look first', 'Mapping the topic into steps']
   };
   var statusRecent = {};
   function typingPhrases(statusKey, prompt){
@@ -2580,6 +3229,69 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }
 
   var RETRY_BUTTON_HTML = '<button type="button" class="msg-retry-btn" title="Answer this again"><i class="fas fa-rotate-right"></i> Retry</button>';
+  var REPLY_BUTTON_HTML = '<button type="button" class="msg-reply-btn" title="Reply to this answer"><i class="fas fa-reply"></i> Reply</button>';
+
+  // ---- Reply to one answer ----
+  // The Reply button under an answer quotes that answer (or just the part the
+  // user selected) above the message box. The quote is sent with the next
+  // message (reply_to) so the AI knows exactly which answer it is about, and it
+  // is saved and shown inside the sent message.
+  var REPLY_QUOTE_MAX = 1500;   // keep in step with views.AI_REPLY_QUOTE_MAX_CHARS
+
+  // One readable line of the quote for the bar and the sent message: the
+  // answer's own words, without its Markdown marks.
+  function replyPreview(text, max){
+    var flat = String(text || '')
+      .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '').replace(/^[ \t]*[-*][ \t]+/gm, '')
+      .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+    return flat.length > max ? flat.slice(0, max).replace(/\s+\S*$/, '') + '…' : flat;
+  }
+
+  function selectedTextIn(bubble){
+    try {
+      var sel = window.getSelection ? window.getSelection() : null;
+      if (sel && !sel.isCollapsed && bubble.contains(sel.anchorNode) && bubble.contains(sel.focusNode)) {
+        return sel.toString().trim();
+      }
+    } catch (err) {}
+    return '';
+  }
+
+  function clearReply(){
+    state.replyTo = null;
+    if (replyBar) replyBar.hidden = true;
+  }
+
+  function startReply(bubble){
+    if (!bubble || !replyBar) return;
+    if (state.gated || state.conversationEnded) return;
+    if (state.githubMode) { showAttachError('Turn off GitHub mode to reply to a message.'); return; }
+    if (state.research) { showAttachError('Turn off deep research to reply to a message.'); return; }
+    var quote = (selectedTextIn(bubble) || plainReplyText(bubble.dataset.rawText || ''))
+      .replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    if (!quote) return;
+    if (quote.length > REPLY_QUOTE_MAX) quote = quote.slice(0, REPLY_QUOTE_MAX - 1).replace(/\s+\S*$/, '') + '…';
+    state.replyTo = { text: quote, bubble: bubble };
+    replyBarQuote.textContent = replyPreview(quote, 160);
+    replyBar.hidden = false;
+    input.focus();
+  }
+
+  // The quote waiting to go with the next message. It is dropped if the answer
+  // it points at has left the page (new chat, another conversation, Retry).
+  function activeReplyText(){
+    var reply = state.replyTo;
+    if (reply && !document.body.contains(reply.bubble)) { clearReply(); return ''; }
+    return reply ? reply.text : '';
+  }
+
+  if (replyBarClose) replyBarClose.addEventListener('click', function(){
+    clearReply();
+    input.focus();
+  });
+  input.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && state.replyTo) clearReply();
+  });
 
   // A failed turn has no reply to copy, but it can still be retried.
   function addRetryOnly(bubble){
@@ -2612,12 +3324,17 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (!userBubble) return;
     var attachments = attachmentsOf(userBubble);
     var messageId = userBubble.dataset.messageId ? parseInt(userBubble.dataset.messageId, 10) : null;
+    // Retrying or editing a deep-research question researches it again, whether
+    // it was just asked or the chat was reloaded since.
+    var answerRow = userRow.nextElementSibling;
+    var answerBubble = answerRow ? answerRow.querySelector('.msg-bubble') : null;
+    var wasResearch = userBubble.dataset.mode === 'research' || !!(answerBubble && answerBubble.dataset.mode === 'research');
     if (messageId) {
       var rows = Array.prototype.slice.call(col.children);
       rows.slice(rows.indexOf(userRow)).forEach(function(r){ r.remove(); });
       state.pendingReplace = {
         id: messageId, image: attachments.image, documentName: attachments.documentName,
-        github: !!opts.github
+        github: !!opts.github, research: wasResearch, replyTo: userBubble.dataset.replyTo || ''
       };
     }
     send(text);
@@ -2696,7 +3413,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       actions.innerHTML = '<button type="button" class="msg-copy-btn"><i class="fas fa-copy"></i> Copy</button>' +
         (SPEECH_SYNTH_SUPPORTED ? '<button type="button" class="msg-speak-btn"><i class="fas fa-volume-high"></i> Listen</button>' : '') +
         // Re-running a note command would just save the note twice.
-        (opts.modelKey !== 'note' ? RETRY_BUTTON_HTML : '');
+        (opts.modelKey !== 'note' ? RETRY_BUTTON_HTML + REPLY_BUTTON_HTML : '');
       bubble.appendChild(actions);
     }
     // Skipped for the note-taking confirmation itself ("Saved to your
@@ -2858,12 +3575,15 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       avatar.innerHTML = MODEL_GLYPHS[mKey] || MODEL_GLYPHS._default;
     }
     var bubble = document.createElement('div');
-    bubble.className = 'msg-bubble' + (opts.error ? ' error' : '') + (role === 'assistant' ? ' md' : '');
+    // A saved deep-research report comes back as the document it was.
+    var reportReply = role === 'assistant' && !opts.typing && !opts.error && isResearchReport(text);
+    bubble.className = 'msg-bubble' + (opts.error ? ' error' : '') + (role === 'assistant' ? ' md' : '') + (reportReply ? ' research-report' : '');
+    if (reportReply) bubble.dataset.mode = 'research';
     if (opts.typing) {
       startTypingStatus(bubble, opts.statusKey, opts.statusPrompt);
     } else {
       var textHtml = role === 'assistant'
-        ? formatMd(text) + (opts.streaming ? '<span class="msg-cursor"></span>' : '')
+        ? formatMd(text, { report: reportReply }) + (opts.streaming ? '<span class="msg-cursor"></span>' : '')
         : escHtml(text);
       var tagHtml = (role === 'assistant' && opts.modelLabel) ? '<div class="msg-model-tag">' + escHtml(opts.modelLabel) + '</div>' : '';
       bubble.innerHTML = tagHtml + textHtml;
@@ -2892,6 +3612,20 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       if (role === 'user') {
         bubble.dataset.rawText = text || '';
         if (opts.messageId) bubble.dataset.messageId = opts.messageId;
+        if (opts.replyTo) {
+          // The answer this message replies to, quoted above it. Built from
+          // text nodes, never HTML, since it is text the model once wrote.
+          bubble.dataset.replyTo = opts.replyTo;
+          var quoteEl = document.createElement('div');
+          quoteEl.className = 'msg-quote';
+          var quoteWho = document.createElement('b');
+          quoteWho.textContent = 'Replying to AI';
+          var quoteText = document.createElement('span');
+          quoteText.textContent = replyPreview(opts.replyTo, 300);
+          quoteEl.appendChild(quoteWho);
+          quoteEl.appendChild(quoteText);
+          bubble.insertBefore(quoteEl, bubble.firstChild);
+        }
         var userActions = document.createElement('div');
         userActions.className = 'msg-user-actions';
         userActions.innerHTML =
@@ -2990,11 +3724,40 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
   function showEmptyState(){
     if (typeof closeChatFind === 'function') closeChatFind();
+    clearReply();
     col.innerHTML = EMPTY_STATE_HTML;
     emptyState = document.getElementById('emptyState');
     bindSuggestRow();
+    fillGreeting();
   }
   bindSuggestRow(); // the empty state rendered by the server on first load needs this too
+  fillGreeting();
+
+  // Welcome screen: "Good afternoon, Rahul", by the visitor's own clock.
+  function fillGreeting(){
+    var el = document.querySelector('#emptyState .empty-greet');
+    if (!el) return;
+    var hour = new Date().getHours();
+    var part = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
+    var name = (el.getAttribute('data-name') || '').trim().split(/\s+/)[0] || '';
+    if (name.indexOf('@') !== -1) name = '';
+    el.textContent = name ? part + ', ' + name : part;
+  }
+
+  // A quick-start card puts the start of a request in the message box for the
+  // person to finish; the Deep research card switches research mode on.
+  function useStartCard(card){
+    if (state.streaming || state.gated || state.conversationEnded) return;
+    if (card.getAttribute('data-action') === 'research') {
+      if (!state.research && researchBtn && !researchBtn.disabled) researchBtn.click();
+      input.focus();
+      return;
+    }
+    input.value = card.getAttribute('data-fill') || '';
+    autoResize();
+    input.focus();
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (err) {}
+  }
 
   function setStreaming(on){
     state.streaming = on;
@@ -3016,7 +3779,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (callBtn) callBtn.disabled = on || locked;
     if (attachBtn) attachBtn.disabled = on || locked;
     if (cameraBtn) cameraBtn.disabled = on || locked;
-    if (webSearchBtn) webSearchBtn.disabled = on || locked;
+    // Deep research does its own searching, so the plain web-search switch is parked while it is on.
+    if (webSearchBtn) webSearchBtn.disabled = on || locked || state.research;
+    if (researchBtn) researchBtn.disabled = on || locked;
     if (modelPickerBtn) modelPickerBtn.disabled = on || locked;
     applyGithubAvailability();
   }
@@ -3846,6 +4611,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
     githubModeToggle.addEventListener('change', function(){
       state.githubMode = githubModeToggle.checked;
+      if (state.githubMode && state.research) setResearchMode(false);
+      if (state.githubMode) clearReply();   // GitHub changes are described fresh, not as a reply
       syncGithubModeUi();
       input.placeholder = state.githubMode
         ? 'Describe the repository change…'
@@ -4041,7 +4808,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (attachThumb) attachThumb.hidden = true;
     if (attachDocIcon) attachDocIcon.hidden = true;
     if (imageInput) imageInput.value = '';
-    if (!state.githubMode) input.placeholder = 'Message AI';
+    if (!state.githubMode) input.placeholder = restingPlaceholder();
   }
 
   function stageImage(dataUri){
@@ -4050,7 +4817,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (documentActionPanel) documentActionPanel.hidden = true;
     if (documentCodingBtn) documentCodingBtn.classList.remove('active');
     if (documentDetailsBtn) documentDetailsBtn.classList.remove('active');
-    if (!state.githubMode) input.placeholder = 'Message AI';
+    if (!state.githubMode) input.placeholder = restingPlaceholder();
     stagedImage = dataUri;
     if (attachFiles) attachFiles.hidden = true;
     if (attachLabel) attachLabel.hidden = false;
@@ -4527,7 +5294,9 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     [/\bma'am\b/gi, 'maaam'],
   ];
   function sanitizeForSpeech(text){
-    var out = (text || '')
+    // A copy card is the reply's actual content (a rewrite, a translation), so
+    // it is read out — only real code blocks are skipped below.
+    var out = plainReplyText(text || '')
       .replace(EMOJI_RE, '')
       .replace(/```[\s\S]*?```/g, ' ')          // code blocks — not useful read aloud
       .replace(/`([^`]+)`/g, '$1')               // inline code — keep the text, drop backticks
@@ -5196,6 +5965,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (state.conversationEnded) return;
     if (state.streaming) { showAttachError('Please wait for the current reply to finish before starting a call.'); return; }
     if (state.githubMode) { showAttachError('Turn off GitHub mode before starting a voice call.'); return; }
+    if (state.research || researchPlanWaiting()) { showAttachError('Finish or turn off deep research before starting a voice call.'); return; }
     if (stagedImage || stagedDocs.length) { showAttachError('Remove the attached file before starting a voice call.'); return; }
     stopVoiceTyping();
     stopSpeaking();
@@ -5556,6 +6326,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       .then(function(data){
         if (data.status !== 'ok') return;
         closeChatFind();
+        clearReply();
         setCurrentConversationId(id);
         col.innerHTML = '';
         emptyState = null;
@@ -5565,7 +6336,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
             image: m.role === 'user' ? (m.image_data || null) : null,
             generatedImage: m.role === 'assistant' ? (m.image_data || null) : null,
             documentName: m.document_name || null, modelLabel: label,
-            conversationId: id, messageId: m.id, modelKey: m.model_key
+            conversationId: id, messageId: m.id, modelKey: m.model_key,
+            replyTo: m.role === 'user' ? (m.reply_to_text || '') : ''
           });
         });
         renderConvList();
@@ -6209,12 +6981,23 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
             (call.caller_name ? ' · as ' + escHtml(call.caller_name) : '') + '</p>' +
           audioBlock +
           '<div class="call-detail-actions">' +
+            '<button type="button" class="cc-ghost-btn" id="callCopyTxt"><i class="fas fa-copy"></i> Copy chat</button>' +
             '<button type="button" class="cc-ghost-btn" id="callDownloadTxt"><i class="fas fa-file-lines"></i> Download chat (text)</button>' +
             '<button type="button" class="cc-ghost-btn" id="callDownloadPdf"><i class="fas fa-file-pdf"></i> Download chat (PDF)</button>' +
             (call.conversation_id ? '<button type="button" class="cc-ghost-btn" id="callOpenChat"><i class="fas fa-comments"></i> Open in chat</button>' : '') +
           '</div>' +
           '<div class="call-transcript">' + (lines || '<div class="account-empty">Nothing was said in this call.</div>') + '</div>';
         panel.querySelector('#callBack').addEventListener('click', function(){ renderAccountCalls(accountCalls); });
+        panel.querySelector('#callCopyTxt').addEventListener('click', function(event){
+          var text = (call.transcript || []).map(function(turn){
+            var who = turn.who === 'you' ? (call.caller_name || 'You') : AI_BRAND_NAME + ' AI';
+            return who + ': ' + (turn.text || '');
+          }).join('\n\n');
+          copyWithFeedback(event.currentTarget, text, {
+            idle: '<i class="fas fa-copy"></i> Copy chat', done: '<i class="fas fa-check"></i> Copied!',
+            fail: '<i class="fas fa-triangle-exclamation"></i> Copy failed'
+          });
+        });
         panel.querySelector('#callDownloadTxt').addEventListener('click', function(){ saveFileFrom('/AI/api/calls/' + call.id + '/download/txt/', 'voice-call-' + call.id + '.txt'); });
         panel.querySelector('#callDownloadPdf').addEventListener('click', function(){ saveFileFrom('/AI/api/calls/' + call.id + '/download/pdf/', 'voice-call-' + call.id + '.pdf'); });
         var audioDownload = panel.querySelector('#callDownloadAudio');
@@ -6690,6 +7473,100 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
   }
   if (accountModalClose) accountModalClose.addEventListener('click', closeAccountModal);
   if (accountModalBackdrop) accountModalBackdrop.addEventListener('click', closeAccountModal);
+  // ---- "More images" style gallery ----
+  var stylesModal = document.getElementById('stylesModal');
+  var stylesBackdrop = document.getElementById('stylesBackdrop');
+  var moreImagesBtn = document.getElementById('moreImagesBtn');
+  function openStyles(){
+    if (!stylesModal || !stylesBackdrop) return;
+    if (typeof closeSidebarMobile === 'function') closeSidebarMobile();
+    stylesModal.hidden = false;
+    stylesBackdrop.hidden = false;
+    var close = document.getElementById('stylesClose');
+    if (close) close.focus();
+  }
+  function closeStyles(){
+    if (!stylesModal || !stylesBackdrop) return;
+    stylesModal.hidden = true;
+    stylesBackdrop.hidden = true;
+  }
+  if (moreImagesBtn) moreImagesBtn.addEventListener('click', openStyles);
+  if (stylesBackdrop) stylesBackdrop.addEventListener('click', closeStyles);
+  if (stylesModal) {
+    stylesModal.addEventListener('click', function(e){
+      if (e.target.closest('#stylesClose')) { closeStyles(); return; }
+      var card = e.target.closest('.style-card');
+      if (!card || state.streaming || state.gated || state.conversationEnded) return;
+      closeStyles();
+      // A picture style is drawn by the image model, never as research or a repository change.
+      if (state.research) setResearchMode(false);
+      var prompt = card.getAttribute('data-prompt') || '';
+      input.value = prompt;
+      autoResize();
+      input.focus();
+      try { input.setSelectionRange(prompt.length, prompt.length); } catch (err) {}
+      // A "Your photo" style changes a picture the person picks now.
+      if (card.getAttribute('data-photo') === '1' && attachBtn && !attachBtn.disabled) attachBtn.click();
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !stylesModal.hidden) closeStyles();
+    });
+  }
+
+  // ---- "How to use" guide ----
+  var guideModal = document.getElementById('guideModal');
+  var guideBackdrop = document.getElementById('guideBackdrop');
+  var guideBody = document.getElementById('guideBody');
+  var GUIDE_COPY_LABELS = {
+    idle: '<i class="fas fa-copy"></i>', done: '<i class="fas fa-check"></i>',
+    fail: '<i class="fas fa-triangle-exclamation"></i>'
+  };
+  function openGuide(){
+    if (!guideModal || !guideBackdrop) return;
+    guideModal.hidden = false;
+    guideBackdrop.hidden = false;
+    if (accountMenuWrap) accountMenuWrap.classList.remove('open');
+    if (accountMenuBtn) accountMenuBtn.setAttribute('aria-expanded', 'false');
+    var close = document.getElementById('guideClose');
+    if (close) close.focus();
+  }
+  function closeGuide(){
+    if (!guideModal || !guideBackdrop) return;
+    guideModal.hidden = true;
+    guideBackdrop.hidden = true;
+  }
+  var guideMenuBtn = document.getElementById('guideMenuBtn');
+  if (guideMenuBtn) guideMenuBtn.addEventListener('click', openGuide);
+  if (guideBackdrop) guideBackdrop.addEventListener('click', closeGuide);
+  if (guideModal) {
+    guideModal.addEventListener('click', function(e){
+      if (e.target.closest('#guideClose')) { closeGuide(); return; }
+      var jump = e.target.closest('[data-guide-jump]');
+      if (jump) {
+        var target = document.getElementById(jump.getAttribute('data-guide-jump'));
+        guideModal.querySelectorAll('[data-guide-jump]').forEach(function(b){ b.classList.toggle('active', b === jump); });
+        if (target && guideBody) guideBody.scrollTop = target.offsetTop - guideBody.offsetTop;
+        return;
+      }
+      var prompt = e.target.closest('.guide-prompt');
+      if (!prompt) return;
+      var text = (prompt.querySelector('p') || {}).textContent || '';
+      var copyBtn = e.target.closest('.guide-copy');
+      if (copyBtn) { copyWithFeedback(copyBtn, text, GUIDE_COPY_LABELS); return; }
+      if (!e.target.closest('.guide-try') || state.streaming || state.gated || state.conversationEnded) return;
+      closeGuide();
+      // A research example only makes sense with deep research switched on.
+      if (prompt.getAttribute('data-research') === '1' && !state.research && researchBtn && !researchBtn.disabled) researchBtn.click();
+      input.value = text;
+      autoResize();
+      input.focus();
+      try { input.setSelectionRange(text.length, text.length); } catch (err) {}
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !guideModal.hidden) closeGuide();
+    });
+  }
+
   if (supportMenuBtn) supportMenuBtn.addEventListener('click', openSupportModal);
   if (supportModalClose) supportModalClose.addEventListener('click', closeSupportModal);
   if (supportModalBackdrop) supportModalBackdrop.addEventListener('click', closeSupportModal);
@@ -6925,6 +7802,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         documentCodingText: pending.document ? pending.document.codingText : null,
         documentCodingTruncated: pending.document ? !!pending.document.codingTruncated : false,
         documentMode: pending.document ? pending.document.mode : null,
+        research: !!pending.research,
         ts: Date.now(),
       }));
     } catch (e) {}
@@ -7044,6 +7922,542 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     });
   }
 
+  // ---- deep research ----
+  // One chat bubble goes through three looks: a plan to read, edit and start
+  // (/AI/api/research/plan/), live progress while the server searches the web
+  // and reads pages (/AI/api/research/run/ — a stream of JSON lines), and the
+  // finished report with its download buttons. Server side: myapp/deep_research.py.
+  var RESEARCH_AUTOSTART_SECONDS = 60;
+  var RESEARCH_RING_LENGTH = 62.83;   // circumference of the countdown ring (r = 10)
+  var RESEARCH_MAX_STEPS = 7;         // keep in step with deep_research.MAX_STEPS
+  var CHIP_COLORS = ['#0f766e', '#2563eb', '#7c3aed', '#db2777', '#d97706', '#0891b2', '#65a30d', '#475569'];
+
+  function restingPlaceholder(){
+    return state.research ? 'What should I research?' : 'Message AI';
+  }
+
+  function setResearchMode(on){
+    state.research = !!on;
+    if (researchBtn) {
+      researchBtn.classList.toggle('active', state.research);
+      researchBtn.setAttribute('aria-pressed', state.research ? 'true' : 'false');
+      researchBtn.setAttribute('aria-label', state.research ? 'Turn off deep research' : 'Turn on deep research');
+    }
+    if (inputWrap) inputWrap.classList.toggle('research-mode', state.research);
+    if (researchModeBar) researchModeBar.hidden = !state.research;
+    if (state.research) clearReply();   // a research question is typed fresh, not as a reply
+    if (!state.githubMode) input.placeholder = restingPlaceholder();
+    setStreaming(state.streaming);
+  }
+
+  // A plan card that was wiped from the page (new chat, another conversation) no longer waits.
+  function researchPlanWaiting(){
+    var pending = state.researchPending;
+    if (pending && !document.body.contains(pending.bubble)) { state.researchPending = null; pending = null; }
+    return !!pending;
+  }
+
+  if (researchBtn) researchBtn.addEventListener('click', function(){
+    if (researchBtn.disabled) return;
+    if (!state.research) {
+      if (state.githubMode) { showAttachError('Turn off GitHub mode before using deep research.'); return; }
+      if (stagedImage || stagedDocs.length) { showAttachError('Deep research works from a typed question — remove the attached file first.'); return; }
+      if (researchPlanWaiting()) { showAttachError('Start or cancel the research plan above first.'); return; }
+    }
+    setResearchMode(!state.research);
+    if (state.research) input.focus();
+  });
+  if (researchModeExit) researchModeExit.addEventListener('click', function(){
+    setResearchMode(false);
+    input.focus();
+  });
+
+  function researchClock(seconds){
+    var minutes = Math.floor(seconds / 60);
+    var rest = seconds % 60;
+    return minutes + ':' + (rest < 10 ? '0' : '') + rest;
+  }
+  function researchDuration(seconds){
+    seconds = Math.max(0, Math.round(seconds));
+    var minutes = Math.floor(seconds / 60);
+    return minutes ? minutes + ' min ' + (seconds % 60) + ' s' : seconds + ' s';
+  }
+  function chipColor(host){
+    var hash = 0;
+    for (var i = 0; i < host.length; i++) hash = (hash * 31 + host.charCodeAt(i)) >>> 0;
+    return CHIP_COLORS[hash % CHIP_COLORS.length];
+  }
+  // A chip for one source. Only http(s) addresses are ever linked.
+  function sourceChipHtml(source){
+    var url = /^https?:\/\//i.test(String(source.url || '')) ? String(source.url) : '';
+    var host = String(source.host || hostOfUrl(url) || '');
+    var inner = '<span class="rs-fav" style="--fav:' + chipColor(host) + '">' + escHtml(host.charAt(0).toUpperCase() || '?') +
+      '</span><span class="rs-chip-host">' + escHtml(host) + '</span>';
+    return '<li>' + (url
+      ? '<a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer" title="' + escHtml(source.title || host) + '">' + inner + '</a>'
+      : inner) + '</li>';
+  }
+  function nearBottom(){
+    return main.scrollHeight - main.scrollTop - main.clientHeight < 180;
+  }
+
+  // Why the server turned a research request down. Returns true when it was dealt with.
+  function researchRefused(status, body, ctx){
+    body = body || {};
+    function dropRows(){
+      stopBubbleTyping(ctx.bubble);
+      var row = ctx.bubble.closest('.msg-row');
+      if (row) row.remove();
+      if (ctx.userRow) ctx.userRow.remove();
+      activeAbort = null;
+      setStreaming(false);
+    }
+    if (status === 403 && body.status === 'login_required') {
+      dropRows();
+      showGate({ text: ctx.text, research: true });
+      return true;
+    }
+    if (status === 403 && body.status === 'subscription_required') {
+      dropRows();
+      showPurchaseGate(body.detail);
+      return true;
+    }
+    if (status === 429 || status === 409) {
+      stopBubbleTyping(ctx.bubble);
+      setRowGenerating(ctx.bubble, false);
+      ctx.bubble.className = 'msg-bubble md';
+      ctx.bubble.innerHTML = formatMd(body.detail || 'Please try again in a moment.');
+      activeAbort = null;
+      setStreaming(false);
+      input.focus();
+      return true;
+    }
+    return false;
+  }
+
+  function sendResearch(promptText, replacing){
+    var text = (typeof promptText === 'string' ? promptText : input.value).trim();
+    if (!text || state.streaming) return;
+    if (researchPlanWaiting()) { showAttachError('Start or cancel the research plan above first.'); return; }
+    if (stagedImage || stagedDocs.length) { showAttachError('Deep research works from a typed question — remove the attached file first.'); return; }
+
+    stopVoiceTyping();
+    stopSpeaking();
+    renderRow('user', text, {});
+    var userRow = col.lastElementChild;
+    var sentBubble = userRow && userRow.querySelector ? userRow.querySelector('.msg-bubble') : null;
+    if (sentBubble) { sentBubble.dataset.mode = 'research'; sentBubble.dataset.modeLabel = 'Deep research'; }
+    input.value = '';
+    autoResize();
+    // One switch-on is one report: later messages are ordinary chat again.
+    setResearchMode(false);
+    setStreaming(true);
+    var bubble = renderRow('assistant', '', { typing: true, statusKey: 'research' });
+    setRowGenerating(bubble, true);
+    var abortController = new AbortController();
+    activeAbort = abortController;
+    var ctx = { text: text, userRow: userRow, bubble: bubble, replacing: replacing || null };
+
+    fetch('/AI/api/research/plan/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        conversation_id: state.currentConversationId, message: text, model: currentModel, language: currentLanguage,
+        replace_message_id: replacing ? replacing.id : undefined,
+      }),
+    }).then(function(resp){
+      return resp.json().catch(function(){ return {}; }).then(function(body){ return { status: resp.status, ok: resp.ok, body: body }; });
+    }).then(function(res){
+      if (researchRefused(res.status, res.body, ctx)) return;
+      if (!res.ok || res.body.status !== 'ok') throw new Error(res.body.detail || 'Something went wrong — please try again.');
+      activeAbort = null;
+      showResearchPlan(ctx, res.body);
+    }).catch(function(err){
+      activeAbort = null;
+      stopBubbleTyping(bubble);
+      setRowGenerating(bubble, false);
+      bubble.className = 'msg-bubble error';
+      bubble.textContent = (err && err.name === 'AbortError') ? 'Stopped.' : ((err && err.message) || 'Something went wrong — please try again.');
+      addRetryOnly(bubble);
+      setStreaming(false);
+      input.focus();
+    });
+  }
+
+  // The plan, as a card: read it, edit it, cancel it, or start. It starts by
+  // itself after a countdown (not while the tab is hidden, and never while editing).
+  function showResearchPlan(ctx, plan){
+    var bubble = ctx.bubble;
+    stopBubbleTyping(bubble);
+    setRowGenerating(bubble, false);
+    bubble.className = 'msg-bubble md';
+    var steps = plan.steps || [];
+    bubble.innerHTML =
+      '<div class="rs-plan">' +
+        '<p class="rs-plan-title">' + escHtml(plan.title || 'Deep research') + '</p>' +
+        '<ol class="rs-steps">' + steps.map(function(step){
+          return '<li data-state="pending" data-final="' + (step.final ? '1' : '') + '" data-query="' + escHtml(step.query || '') +
+            '" data-orig="' + escHtml(step.text) + '"><span class="rs-mark"></span><span class="rs-step-text">' + escHtml(step.text) + '</span></li>';
+        }).join('') + '</ol>' +
+        (plan.fallback ? '<p class="rs-plan-note">This is a standard plan — the AI could not draft a custom one just now. Edit it if you like.</p>' : '') +
+        '<div class="rs-plan-actions">' +
+          '<button type="button" class="rs-btn rs-edit">Edit</button><span class="rs-spacer"></span>' +
+          '<button type="button" class="rs-btn rs-cancel">Cancel</button>' +
+          '<button type="button" class="rs-btn primary rs-start"><span>Start</span><span class="rs-count">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"></circle>' +
+            '<circle class="rs-count-fg" cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="' +
+            RESEARCH_RING_LENGTH + '" stroke-dashoffset="0" transform="rotate(-90 12 12)"></circle></svg>' +
+            '<span class="rs-count-num">' + RESEARCH_AUTOSTART_SECONDS + '</span></span></button>' +
+        '</div>' +
+      '</div>';
+    var card = bubble.querySelector('.rs-plan');
+    var list = card.querySelector('.rs-steps');
+    var editBtn = card.querySelector('.rs-edit');
+    var countEl = card.querySelector('.rs-count');
+    var editing = false;
+    var timer = null;
+    state.researchPending = ctx;
+    setStreaming(false);
+    input.focus();
+
+    function stopCountdown(){
+      if (timer) { clearInterval(timer); timer = null; }
+      if (countEl) countEl.style.display = 'none';
+    }
+    function startCountdown(){
+      var remaining = RESEARCH_AUTOSTART_SECONDS;
+      var numEl = card.querySelector('.rs-count-num');
+      var ring = card.querySelector('.rs-count-fg');
+      timer = setInterval(function(){
+        if (!document.body.contains(card)) { clearInterval(timer); timer = null; return; }
+        remaining -= 1;
+        if (remaining <= 0) {
+          // Nobody is looking: wait for a click rather than spend a report unattended.
+          if (document.hidden) { stopCountdown(); return; }
+          begin();
+          return;
+        }
+        numEl.textContent = remaining;
+        ring.style.strokeDashoffset = String(RESEARCH_RING_LENGTH * (1 - remaining / RESEARCH_AUTOSTART_SECONDS));
+      }, 1000);
+    }
+
+    // What the steps say now, in the shape the server wants. A step whose words were
+    // changed loses its planned search, so the server works one out from the new words.
+    function readSteps(){
+      var seen = {};
+      var out = [];
+      Array.prototype.forEach.call(list.querySelectorAll('li'), function(li){
+        var field = li.querySelector('.rs-step-input');
+        var textEl = li.querySelector('.rs-step-text');
+        var text = (field ? field.value : textEl.textContent).replace(/\s+/g, ' ').trim();
+        var isFinal = li.getAttribute('data-final') === '1';
+        if (!text || (!isFinal && seen[text.toLowerCase()])) return;
+        seen[text.toLowerCase()] = true;
+        out.push({
+          text: text, final: isFinal,
+          query: text === li.getAttribute('data-orig') ? (li.getAttribute('data-query') || '') : ''
+        });
+      });
+      var research = out.filter(function(step){ return !step.final; }).slice(0, RESEARCH_MAX_STEPS);
+      return research.concat(out.filter(function(step){ return step.final; }));
+    }
+
+    function researchStepCount(){
+      return list.querySelectorAll('li:not([data-final="1"])').length;
+    }
+    function syncAddButton(){
+      var add = card.querySelector('.rs-add-step');
+      if (add) add.hidden = researchStepCount() >= RESEARCH_MAX_STEPS;
+    }
+    function setEditing(on){
+      editing = on;
+      editBtn.textContent = on ? 'Done' : 'Edit';
+      Array.prototype.forEach.call(list.querySelectorAll('li'), function(li){
+        var textEl = li.querySelector('.rs-step-text');
+        if (on) {
+          var current = textEl.textContent;
+          textEl.innerHTML = '<input type="text" class="rs-step-input" maxlength="200" aria-label="Research step">';
+          textEl.querySelector('input').value = current;
+          if (li.getAttribute('data-final') !== '1') {
+            li.insertAdjacentHTML('beforeend', '<button type="button" class="rs-step-remove" aria-label="Remove this step"><i class="fas fa-xmark"></i></button>');
+          }
+        } else {
+          var field = textEl.querySelector('.rs-step-input');
+          if (field) textEl.textContent = field.value.replace(/\s+/g, ' ').trim() || li.getAttribute('data-orig');
+          var remove = li.querySelector('.rs-step-remove');
+          if (remove) remove.remove();
+        }
+      });
+      var add = card.querySelector('.rs-add-step');
+      if (on && !add) {
+        list.insertAdjacentHTML('afterend', '<button type="button" class="rs-add-step"><i class="fas fa-plus"></i> Add a step</button>');
+        syncAddButton();
+      } else if (!on && add) {
+        add.remove();
+      }
+    }
+
+    function begin(){
+      if (!document.body.contains(card) || state.researchPending !== ctx) return;
+      if (editing) setEditing(false);
+      stopCountdown();
+      var confirmed = readSteps();
+      state.researchPending = null;
+      runResearch(ctx, { title: plan.title, steps: confirmed });
+    }
+    function cancel(){
+      stopCountdown();
+      state.researchPending = null;
+      var row = bubble.closest('.msg-row');
+      if (row) row.remove();
+      if (ctx.userRow) ctx.userRow.remove();
+      input.value = ctx.text;
+      autoResize();
+      input.focus();
+      // A retry took the earlier turn off the screen; bring it back.
+      if (ctx.replacing && state.currentConversationId) loadConversation(state.currentConversationId);
+    }
+
+    card.addEventListener('click', function(e){
+      var target = e.target.closest ? e.target.closest('button') : null;
+      if (!target) return;
+      if (target.classList.contains('rs-start')) { begin(); return; }
+      if (target.classList.contains('rs-cancel')) { cancel(); return; }
+      if (target.classList.contains('rs-edit')) {
+        if (!editing) stopCountdown();
+        setEditing(!editing);
+        return;
+      }
+      if (target.classList.contains('rs-step-remove')) {
+        if (researchStepCount() > 1) {
+          target.closest('li').remove();
+          syncAddButton();
+        }
+        return;
+      }
+      if (target.classList.contains('rs-add-step')) {
+        if (researchStepCount() >= RESEARCH_MAX_STEPS) return;
+        var finalLi = list.querySelector('li[data-final="1"]');
+        var fresh = document.createElement('li');
+        fresh.setAttribute('data-state', 'pending');
+        fresh.setAttribute('data-final', '');
+        fresh.setAttribute('data-query', '');
+        fresh.setAttribute('data-orig', '');
+        fresh.innerHTML = '<span class="rs-mark"></span><span class="rs-step-text"><input type="text" class="rs-step-input" maxlength="200" aria-label="Research step" placeholder="What should be looked up?"></span>' +
+          '<button type="button" class="rs-step-remove" aria-label="Remove this step"><i class="fas fa-xmark"></i></button>';
+        list.insertBefore(fresh, finalLi);
+        fresh.querySelector('input').focus();
+        syncAddButton();
+      }
+    });
+    card.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('rs-step-input')) {
+        e.preventDefault();
+        setEditing(false);
+      }
+    });
+
+    startCountdown();
+    scrollToBottom();
+  }
+
+  // Runs the confirmed plan: live progress first, then the finished report.
+  function runResearch(ctx, plan){
+    var bubble = ctx.bubble;
+    var startedAt = Date.now();
+    var abortController = new AbortController();
+    activeAbort = abortController;
+    setStreaming(true);
+    setRowGenerating(bubble, true);
+    bubble.className = 'msg-bubble md';
+    var run = { steps: plan.steps.map(function(step){ return { text: step.text, found: 0 }; }), sources: [], report: '', current: -1, done: false };
+    var answeredModelKey = null;
+    var clockTimer = null;
+    var renderTimer = null;
+
+    bubble.innerHTML =
+      '<div class="rs-run">' +
+        '<div class="rs-run-head"><p class="rs-run-title">' + escHtml(plan.title || 'Deep research') + '</p><span class="rs-run-time">0:00</span></div>' +
+        '<ol class="rs-steps"></ol>' +
+        '<p class="rs-status" aria-live="polite"><span class="typing-orb" aria-hidden="true"></span><span class="typing-status">Getting started…</span></p>' +
+        '<div class="rs-sources" hidden><span class="rs-sources-label">Sources <b class="rs-source-count">0</b></span><ul class="rs-chips"></ul></div>' +
+      '</div><div class="rs-report-live"></div>';
+    var runEl = bubble.querySelector('.rs-run');
+    var stepsEl = runEl.querySelector('.rs-steps');
+    var statusEl = runEl.querySelector('.typing-status');
+    var timeEl = runEl.querySelector('.rs-run-time');
+    var sourcesEl = runEl.querySelector('.rs-sources');
+    var chipsEl = runEl.querySelector('.rs-chips');
+    var countEl = runEl.querySelector('.rs-source-count');
+    var liveEl = bubble.querySelector('.rs-report-live');
+
+    function drawSteps(){
+      stepsEl.innerHTML = run.steps.map(function(step, i){
+        var state_ = i < run.current ? 'done' : (i === run.current ? 'active' : 'pending');
+        return '<li data-state="' + state_ + '"><span class="rs-mark"></span><span class="rs-step-text">' + escHtml(step.text) +
+          '</span><span class="rs-step-meta">' + (step.found ? step.found + (step.found === 1 ? ' source' : ' sources') : '') + '</span></li>';
+      }).join('');
+    }
+    function setStatus(text){ statusEl.textContent = text; }
+    function stopTimers(){
+      if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+      if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    }
+    clockTimer = setInterval(function(){
+      if (!document.body.contains(bubble)) { stopTimers(); return; }
+      timeEl.textContent = researchClock(Math.round((Date.now() - startedAt) / 1000));
+    }, 1000);
+    drawSteps();
+
+    function paintReport(){
+      renderTimer = null;
+      liveEl.innerHTML = formatMd(run.report, { report: true }) + '<span class="msg-cursor"></span>';
+    }
+    function fail(message){
+      stopTimers();
+      activeAbort = null;
+      setRowGenerating(bubble, false);
+      bubble.className = 'msg-bubble error';
+      bubble.textContent = message;
+      addRetryOnly(bubble);
+      setStreaming(false);
+      input.focus();
+    }
+    function finish(done){
+      stopTimers();
+      run.done = true;
+      activeAbort = null;
+      var modelKey = answeredModelKey || currentModel;
+      var label = MODEL_LABELS[modelKey] || AI_BRAND_NAME;
+      var stats = done.stats || {};
+      var seconds = stats.seconds != null ? stats.seconds : Math.round((Date.now() - startedAt) / 1000);
+      var reviewed = stats.reviewed != null ? stats.reviewed : run.sources.length;
+      var doneSteps = run.steps.map(function(step){
+        return '<li data-state="done"><span class="rs-mark"></span><span class="rs-step-text">' + escHtml(step.text) + '</span></li>';
+      }).join('');
+      var summary = '<details class="rs-done"><summary><i class="fas fa-circle-check"></i> Researched ' + reviewed +
+        (reviewed === 1 ? ' web source' : ' web sources') + ' in ' + researchDuration(seconds) + '</summary><div class="rs-done-body">' +
+        '<ol class="rs-steps">' + doneSteps + '</ol>' +
+        (run.sources.length ? '<div class="rs-sources"><span class="rs-sources-label">Sources found</span><ul class="rs-chips">' + run.sources.map(sourceChipHtml).join('') + '</ul></div>' : '') +
+        '</div></details>';
+      var tag = '<div class="msg-model-tag">' + escHtml(label) +
+        '<span class="msg-mode-chip"><i class="fas fa-magnifying-glass-chart"></i> Deep research</span></div>';
+      bubble.className = 'msg-bubble md research-report';
+      bubble.dataset.mode = 'research';
+      bubble.innerHTML = tag + summary + formatMd(done.md, { report: true });
+      setRowModel(bubble, modelKey);
+      setRowGenerating(bubble, false);
+      addMsgCopyAction(bubble, done.md, {
+        conversationId: state.currentConversationId, messageId: done.message_id, modelKey: modelKey
+      });
+      setStreaming(false);
+      refreshConversations();
+      try {
+        var row = bubble.closest('.msg-row');
+        if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) { scrollToBottom(); }
+    }
+
+    function onEvent(ev){
+      if (!ev || typeof ev !== 'object') return;
+      var follow = nearBottom();
+      if (ev.t === 'plan') {
+        run.steps = (ev.steps || []).map(function(step){ return { text: step.text, found: 0 }; });
+        drawSteps();
+      } else if (ev.t === 'step') {
+        if (ev.s === 'active') { run.current = ev.i; setStatus('Searching: ' + ((run.steps[ev.i] || {}).text || 'the web')); }
+        else if (ev.i + 1 > run.current) run.current = ev.i + 1;
+        drawSteps();
+      } else if (ev.t === 'src') {
+        run.sources.push(ev);
+        if (run.steps[run.current]) run.steps[run.current].found += 1;
+        sourcesEl.hidden = false;
+        countEl.textContent = run.sources.length;
+        chipsEl.insertAdjacentHTML('beforeend', sourceChipHtml(ev));
+        drawSteps();
+      } else if (ev.t === 'read') {
+        setStatus('Reading ' + (ev.host || 'pages') + '…');
+      } else if (ev.t === 'write') {
+        run.current = run.steps.length - 1;
+        setStatus('Writing the report…');
+        drawSteps();
+      } else if (ev.t === 'd') {
+        run.report += ev.x || '';
+        bubble.classList.add('research-report');
+        if (!renderTimer) renderTimer = setTimeout(paintReport, 90);
+      } else if (ev.t === 'final') {
+        finish(ev);
+      } else if (ev.t === 'error') {
+        run.done = true;
+        fail(ev.msg || 'The report could not be finished this time. Please try again.');
+      }
+      if (follow && ev.t !== 'd') scrollToBottom();
+    }
+
+    fetch('/AI/api/research/run/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        conversation_id: state.currentConversationId, message: ctx.text, model: currentModel, language: currentLanguage,
+        title: plan.title, steps: plan.steps,
+        replace_message_id: ctx.replacing ? ctx.replacing.id : undefined,
+      }),
+    }).then(function(resp){
+      var convId = resp.headers.get('X-Conversation-Id');
+      if (convId) setCurrentConversationId(parseInt(convId, 10));
+      var sentId = resp.headers.get('X-User-Message-Id');
+      var sentBubble = ctx.userRow && ctx.userRow.querySelector ? ctx.userRow.querySelector('.msg-bubble') : null;
+      if (sentId && sentBubble) sentBubble.dataset.messageId = sentId;
+      answeredModelKey = currentModel === 'chatgpt56' ? 'chatgpt56' : (resp.headers.get('X-Model-Key') || currentModel);
+      if (!resp.ok) {
+        return resp.json().catch(function(){ return {}; }).then(function(body){
+          stopTimers();
+          if (researchRefused(resp.status, body, ctx)) return null;
+          throw new Error(body.detail || 'Something went wrong — please try again.');
+        });
+      }
+      var pending = '';
+      function handle(line){
+        if (!line.trim()) return;
+        var ev = null;
+        try { ev = JSON.parse(line); } catch (e) { return; }
+        onEvent(ev);
+      }
+      if (!resp.body || !resp.body.getReader) {
+        return resp.text().then(function(all){ all.split('\n').forEach(handle); });
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      function pump(){
+        return reader.read().then(function(result){
+          if (result.done) { pending += decoder.decode(); handle(pending); return; }
+          pending += decoder.decode(result.value, { stream: true });
+          var lines = pending.split('\n');
+          pending = lines.pop();
+          lines.forEach(handle);
+          return pump();
+        });
+      }
+      return pump();
+    }).then(function(result){
+      if (result === null || run.done) return;
+      // The stream ended without a report or an error: the connection was cut.
+      run.done = true;
+      fail('The connection dropped before the report was finished. Nothing was saved — please try again.');
+    }).catch(function(err){
+      if (run.done) return;
+      run.done = true;
+      fail((err && err.name === 'AbortError')
+        ? 'Research stopped. Nothing was saved.'
+        : ((err && err.message) || 'The connection dropped before the report was finished. Please try again.'));
+    });
+  }
+
   function youtubeUrlFromText(text){
     var match = (text || '').match(/https?:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com\/(?:watch\?[^\s]*v=|shorts\/|live\/)|youtu\.be\/)[^\s<]+/i);
     return match ? match[0].replace(/[),.!?]+$/, '') : null;
@@ -7143,6 +8557,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     if (state.gated) { showGate(); return; }
     if (state.conversationEnded) return;
     if (state.githubMode || (replacing && replacing.github)) { sendGithub(promptText, replacing); return; }
+    if (state.research || (replacing && replacing.research)) { sendResearch(promptText, replacing); return; }
+    if (researchPlanWaiting()) { showAttachError('Start or cancel the research plan above first.'); return; }
     if (docsBusy()) { showAttachError('Please wait — your files are still uploading.'); return; }
     var text = (typeof promptText === 'string' ? promptText : input.value).trim();
     var imageToSend = stagedImage;
@@ -7189,9 +8605,14 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
 
     stopVoiceTyping();
     stopSpeaking();
+    // A Retry/Edit keeps the reply its message already had; otherwise this
+    // message answers whatever the Reply button quoted.
+    var replyQuote = replacing ? (replacing.replyTo || '') : activeReplyText();
+    if (!replacing) clearReply();
     renderRow('user', text, {
       image: imageToSend || (replacing && replacing.image) || null,
-      documentName: documentToSend ? documentToSend.name : (replacing ? replacing.documentName : null)
+      documentName: documentToSend ? documentToSend.name : (replacing ? replacing.documentName : null),
+      replyTo: replyQuote
     });
     var userRow = col.lastElementChild;
     input.value = '';
@@ -7290,6 +8711,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         document_truncated: documentTruncatedToSend,
         language: currentLanguage,
         web_search: state.webSearch,
+        reply_to: replyQuote || undefined,
         replace_message_id: replacing ? replacing.id : undefined,
         voice_call: voiceCall.active ? true : undefined,
         caller_name: voiceCall.active && voiceCall.name ? voiceCall.name : undefined,
@@ -7503,6 +8925,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
         pending.documentCodingText || pending.documentText || '', pending.documentCodingTruncated,
         pending.documentMode
       );
+      // Logging in from a deep-research question picks the research back up.
+      if (pending.research && pending.text) setResearchMode(true);
       if (pending.text || pending.image || pending.documentName) send(pending.text || '');
     }
     var convId = parseInt(pending.conversationId || '', 10);

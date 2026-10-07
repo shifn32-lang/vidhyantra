@@ -706,6 +706,10 @@ class AIMessage(models.Model):
     # it — replayed on every turn within AI_CHAT_MAX_HISTORY, same tradeoff
     # as replaying an attached image.
     document_text = models.TextField(blank=True)
+    # The earlier AI answer (or the part of it the user selected) this message
+    # replies to, set by the Reply button under an answer (user turns only).
+    # Shown as a quote above the message and given to the model as context.
+    reply_to_text = models.TextField(blank=True)
     model_key    = models.CharField(max_length=20, blank=True)  # which EduTrellis model answered (assistant turns only)
     # Comma-separated slugs of real EduTrellis Store products shown as cards
     # under this reply (assistant turns only) — see myapp.product_search.

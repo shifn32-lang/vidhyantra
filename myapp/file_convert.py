@@ -165,210 +165,61 @@ def _decode_text(data):
 
 
 # ── writers ──
+# The document writers live in doc_pdf / doc_word / doc_sheet, on top of the
+# shared Markdown parser in doc_blocks. They are imported on first use, the way
+# doc_extract.py imports fitz — a missing optional library must degrade to a
+# clear message, never an import-time crash that takes the whole site down.
+# Conversions pass branded=False: it is the user's own file, not ours, so it
+# gets typography and page numbers but no title band, date or brand name.
 
-_PDF_PAGE_SIZE = (612, 792)      # US Letter, in points
-_PDF_MARGIN = 56
-_PDF_BODY_SIZE = 11
-_PDF_HEADING_SIZES = {1: 20, 2: 17, 3: 15, 4: 13, 5: 12, 6: 11}
-_PDF_LINE_SPACING = 1.35
-_PDF_FONT = 'helv'
-_PDF_FONT_BOLD = 'hebo'
-
-
-# Models write Markdown, and the writers below used to lay it down verbatim —
-# a document full of literal **stars**, `backticks` and [text](url). These
-# resolve the inline markers to what the reader should actually see.
-_MD_LINK_RE = re.compile(r'\[([^\]\r\n]*)\]\(\s*([^)\s]*)[^)]*\)')
-_MD_IMAGE_RE = re.compile(r'!\[([^\]\r\n]*)\]\([^)]*\)')
-_MD_BOLD_RE = re.compile(r'(\*\*|__)(?=\S)(.+?)(?<=\S)\1', re.S)
-_MD_ITALIC_RE = re.compile(r'(?<![\w*])\*(?=\S)([^*\r\n]+?)(?<=\S)\*(?![\w*])')
-_MD_CODE_RE = re.compile(r'`([^`\r\n]+)`')
+# A table PDF stops here: past it a spreadsheet is a data export, not a page to read.
+MAX_PDF_TABLE_ROWS = 1000
 
 
-def _inline_text(text):
-    """Flatten inline Markdown to plain reading text.
-
-    A link keeps its label and, when the URL adds information, the URL in
-    brackets after it — dropping it silently would lose the destination.
-    """
-    text = _MD_IMAGE_RE.sub(r'\1', text or '')
-    text = _MD_LINK_RE.sub(
-        lambda m: m.group(1) if not m.group(2) or m.group(2) == m.group(1)
-        else (f'{m.group(1)} ({m.group(2)})' if m.group(1) else m.group(2)),
-        text,
-    )
-    text = _MD_BOLD_RE.sub(r'\2', text)
-    text = _MD_ITALIC_RE.sub(r'\1', text)
-    text = _MD_CODE_RE.sub(r'\1', text)
-    return text
+def text_to_pdf_bytes(content, **options):
+    """Render Markdown-ish text (headings, lists, tables, code, charts) as a designed PDF."""
+    from myapp import doc_pdf
+    return doc_pdf.render_pdf(content, **options)
 
 
-def _docx_runs(paragraph, text):
-    """Add ``text`` to a DOCX paragraph with **bold** as real bold runs."""
-    text = _MD_IMAGE_RE.sub(r'\1', text or '')
-    text = _MD_LINK_RE.sub(
-        lambda m: m.group(1) if not m.group(2) or m.group(2) == m.group(1)
-        else (f'{m.group(1)} ({m.group(2)})' if m.group(1) else m.group(2)),
-        text,
-    )
-    for index, part in enumerate(_MD_BOLD_RE.split(text)):
-        # split() with two groups yields [plain, marker, inner, plain, ...] —
-        # every third item from index 2 is the bolded text.
-        if part is None:
-            continue
-        if index % 3 == 2:
-            paragraph.add_run(_MD_CODE_RE.sub(r'\1', _MD_ITALIC_RE.sub(r'\1', part))).bold = True
-        elif index % 3 == 0:
-            paragraph.add_run(_MD_CODE_RE.sub(r'\1', _MD_ITALIC_RE.sub(r'\1', part)))
-
-
-def _wrap_line(fitz_module, text, fontsize, max_width, fontname):
-    """Greedy word-wrap using the font's real glyph widths."""
-    words = text.split(' ')
-    lines = []
-    current = ''
-    for word in words:
-        candidate = f'{current} {word}'.strip()
-        if not current or fitz_module.get_text_length(
-            candidate, fontname=fontname, fontsize=fontsize,
-        ) <= max_width:
-            current = candidate
-        else:
-            lines.append(current)
-            current = word
-    lines.append(current)
-    return lines
-
-
-def text_to_pdf_bytes(content):
-    """Render Markdown-ish text (headings, bullets, numbered lists) as a PDF.
-
-    Shared by the AI's own file generation (views._ai_pdf_bytes) and by the
-    conversions here, so both produce identically-formatted documents.
-
-    PyMuPDF is imported lazily, the way doc_extract.py does it — a missing
-    optional dependency must degrade to a clear message, never an import-time
-    crash that takes the whole site down.
-    """
-    try:
-        import fitz
-    except ImportError as exc:
-        raise ConvertError('PDF generation is temporarily unavailable.') from exc
-
-    width, height = _PDF_PAGE_SIZE
-    max_width = width - 2 * _PDF_MARGIN
-    doc = fitz.open()
-    page = doc.new_page(width=width, height=height)
-    y = _PDF_MARGIN
-
-    def emit(text, fontsize, fontname, indent=0, gap_after=6):
-        nonlocal page, y
-        for line in _wrap_line(fitz, text, fontsize, max_width - indent, fontname):
-            if y + fontsize > height - _PDF_MARGIN:
-                page = doc.new_page(width=width, height=height)
-                y = _PDF_MARGIN
-            page.insert_text(
-                (_PDF_MARGIN + indent, y + fontsize), line,
-                fontsize=fontsize, fontname=fontname,
-            )
-            y += fontsize * _PDF_LINE_SPACING
-        y += gap_after
-
-    for raw_line in (content or '').splitlines():
-        line = raw_line.strip()
-        if not line:
-            y += _PDF_BODY_SIZE * 0.5
-            continue
-        # A table row or a rule from Markdown would otherwise print as a wall
-        # of pipes and dashes; keep the cell text, drop the drawing characters.
-        if re.fullmatch(r'\|?[\s:|-]{3,}\|?', line):
-            continue
-        if line.startswith('|') and line.endswith('|'):
-            line = '  '.join(cell.strip() for cell in line.strip('|').split('|'))
-        heading = re.match(r'^(#{1,6})\s+(.+)$', line)
-        bullet = re.match(r'^[-*+]\s+(.+)$', line)
-        numbered = re.match(r'^(\d+[.)])\s+(.+)$', line)
-        if heading:
-            emit(_inline_text(heading.group(2)),
-                 _PDF_HEADING_SIZES[min(len(heading.group(1)), 6)], _PDF_FONT_BOLD)
-        elif bullet:
-            # A plain hyphen, not a Unicode bullet: the base-14 PDF fonts here
-            # don't reliably round-trip "•" through every reader/extractor.
-            emit(f'- {_inline_text(bullet.group(1))}', _PDF_BODY_SIZE, _PDF_FONT, indent=14)
-        elif numbered:
-            emit(f'{numbered.group(1)} {_inline_text(numbered.group(2))}',
-                 _PDF_BODY_SIZE, _PDF_FONT, indent=14)
-        else:
-            emit(_inline_text(line), _PDF_BODY_SIZE, _PDF_FONT)
-
-    data = doc.tobytes()
-    doc.close()
-    return data
-
-
-def text_to_docx_bytes(content):
+def text_to_docx_bytes(content, **options):
     """Render Markdown-ish text as a real DOCX package."""
-    from docx import Document as WordDocument
-
-    document = WordDocument()
-    for raw_line in (content or '').splitlines():
-        line = raw_line.strip()
-        if re.fullmatch(r'\|?[\s:|-]{3,}\|?', line):
-            continue
-        if line.startswith('|') and line.endswith('|'):
-            line = '  '.join(cell.strip() for cell in line.strip('|').split('|'))
-        heading = re.match(r'^(#{1,6})\s+(.+)$', line)
-        bullet = re.match(r'^[-*+]\s+(.+)$', line)
-        numbered = re.match(r'^\d+[.)]\s+(.+)$', line)
-        if heading:
-            document.add_heading(_inline_text(heading.group(2)), level=min(len(heading.group(1)), 9))
-        elif bullet:
-            _docx_runs(document.add_paragraph(style='List Bullet'), bullet.group(1))
-        elif numbered:
-            _docx_runs(document.add_paragraph(style='List Number'), numbered.group(1))
-        else:
-            _docx_runs(document.add_paragraph(), line)
-    buffer = io.BytesIO()
-    document.save(buffer)
-    return buffer.getvalue()
+    try:
+        from myapp import doc_word
+    except ImportError as exc:
+        raise ConvertError('Word generation is temporarily unavailable.') from exc
+    return doc_word.render_docx(content, **options)
 
 
-def rows_to_xlsx_bytes(rows):
+def rows_to_xlsx_bytes(rows, **options):
     """Write table rows as a real XLSX workbook, numbers stored as numbers."""
     try:
-        from openpyxl import Workbook
-        from openpyxl.styles import Font
-        from openpyxl.utils import get_column_letter
+        from myapp import doc_sheet
     except ImportError as exc:
         raise ConvertError('Excel generation is temporarily unavailable.') from exc
-
-    workbook = Workbook()
-    sheet = workbook.active
-    for row in rows:
-        sheet.append([_cell_value(value) for value in row])
-    if rows:
-        for cell in sheet[1]:
-            cell.font = Font(bold=True)
-        for index, column in enumerate(sheet.columns, start=1):
-            longest = max((len(str(cell.value or '')) for cell in column), default=0)
-            sheet.column_dimensions[get_column_letter(index)].width = min(max(longest + 2, 8), 60)
-    buffer = io.BytesIO()
-    workbook.save(buffer)
-    return buffer.getvalue()
+    return doc_sheet.render_xlsx(rows, **options)
 
 
-def _cell_value(value):
-    """Numeric-looking cells become real numbers; everything else stays text."""
-    text = str(value or '').strip()
-    if not text:
-        return ''
-    # Narrow on purpose: a currency symbol, percent sign or thousands separator
-    # means reinterpreting would change what the user actually wrote.
-    if re.fullmatch(r'-?\d+', text):
-        return int(text)
-    if re.fullmatch(r'-?\d*\.\d+', text):
-        return float(text)
-    return text
+def rows_to_pdf_bytes(rows, **options):
+    """Table rows (first row = headers) as a PDF table, wide ones in landscape."""
+    from myapp import doc_pdf
+    from myapp.doc_blocks import Block, escape_markdown
+
+    rows = [list(row) for row in rows if any(str(cell).strip() for cell in row)]
+    if not rows:
+        return doc_pdf.render_pdf('', **options)
+    width = max(len(row) for row in rows)
+
+    def cells(row):
+        return [escape_markdown(str(cell)) for cell in row + [''] * (width - len(row))]
+
+    body = [cells(row) for row in rows[1:]]
+    blocks = [Block('table', header=cells(rows[0]), rows=body[:MAX_PDF_TABLE_ROWS], aligns=[''] * width)]
+    if len(body) > MAX_PDF_TABLE_ROWS:
+        blocks.append(Block(
+            'para', text=f'Showing the first {MAX_PDF_TABLE_ROWS:,} of {len(body):,} rows.',
+        ))
+    return doc_pdf.render_pdf('', blocks=blocks, landscape=width > 6, **options)
 
 
 def rows_to_csv_bytes(rows):
@@ -376,10 +227,6 @@ def rows_to_csv_bytes(rows):
     writer = csv.writer(buffer, lineterminator='\n')
     writer.writerows(rows)
     return buffer.getvalue().encode('utf-8')
-
-
-def _rows_to_text(rows):
-    return '\n'.join(' | '.join(row) for row in rows)
 
 
 def _image_to_pdf_bytes(data):
@@ -452,11 +299,11 @@ def convert(data, source_name, target):
     elif source in ('csv', 'xlsx'):
         rows = _csv_to_rows(data) if source == 'csv' else _xlsx_to_rows(data)
         if target == 'xlsx':
-            payload = rows_to_xlsx_bytes(rows)
+            payload = rows_to_xlsx_bytes(rows, branded=False)
         elif target == 'csv':
             payload = rows_to_csv_bytes(rows)
         else:
-            payload = text_to_pdf_bytes(_rows_to_text(rows))
+            payload = rows_to_pdf_bytes(rows, branded=False)
     else:
         if source == 'pdf':
             text = _pdf_to_text(data)
@@ -465,9 +312,9 @@ def convert(data, source_name, target):
         else:
             text = _decode_text(data)
         if target == 'pdf':
-            payload = text_to_pdf_bytes(text)
+            payload = text_to_pdf_bytes(text, branded=False)
         elif target == 'docx':
-            payload = text_to_docx_bytes(text)
+            payload = text_to_docx_bytes(text, branded=False)
         else:
             payload = text.encode('utf-8')
 

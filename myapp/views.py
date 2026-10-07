@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import tempfile
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -17,7 +18,6 @@ from functools import wraps
 from urllib.parse import unquote, urlencode, urlsplit
 
 import requests
-from docx import Document as WordDocument
 from PIL import Image, ImageOps
 
 from django.contrib import messages
@@ -48,6 +48,10 @@ from myapp import ai_calls
 from myapp import coding_api
 from myapp import github_ops
 from myapp import doc_extract
+from myapp import doc_image
+from myapp import image_styles
+from myapp import poster
+from myapp import doc_text
 from myapp import company_knowledge
 from myapp import image_ocr
 from myapp import image_generation
@@ -55,6 +59,7 @@ from myapp import privacy
 from myapp import request_router
 from myapp import file_convert
 from myapp import web_search
+from myapp import deep_research
 from myapp import audio_transcribe
 from myapp import youtube_download
 from myapp import location_backfill
@@ -2547,6 +2552,10 @@ _AI_FILE_OBJECT_RE = re.compile(
     r"powerpoint|presentation|slide\s?deck|slides?|pptx?)\b",
     re.IGNORECASE,
 )
+_AI_FILE_FORMAT_RE = re.compile(
+    r"\b(?:pdf|docx?|excel|spreadsheet|xlsx?|workbook|powerpoint|presentation|slide\s?deck|pptx?)\b",
+    re.IGNORECASE,
+)
 _AI_EXPLICIT_FILENAME_RE = re.compile(
     r"\b([A-Za-z0-9][A-Za-z0-9_.-]{0,100}\.([A-Za-z0-9]{1,8}))\b",
     re.IGNORECASE,
@@ -2567,6 +2576,17 @@ def _ai_generated_file_spec(message):
             break
     if not _AI_FILE_ACTION_RE.search(text) or not (explicit or _AI_FILE_OBJECT_RE.search(text)):
         return None
+    # "Create an image for my brand ... featuring File Upload, Web Search ..." is
+    # a picture, not a file: the bare words file/document/sheet inside a picture
+    # request only describe what the picture shows. Only a named format
+    # (pdf, excel, slides...) or a real filename turns an image request into a file.
+    if (
+        not explicit
+        and (ai_chat.is_image_generation_request(text) or ai_chat.is_design_request(text))
+        and not ai_chat.is_image_capability_question(text)
+        and not _AI_FILE_FORMAT_RE.search(text)
+    ):
+        return None
 
     if explicit:
         candidate = explicit
@@ -2586,6 +2606,39 @@ def _ai_generated_file_spec(message):
     if not dot or extension.lower() not in AI_GENERATED_FILE_EXTENSIONS:
         candidate = 'generated.txt'
     return {'file_name': candidate}
+
+
+# Shared by every generated document. The rules are about content (what a
+# reader can trust) as much as layout: the writers in doc_pdf / doc_word turn
+# this Markdown into headings, tables, callouts and charts, so structure the
+# model writes becomes design, and invented figures become a visibly wrong
+# document — hence the accuracy rule is spelled out, not implied.
+_AI_ACCURACY_RULE = (
+    "Use only facts the user gave you, facts present in any retrieved web context, and well-established "
+    "general knowledge. Never invent statistics, names, dates, prices, quotes or sources: for a value you do "
+    "not have, write 'Not available' instead of guessing."
+)
+_AI_CHART_FORMAT = (
+    "(a line 'type:' of column, hbar, line, pie or donut; optional 'title:' and 'unit:' lines; then CSV "
+    "rows: a header row with the label column first and one column per data series, then one row per "
+    "category with plain numbers). Only add a chart for numbers the user supplied or the web context "
+    "contains."
+)
+_AI_DOCUMENT_STYLE_GUIDE = (
+    "Write it as a finished, professional document in Markdown: begin with one '# ' title line, then (for "
+    "anything longer than a page) a one- or two-sentence summary paragraph; use '## ' sections, '### ' "
+    "sub-sections, short paragraphs, '-' bullet lists and '1.' numbered steps; put any comparison, schedule, "
+    "price list or other data in a Markdown table with a header row (plain numbers such as 15,000 or 12.5%, "
+    "with the unit in the column title); use '> **Note:** …', '> **Tip:** …' or '> **Warning:** …' "
+    "callouts sparingly for the few points that really matter; use **bold** for key terms. "
+    + _AI_ACCURACY_RULE +
+    " When facts or figures come from the web search context, finish with a '## Sources' section listing "
+    "the real URLs from that context as Markdown links — never a URL that is not in it. If, and only if, "
+    "the user asked for a chart or graph, add it under the relevant section as a fenced block tagged chart "
+    + _AI_CHART_FORMAT +
+    " If the document contains a code sample or a chart block, open the OUTER fence with four backticks so "
+    "the inner fence does not end it."
+)
 
 
 def _ai_generated_file_instruction(filename):
@@ -2610,37 +2663,45 @@ def _ai_generated_file_instruction_body(filename):
     if filename.lower().endswith('.docx'):
         return (
             f"The user explicitly requested a real downloadable Microsoft Word document named {filename!r}. "
-            "Write the complete final document content now in exactly one fenced Markdown block. Use clear "
-            "headings and lists where helpful, with no placeholders or explanatory text outside the block. "
-            "Do not output XML, base64, a fake URL, or claim that you attached a file. The application will "
+            "Write the complete final document content now in exactly one fenced Markdown block, with no "
+            "placeholders or explanatory text outside the block. " + _AI_DOCUMENT_STYLE_GUIDE +
+            " Do not output XML, base64, a fake URL, or claim that you attached a file. The application will "
             "convert this content into a genuine DOCX file and attach the real download link."
         )
     if filename.lower().endswith('.pdf'):
         return (
             f"The user explicitly requested a real downloadable PDF named {filename!r}. Write the complete "
-            "final document content now in exactly one fenced Markdown block. Use clear headings and lists "
-            "where helpful, with no placeholders or explanatory text outside the block. Do not output "
-            "base64, a fake URL, or claim that you attached a file. The application will render this content "
-            "into a genuine PDF and attach the real download link."
+            "final document content now in exactly one fenced Markdown block, with no placeholders or "
+            "explanatory text outside the block. " + _AI_DOCUMENT_STYLE_GUIDE +
+            " Do not output base64, a fake URL, or claim that you attached a file. The application will "
+            "render this content into a genuine PDF and attach the real download link."
         )
     if filename.lower().endswith('.xlsx'):
         return (
             f"The user explicitly requested a real downloadable Excel spreadsheet named {filename!r}. "
             "Write the complete final table now as CSV in exactly one fenced block: the first row is the "
             "column headers, every following row is one record, values separated by commas, and any value "
-            "containing a comma wrapped in double quotes. Write real values, never placeholders. Put no "
-            "explanatory text, notes, or totals commentary outside the block. The application will convert "
-            "this into a genuine XLSX workbook and attach the real download link."
+            "containing a comma wrapped in double quotes. Write real values, never placeholders. Write "
+            "numbers plainly (15000, 12.5, 8%) with the unit in the column header, for example 'Price (₹)', "
+            "so they can be summed and sorted; write dates as YYYY-MM-DD. If the data has totals, add a last "
+            "row whose first cell is 'Total' and check every sum before writing it. Put no explanatory text, "
+            "notes, or totals commentary outside the block. " + _AI_ACCURACY_RULE + " The application will "
+            "convert this into a genuine XLSX workbook and attach the real download link."
         )
     if filename.lower().endswith('.pptx'):
         return (
             f"The user explicitly requested a real downloadable PowerPoint deck named {filename!r}. "
             "Write the complete final deck now in exactly one fenced Markdown block, using this exact "
             "structure: start each slide with '# ' followed by that slide's title on its own line, then "
-            "the slide's bullet points as lines starting with '- '. Use one slide per idea, keep bullets "
-            "short, and write real content with no placeholders. Put no explanatory text outside the "
-            "block. The application will convert this into a genuine PPTX deck and attach the real "
-            "download link."
+            "the slide's bullet points as lines starting with '- ' (indent a sub-point by two spaces). The "
+            "FIRST slide is the title slide: its '# ' line is the deck's title and its only content is one "
+            "short '- ' subtitle line. Use one slide per idea, keep every bullet under about 15 words, and "
+            "write real content with no placeholders. Put a comparison, schedule or other data in a Markdown "
+            "table with a header row (it becomes a real table on its own slide). If the user asked for a "
+            "chart, add one under that slide as a fenced block tagged chart " + _AI_CHART_FORMAT +
+            " Add speaker notes only if the user asked for them, as a line starting 'Notes:' under the "
+            "slide. " + _AI_ACCURACY_RULE + " Put no explanatory text outside the block. The application "
+            "will convert this into a genuine PPTX deck and attach the real download link."
         )
     return (
         f"The user explicitly requested a downloadable file named {filename!r}. Create the complete final "
@@ -2659,6 +2720,7 @@ _AI_FILE_INSTRUCTION_SUFFIX = (
     " NEVER write a download link, URL, or file path of your own anywhere in this reply — not in Markdown, "
     "not as plain text — and never say the file is attached or ready. The application adds the one real "
     "link by itself, and any link you write is dead and appears as a confusing duplicate. "
+    + _AI_ACCURACY_RULE + " "
     "If you genuinely cannot write the document because the user has not said what it should contain, "
     "reply with only your single clarifying question and NO fenced block at all; no file will then be "
     "created, which is correct. Otherwise write the full content and do not ask anything."
@@ -2706,6 +2768,51 @@ def _strip_fake_download_links(text):
     # Collapse the blank lines the removal leaves behind.
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
+
+
+# Files whose body is a document: the model may write code samples or chart
+# blocks *inside* it, so the outer fence has to be matched, not just closed at
+# the first ``` that turns up.
+_AI_DOCUMENT_SUFFIXES = ('.docx', '.pdf', '.pptx', '.md', '.txt')
+_FENCE_LINE_RE = re.compile(r'^[ \t]*(`{3,}|~{3,})(.*)$')
+
+
+def _first_fenced_block(text):
+    """The content of the first fenced block, keeping fences written inside it.
+
+    A four-backtick opener ends only at a bare fence of four or more. With the
+    usual three, an inner fence that names a language (```chart, ```python)
+    opens a nested block and the bare ``` after it closes that block; the outer
+    block ends at the first bare fence left over. An unclosed fence — a reply
+    cut off by the token limit — yields what was written so far. None when
+    there is no fence at all.
+    """
+    lines = (text or '').split('\n')
+    opener = None
+    for start, line in enumerate(lines):
+        opener = _FENCE_LINE_RE.match(line)
+        if opener:
+            break
+    if not opener:
+        return None
+    marker = opener.group(1)
+    depth = 0
+    body = []
+    for line in lines[start + 1:]:
+        match = _FENCE_LINE_RE.match(line)
+        if match and match.group(1)[0] == marker[0] and len(match.group(1)) >= len(marker):
+            named = bool(match.group(2).strip())
+            if len(marker) > 3:
+                if not named:
+                    return '\n'.join(body).rstrip('\r\n')
+            elif named:
+                depth += 1
+            elif depth:
+                depth -= 1
+            else:
+                return '\n'.join(body).rstrip('\r\n')
+        body.append(line)
+    return '\n'.join(body).rstrip('\r\n')
 
 
 def _extract_ai_generated_file_content(reply, filename=''):
@@ -2790,6 +2897,10 @@ def _extract_ai_generated_file_content(reply, filename=''):
         ):
             return ''
         return _strip_fake_download_links(content)
+    if str(filename or '').lower().endswith(_AI_DOCUMENT_SUFFIXES):
+        nested = _first_fenced_block(text)
+        if nested is not None:
+            return _strip_fake_download_links(nested)
     if fences:
         return _strip_fake_download_links(fences[0].group(2).rstrip('\r\n'))
     if text.startswith('```') and text.endswith('```'):
@@ -2808,87 +2919,53 @@ def _extract_ai_generated_file_content(reply, filename=''):
     return text
 
 
-def _ai_word_document_bytes(content):
-    """Convert model-produced document text into a genuine DOCX package."""
-    return file_convert.text_to_docx_bytes(content)
-
-
-def _ai_pdf_bytes(content):
-    """Convert model-produced document text into a genuine, paginated PDF.
-
-    Both this and the file-conversion endpoint render through the same writer
-    (file_convert.text_to_pdf_bytes), so an AI-generated PDF and a converted
-    one come out formatted identically. ConvertError is re-raised as
-    RuntimeError because that is what the download view below catches for
-    "this format is temporarily unavailable".
-    """
+def _ai_office_file(build, *args, **meta):
+    """Run one document writer; a missing library or a file it cannot build is
+    reported as RuntimeError, which the download view turns into "temporarily
+    unavailable" rather than a server error."""
     try:
-        return file_convert.text_to_pdf_bytes(content)
+        return build(*args, **meta)
     except file_convert.ConvertError as exc:
         raise RuntimeError(str(exc)) from exc
 
 
-def _ai_excel_bytes(content):
-    """Convert the model's CSV output into a genuine XLSX workbook.
+def _ai_word_document_bytes(content, **meta):
+    """Convert model-produced document text into a designed DOCX package
+    (headings, lists, tables, callouts, charts — see doc_word)."""
+    return _ai_office_file(file_convert.text_to_docx_bytes, content, **meta)
+
+
+def _ai_pdf_bytes(content, **meta):
+    """Convert model-produced document text into a designed, paginated PDF.
+
+    Both this and the file-conversion endpoint render through the same writer
+    (doc_pdf), so an AI-generated PDF and a converted one share one typography.
+    ConvertError is re-raised as RuntimeError because that is what the download
+    view below catches for "this format is temporarily unavailable".
+    """
+    return _ai_office_file(file_convert.text_to_pdf_bytes, content, **meta)
+
+
+def _ai_excel_bytes(content, **meta):
+    """Convert the model's CSV output into a styled XLSX workbook.
 
     CSV is the intermediate on purpose (see _ai_generated_file_instruction):
     it is the tabular format models emit most reliably, and csv.reader handles
     the quoting rules so a value containing a comma survives intact.
     """
     rows = list(csv.reader(io.StringIO(content or '')))
-    try:
-        return file_convert.rows_to_xlsx_bytes(rows)
-    except file_convert.ConvertError as exc:
-        raise RuntimeError(str(exc)) from exc
+    return _ai_office_file(file_convert.rows_to_xlsx_bytes, rows, **meta)
 
 
-def _ai_powerpoint_bytes(content):
-    """Convert the model's '# title / - bullet' Markdown into a real PPTX deck."""
+def _ai_powerpoint_bytes(content, **meta):
+    """Convert the model's '# title / - bullet' Markdown into a designed 16:9
+    PPTX deck (title slide, themed slides, native tables and charts — see
+    doc_slides)."""
     try:
-        from pptx import Presentation
-        from pptx.util import Pt
+        from myapp import doc_slides
     except ImportError as exc:
         raise RuntimeError('PowerPoint generation is temporarily unavailable.') from exc
-
-    presentation = Presentation()
-    # Layout 1 is the stock "Title and Content" master — using it means the
-    # deck opens with normal, editable placeholders rather than loose boxes.
-    layout = presentation.slide_layouts[1]
-
-    slides = []
-    for raw_line in (content or '').splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        heading = re.match(r'^#{1,6}\s+(.+)$', line)
-        bullet = re.match(r'^[-*]\s+(.+)$', line)
-        if heading:
-            slides.append({'title': heading.group(1), 'bullets': []})
-        elif slides:
-            slides[-1]['bullets'].append(bullet.group(1) if bullet else line)
-        else:
-            # Content before any heading still deserves a slide rather than
-            # being silently dropped.
-            slides.append({'title': bullet.group(1) if bullet else line, 'bullets': []})
-
-    if not slides:
-        slides = [{'title': 'Untitled', 'bullets': []}]
-
-    for entry in slides:
-        slide = presentation.slides.add_slide(layout)
-        slide.shapes.title.text = entry['title'][:250]
-        body = slide.placeholders[1].text_frame
-        body.clear()
-        if not entry['bullets']:
-            continue
-        for index, bullet_text in enumerate(entry['bullets']):
-            paragraph = body.paragraphs[0] if index == 0 else body.add_paragraph()
-            paragraph.text = bullet_text
-            paragraph.font.size = Pt(18)
-
-    buffer = io.BytesIO()
-    presentation.save(buffer)
-    return buffer.getvalue()
+    return _ai_office_file(doc_slides.render_pptx, content, **meta)
 
 
 def _ai_user_context(user):
@@ -2948,29 +3025,53 @@ def ai_generated_file_download(request, token):
             files = files.filter(user__isnull=True, session_key=session_key)
     generated_file = get_object_or_404(files)
 
-    if generated_file.file_name.lower().endswith('.docx'):
-        payload = _ai_word_document_bytes(generated_file.content)
-        content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    elif generated_file.file_name.lower().endswith('.pdf'):
+    name = generated_file.file_name.lower()
+    if doc_image.is_image_file(generated_file.content):
+        extension = name.rsplit('.', 1)[-1]
         try:
-            payload = _ai_pdf_bytes(generated_file.content)
+            payload = doc_image.render(name, generated_file.content)
+        except Exception:
+            logger.exception('Could not build the image file %s', generated_file.pk)
+            return JsonResponse({
+                'status': 'error',
+                'detail': "We couldn't build this file. Please ask for it again.",
+            }, status=503)
+        response = HttpResponse(payload, content_type=doc_image.CONTENT_TYPES.get(extension, 'application/octet-stream'))
+        response['Content-Disposition'] = f'attachment; filename="{generated_file.file_name}"'
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+    # The day the file was made goes into the document itself (title band,
+    # footer), so a re-download is identical. Generated files carry no brand
+    # name: they are the user's documents.
+    meta = {'brand': '', 'created': generated_file.created_at}
+    builders = {
+        '.docx': (_ai_word_document_bytes,
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        '.pdf': (_ai_pdf_bytes, 'application/pdf'),
+        '.xlsx': (_ai_excel_bytes,
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+        '.pptx': (_ai_powerpoint_bytes,
+                  'application/vnd.openxmlformats-officedocument.presentationml.presentation'),
+    }
+    builder = next((entry for suffix, entry in builders.items() if name.endswith(suffix)), None)
+    if builder:
+        try:
+            payload = builder[0](generated_file.content, **meta)
         except RuntimeError as exc:
             return JsonResponse({'status': 'error', 'detail': str(exc)}, status=503)
-        content_type = 'application/pdf'
-    elif generated_file.file_name.lower().endswith('.xlsx'):
-        try:
-            payload = _ai_excel_bytes(generated_file.content)
-        except RuntimeError as exc:
-            return JsonResponse({'status': 'error', 'detail': str(exc)}, status=503)
-        content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    elif generated_file.file_name.lower().endswith('.pptx'):
-        try:
-            payload = _ai_powerpoint_bytes(generated_file.content)
-        except RuntimeError as exc:
-            return JsonResponse({'status': 'error', 'detail': str(exc)}, status=503)
-        content_type = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        except Exception:
+            # A document the writers cannot lay out must never be a server
+            # error: say so, and the person can ask for the file again.
+            logger.exception('Could not build the AI-generated file %s', generated_file.pk)
+            return JsonResponse({
+                'status': 'error',
+                'detail': "We couldn't build this file. Please ask for it again.",
+            }, status=503)
+        content_type = builder[1]
     else:
-        payload = generated_file.content.encode('utf-8')
+        payload = doc_text.finish_text_file(generated_file.file_name, generated_file.content, **meta)
         content_type = f"{mimetypes.guess_type(generated_file.file_name)[0] or 'text/plain'}; charset=utf-8"
     response = HttpResponse(payload, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{generated_file.file_name}"'
@@ -3138,6 +3239,7 @@ def ai_page(request):
         # empty state would tell a free user a model is selected that the
         # picker below is actually showing as Vidhyora Quick.
         'ai_full_model_access': ai_full_model_access,
+        'ai_image_styles': image_styles.gallery(),
         'ai_default_model': ai_default_model,
         'ai_default_model_label': model_labels[ai_default_model],
         'ai_model_labels': model_labels,
@@ -3893,7 +3995,13 @@ def _ai_flux_response(conversation, prompt, source_image, response_model_key=Non
     model_controls.record_request(ai_chat.FLUX_KLEIN_4B_MODEL_KEY)
     try:
         try:
-            generated = image_generation.generate_image(prompt, source_image or None)
+            # A poster with words that must be exact (brand name, price,
+            # contact details) gets AI artwork with the words lettered on top
+            # by the server — see myapp/poster.py. Anything else is drawn
+            # entirely by the image model, as before.
+            generated = None if source_image else poster.make_poster(prompt)
+            if generated is None:
+                generated = image_generation.generate_image(prompt, source_image or None)
         except image_generation.ImageGenerationError as exc:
             # The connected backend can't actually edit an uploaded reference
             # image at all (see ImageGenerationError.editing_unavailable) —
@@ -4027,6 +4135,30 @@ def _ai_replace_target(request, payload):
     return target
 
 
+AI_REPLY_QUOTE_MAX_CHARS = 1500
+
+
+def _ai_reply_quote(payload):
+    """The earlier answer (or the part of it the user selected) that this
+    message replies to (payload reply_to), tidied and capped. Empty when the
+    message is not a reply."""
+    quote = payload.get('reply_to')
+    if not isinstance(quote, str):
+        return ''
+    quote = re.sub(r'[ \t]+', ' ', quote.replace('\r\n', '\n'))
+    quote = re.sub(r'\n{3,}', '\n\n', quote).strip()
+    return quote[:AI_REPLY_QUOTE_MAX_CHARS].rstrip()
+
+
+def _ai_reply_context(quote):
+    """What the model is told before a message that replies to one of its
+    earlier answers, so it knows which answer 'this' or 'that' means."""
+    return (
+        'The user is replying to this specific earlier answer of yours:\n"""\n'
+        f'{quote}\n"""\nTheir message about it follows.\n\n'
+    )
+
+
 def _ai_image_daily_count(request):
     """Count images successfully saved today for this account/session."""
     images = AIUserImage.objects.filter(created_at__date=timezone.localdate())
@@ -4039,8 +4171,11 @@ def _ai_image_daily_count(request):
 
 
 def _ai_previous_image_for_edit(request, conversation_id, message):
-    """Return the latest usable image when a follow-up clearly asks to edit it."""
-    if not conversation_id or not ai_chat.is_image_edit_instruction(message):
+    """Return the latest usable image when a follow-up clearly asks to edit it:
+    an edit verb ("change", "remove"...), or - straight after the AI has shown
+    a picture - a few words about how it should look ("hands up pose")."""
+    explicit_edit = ai_chat.is_image_edit_instruction(message)
+    if not conversation_id or not (explicit_edit or ai_chat.is_image_followup(message)):
         return ''
     try:
         conversation_id = int(conversation_id)
@@ -4051,6 +4186,10 @@ def _ai_previous_image_for_edit(request, conversation_id, message):
     ).first()
     if not conversation:
         return ''
+    if not explicit_edit:
+        latest = _ai_visible_messages(request, conversation).order_by('-created_at', '-pk').first()
+        if not latest or latest.role != AIMessage.ROLE_ASSISTANT or not latest.image_data:
+            return ''
     previous = _ai_visible_messages(request, conversation).exclude(image_data='').order_by(
         '-created_at', '-pk',
     ).values_list('image_data', flat=True).first()
@@ -4144,6 +4283,81 @@ def _ai_recalled_image_response(conversation, image_value, display_model_key):
     response['X-Message-Id'] = str(assistant_message.pk)
     return response
 
+
+
+# "add this image inside pdf", "put the poster in a word file", "this photo as
+# pptx": an image already in the chat goes into a file as it is. Needs both a
+# pointer at an existing picture and a file format; "create a pdf with an image
+# of a logo" (no existing picture) stays an ordinary written document.
+_AI_IMAGE_REFERENCE_RE = re.compile(
+    r"\b(?:this|that|the|above|previous|last|same|generated|my|your|ye|yeh|is)\s+"
+    r"(?:image|picture|photo|pic|poster|logo|banner|flyer|design|graphic|wallpaper|thumbnail)s?\b"
+    r"(?!\s+(?:generat|creat|edit|model|prompt))|"
+    r"\b(?:image|picture|photo|poster)\s+(?:above|you\s+(?:made|created|generated|gave))\b|"
+    r"\b(?:it|this)\s+(?:in|into|inside|as|to)\s+(?:a\s+|an\s+)?(?:pdf|word|docx|ppt|pptx|powerpoint)\b",
+    re.IGNORECASE,
+)
+_AI_IMAGE_FILE_FORMATS = (
+    (re.compile(r'\bpdf\b', re.IGNORECASE), 'pdf'),
+    (re.compile(r'\b(?:word|docx?)\b', re.IGNORECASE), 'docx'),
+    (re.compile(r'\b(?:pptx?|powerpoint|presentation|slides?|slide\s?deck)\b', re.IGNORECASE), 'pptx'),
+)
+
+
+def _ai_image_file_request(message):
+    """'pdf', 'docx' or 'pptx' when the message asks to put a chat image into
+    that kind of file, else ''."""
+    text = message or ''
+    if not _AI_IMAGE_REFERENCE_RE.search(text):
+        return ''
+    found = [(m.start(), ext) for pattern, ext in _AI_IMAGE_FILE_FORMATS for m in [pattern.search(text)] if m]
+    return min(found)[1] if found else ''
+
+
+def _ai_image_file_response(request, conversation, user_message, extension, display_model_key):
+    """Put the picture this turn points at (one attached now, else the latest
+    one in the chat) into a PDF/Word/PowerPoint file and reply with its link."""
+    picture = user_message.image_data or (
+        _ai_visible_messages(request, conversation).exclude(pk=user_message.pk).exclude(image_data='')
+        .order_by('-created_at', '-pk').values_list('image_data', flat=True).first() or ''
+    )
+    picture = _snapshot_ai_report_image(picture) if picture else ''
+    labels = {'pdf': 'PDF', 'docx': 'Word file', 'pptx': 'PowerPoint file'}
+    if not picture:
+        reply = (
+            f"There's no image in this chat yet to put in a {labels[extension]}. "
+            "Create one or attach one, then ask again."
+        )
+    elif not picture.startswith('data:image/'):
+        reply = "I couldn't open that image any more. Please create or attach it again, then ask for the file."
+    else:
+        explicit = next(
+            (m.group(1) for m in _AI_EXPLICIT_FILENAME_RE.finditer(user_message.content or '')
+             if m.group(2).lower() == extension), '',
+        )
+        noun = re.search(r'\b(poster|logo|banner|flyer|photo|picture|design|wallpaper|thumbnail)\b',
+                         user_message.content or '', re.IGNORECASE)
+        file_name = explicit or f"{(noun.group(1).lower() if noun else 'image')}.{extension}"
+        file_name = re.sub(r'[^A-Za-z0-9_.-]+', '-', Path(file_name.replace('\\', '/')).name).strip('.-')[:120]
+        generated_file = AIGeneratedFile.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            session_key='' if request.user.is_authenticated else (request.session.session_key or ''),
+            file_name=file_name,
+            content=doc_image.stored_content(picture),
+        )
+        download_url = request.build_absolute_uri(reverse('ai_generated_file_download', args=[generated_file.token]))
+        reply = f"Your file is ready.\n\n[Download {generated_file.file_name}]({download_url})"
+    assistant_message = AIMessage.objects.create(
+        conversation=conversation, role=AIMessage.ROLE_ASSISTANT, content=reply, model_key=display_model_key,
+    )
+    response = HttpResponse(reply, content_type='text/plain; charset=utf-8')
+    response['Cache-Control'] = 'private, no-store'
+    response['X-Conversation-Id'] = str(conversation.pk)
+    response['X-Model-Key'] = display_model_key
+    response['X-Routed-Model-Key'] = display_model_key
+    response['X-Request-Category'] = 'file_generation'
+    response['X-Message-Id'] = str(assistant_message.pk)
+    return response
 
 
 def ai_chat_send(request):
@@ -4341,6 +4555,9 @@ def _ai_chat_send(request):
         # narrow natural-prompt pattern) but is just as clearly a real
         # prompt to generate, not a question to answer conversationally.
         or (not image_data and ai_chat.is_scene_description_prompt(message))
+        # A design named on its own, with no "create"/"image" word: "Instagram
+        # poster 4:5 ...", "need a flyer for my yoga class", "--ar 4:5 --v 6".
+        or (not image_data and ai_chat.is_design_request(message))
         # If the previous assistant turn explicitly asked for image details,
         # this reply completes that request instead of starting a text chat.
         or bool(pending_image_prompt)
@@ -4369,7 +4586,13 @@ def _ai_chat_send(request):
         if message and not document_text
         else None
     )
-    if previous_display_image:
+    image_file_extension = _ai_image_file_request(message) if message else ''
+    if image_file_extension:
+        # Built directly from the picture already in the chat - no model call,
+        # and never mistaken for a request to draw or edit a picture.
+        model_key = 'quick'
+        request_category = 'image_file'
+    elif previous_display_image:
         model_key = 'quick'
         request_category = 'image_recall'
     elif generated_file_spec:
@@ -4446,7 +4669,7 @@ def _ai_chat_send(request):
     if (
         not full_model_access
         and model_key != ai_chat.FLUX_KLEIN_4B_MODEL_KEY
-        and request_category != 'image_recall'
+        and request_category not in ('image_recall', 'image_file')
         and (
         selected_model_key not in AI_FREE_MODEL_KEYS or model_key not in AI_FREE_MODEL_KEYS
         )
@@ -4555,12 +4778,17 @@ def _ai_chat_send(request):
         conversation=conversation, role=AIMessage.ROLE_USER, content=message,
         image_data=image_data, document_name=document_name,
         document_text=document_text or image_ocr_text,
+        reply_to_text=_ai_reply_quote(payload),
     )
     request._ai_user_message_id = user_message.pk
     conversation.updated_at = timezone.now()
     conversation.save(update_fields=['updated_at'])
     request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
 
+    if image_file_extension:
+        return _ai_image_file_response(
+            request, conversation, user_message, image_file_extension, response_model_key,
+        )
     if previous_display_image:
         return _ai_recalled_image_response(
             conversation, previous_display_image, response_model_key,
@@ -4644,7 +4872,7 @@ def _ai_chat_send(request):
 
     recent = list(
         _ai_visible_messages(request, conversation).order_by('-created_at')
-        .values('role', 'content', 'image_data', 'document_name', 'document_text')[:AI_CHAT_MAX_HISTORY]
+        .values('role', 'content', 'image_data', 'document_name', 'document_text', 'reply_to_text')[:AI_CHAT_MAX_HISTORY]
     )
     recent.reverse()
 
@@ -4682,6 +4910,12 @@ def _ai_chat_send(request):
             content = (m['content'] + f" [Attached document: {m['document_name']}]").strip()
         else:
             content = m['content']
+        if m['reply_to_text'] and m['role'] == AIMessage.ROLE_USER:
+            reply_context = _ai_reply_context(m['reply_to_text'])
+            if isinstance(content, list):
+                content[0]['text'] = reply_context + content[0]['text']
+            else:
+                content = reply_context + content
         clean_history.append({'role': m['role'], 'content': content})
 
     # Drop the oldest turns (documents/images first pushed the total over
@@ -5057,6 +5291,329 @@ def _ai_chat_send(request):
     # instead of showing the usual follow-up chips (see is_persona_farewell
     # above; ai_chat.stream_chat was told to make this a closing message).
     response['X-Persona-End'] = '1' if is_persona_farewell else ''
+    return response
+
+
+# ── Deep research (/AI/api/research/) ───────────────────────────────────────
+# A question is planned, searched on the web, read and written up as a cited
+# report with PDF / Word / Markdown downloads. The research itself lives in
+# myapp.deep_research; this is the web side of it: who may run it, how often,
+# the progress stream and what gets saved.
+
+AI_RESEARCH_PLAN_LIMIT = 20          # plans per 10 minutes, per account
+AI_RESEARCH_RUN_LIMIT = 8            # runs started per 10 minutes, per account
+AI_RESEARCH_DAILY_LIMIT = 3          # finished reports a day on the free plan
+AI_RESEARCH_DAILY_LIMIT_FULL = 20    # ...and for staff and subscribers
+AI_RESEARCH_MAX_PARALLEL = 2         # reports being researched at once, per server process
+AI_RESEARCH_ACTIVE_SECONDS = 420     # a person's one-at-a-time lock is dropped after this long
+AI_RESEARCH_QUESTION_CHARS = 2000
+AI_RESEARCH_FORMATS = (('pdf', 'PDF'), ('docx', 'Word'), ('md', 'Markdown'))
+_AI_RESEARCH_SLOTS = threading.BoundedSemaphore(AI_RESEARCH_MAX_PARALLEL)
+
+
+def _ai_research_used_today(user):
+    """Reports this account finished today (each one leaves a .md file)."""
+    return AIGeneratedFile.objects.filter(
+        user=user, file_name__startswith='deep-research-', file_name__endswith='.md',
+        created_at__date=timezone.localdate(),
+    ).count()
+
+
+def _ai_research_daily_limit(user):
+    if (user.email or '').strip().lower() in AI_UNLIMITED_IMAGE_EMAILS:
+        return None
+    return AI_RESEARCH_DAILY_LIMIT_FULL if _ai_has_full_model_access(user) else AI_RESEARCH_DAILY_LIMIT
+
+
+def _ai_research_models(user, requested):
+    """(model shown to the person, model that does the work, persona) for a
+    research turn, or None when no model is available. A report is general
+    writing, so the coding mode does the work as Quick; a free account gets
+    Quick whatever it picked, the same as everywhere else."""
+    full_access = _ai_has_full_model_access(user)
+    fallback = (
+        ai_chat.SOL_MODEL_KEY if full_access and ai_chat.is_model_enabled(ai_chat.SOL_MODEL_KEY) else 'quick'
+    )
+    shown = requested if requested in ai_chat.MODELS else fallback
+    if shown in ('vision', 'code', ai_chat.FLUX_KLEIN_4B_MODEL_KEY):
+        shown = fallback if shown != 'code' else 'quick'
+    if not full_access and shown not in AI_FREE_MODEL_KEYS:
+        shown = 'quick'
+    if not ai_chat.is_model_enabled(shown):
+        shown = fallback
+        if not ai_chat.is_model_enabled(shown):
+            return None
+    if shown == ai_chat.CHATGPT_56_MODEL_KEY:
+        return shown, 'quick', shown     # Luna: a Quick worker, answering under Luna's name and key
+    return shown, shown, None
+
+
+def _ai_research_rate_limited(request, name, limit):
+    key = f'ai_research_{name}_rate:{request.user.pk}'
+    cache.add(key, 0, AI_CHAT_RATE_WINDOW)
+    try:
+        count = cache.incr(key)
+    except ValueError:      # expired between add and incr
+        cache.set(key, 1, AI_CHAT_RATE_WINDOW)
+        count = 1
+    return count > limit
+
+
+def _ai_research_chat_context(request, payload):
+    """The last few turns of the open conversation, as a few short redacted
+    lines — enough for "now compare it with Chrome" to know its subject."""
+    try:
+        conversation = AIConversation.objects.filter(
+            _ai_owner_filter(request), pk=int(payload.get('conversation_id')),
+        ).first()
+    except (TypeError, ValueError):
+        conversation = None
+    if conversation is None:
+        return ''
+    _ai_replace_target(request, payload)
+    rows = list(
+        _ai_visible_messages(request, conversation).exclude(content='')
+        .order_by('-created_at', '-pk').values_list('role', 'content')[:deep_research.CONTEXT_TURNS]
+    )
+    rows.reverse()
+    return privacy.redact(deep_research.chat_context(rows))
+
+
+def _ai_research_request(request, kind):
+    """Checks shared by the plan and the run. Returns ``(context, None)`` or
+    ``(None, error response)``."""
+    if request.method != 'POST':
+        return None, JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    if not request.user.is_authenticated:
+        return None, JsonResponse({
+            'status': 'login_required',
+            'detail': 'Log in to use deep research — the finished report is saved to your account.',
+        }, status=403)
+    user = request.user
+    if not _ai_has_admin_access(user):
+        ip = _client_ip(request)
+        block = Q(user=user)
+        if ip and ip != 'unknown':
+            block |= Q(ip_address=ip)
+        if AIBlock.objects.filter(block).exists():
+            return None, JsonResponse({
+                'status': 'error',
+                'detail': "Your access to Vidhyora AI has been restricted. Contact support if you think this is a mistake.",
+            }, status=403)
+    if _ai_research_rate_limited(
+        request, kind, AI_RESEARCH_PLAN_LIMIT if kind == 'plan' else AI_RESEARCH_RUN_LIMIT,
+    ):
+        return None, JsonResponse({
+            'status': 'rate_limited',
+            'detail': 'Too many research requests in a short time — please wait a few minutes and try again.',
+        }, status=429)
+    payload = _parse_json_body(request)
+    if not isinstance(payload, dict):
+        return None, JsonResponse({'status': 'error', 'detail': 'Invalid request body.'}, status=400)
+    message = str(payload.get('message', ''))[:AI_RESEARCH_QUESTION_CHARS].strip()
+    if len(message) < 3:
+        return None, JsonResponse({'status': 'error', 'detail': 'Tell me what you would like researched.'}, status=400)
+    gate = _ai_profile_gate(user, _client_ip(request))
+    if gate:
+        return None, JsonResponse(gate, status=403)
+    limit = _ai_research_daily_limit(user)
+    if limit is not None and _ai_research_used_today(user) >= limit:
+        return None, JsonResponse({
+            'status': 'rate_limited',
+            'detail': (
+                f"You have used today's {limit} deep research report{'s' if limit != 1 else ''}. "
+                'The limit resets tomorrow' + ('' if _ai_has_full_model_access(user) else ' — premium access raises it') + '.'
+            ),
+        }, status=429)
+    models = _ai_research_models(user, payload.get('model'))
+    if models is None:
+        return None, JsonResponse({
+            'status': 'model_disabled',
+            'detail': 'Deep research is temporarily unavailable. Please try again later.',
+        }, status=403)
+    requested_language = payload.get('language')
+    language = requested_language if requested_language in ai_chat.LANGUAGES else ai_chat.DEFAULT_LANGUAGE
+    return {
+        'payload': payload, 'message': message, 'language': language,
+        'shown_model': models[0], 'worker_model': models[1], 'identity_model': models[2],
+    }, None
+
+
+def ai_research_plan(request):
+    """Step one: a short research plan the person can read, edit and start."""
+    ctx, error = _ai_research_request(request, 'plan')
+    if error:
+        return error
+    started = time.perf_counter()
+    plan = deep_research.make_plan(
+        privacy.redact(ctx['message']),
+        model_key=ctx['worker_model'], identity_model_key=ctx['identity_model'],
+        language_name=ai_chat.LANGUAGES.get(ctx['language'], 'English'),
+        chat_context=_ai_research_chat_context(request, ctx['payload']),
+    )
+    logger.info('AI timing research_plan=%.3fs fallback=%s', time.perf_counter() - started, bool(plan.get('fallback')))
+    return JsonResponse({'status': 'ok', **deep_research.plan_for_page(plan)})
+
+
+def _ndjson(event):
+    return json.dumps(event, ensure_ascii=False) + '\n'
+
+
+def ai_research_run(request):
+    """Step two: research the confirmed plan and write the report. The reply is
+    a stream of JSON lines — progress events, then the report text as it is
+    written, then one ``final`` event with the finished report and its files."""
+    ctx, error = _ai_research_request(request, 'run')
+    if error:
+        return error
+    user = request.user
+    payload, message = ctx['payload'], ctx['message']
+    active_key = f'ai_research_active:{user.pk}'
+    if cache.get(active_key):
+        return JsonResponse({
+            'status': 'busy',
+            'detail': 'A deep research report is already being written for your account. Wait for it to finish.',
+        }, status=409)
+
+    question = privacy.redact(message)
+    plan = deep_research.plan_from_page(payload.get('title'), payload.get('steps'), question)
+    context_text = _ai_research_chat_context(request, payload)
+    replace_target = _ai_replace_target(request, payload)
+
+    conversation = None
+    if payload.get('conversation_id'):
+        try:
+            conversation = AIConversation.objects.filter(
+                _ai_owner_filter(request), pk=int(payload.get('conversation_id')),
+            ).first()
+        except (TypeError, ValueError):
+            conversation = None
+        if conversation is None:
+            return JsonResponse({'status': 'error', 'detail': 'Conversation not found.'}, status=404)
+    if conversation is None:
+        ip = _client_ip(request)
+        conversation = AIConversation.objects.create(
+            user=user, title=message[:AI_CONVERSATION_TITLE_CHARS], ip_address=ip if ip and ip != 'unknown' else None,
+        )
+    if replace_target is not None and replace_target.conversation_id == conversation.id:
+        conversation.messages.filter(pk__gte=replace_target.pk).update(superseded=True)
+    request._ai_replace_from_pk = None
+    user_message = AIMessage.objects.create(conversation=conversation, role=AIMessage.ROLE_USER, content=message)
+    conversation.updated_at = timezone.now()
+    conversation.save(update_fields=['updated_at'])
+    request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
+    if not _ai_has_admin_access(user):
+        StoreProfile.objects.filter(user=user).exclude(
+            ai_subscription_until__gt=timezone.now(),
+        ).update(ai_free_messages_used=F('ai_free_messages_used') + 1)
+
+    shown_model, worker_model, identity_model = ctx['shown_model'], ctx['worker_model'], ctx['identity_model']
+    language = ctx['language']
+    is_staff = _ai_has_admin_access(user)
+    brand = ai_chat.get_ai_brand_name()
+    model_label = ai_chat.MODELS.get(shown_model, {}).get('label', 'Vidhyora AI')
+    persona_name = ai_chat.chatgpt_persona_name(shown_model)
+
+    def public_text(text):
+        """Keeps the backend vendor's and other modes' names out of the report,
+        the same way a chat reply does."""
+        if shown_model == ai_chat.CHATGPT_56_MODEL_KEY:
+            return _chatgpt_public_reply(text, persona_name)
+        if shown_model not in (ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
+            return _vidhyora_public_reply(text, model_label)
+        return text
+
+    def event_stream():
+        started = time.monotonic()
+        if not _AI_RESEARCH_SLOTS.acquire(blocking=False):
+            yield _ndjson({'t': 'error', 'msg': 'Deep research is busy with other reports right now. Please try again in a minute.'})
+            return
+        cache.set(active_key, True, AI_RESEARCH_ACTIVE_SECONDS)
+        writing = False     # True while the model is being called: its failures get the model's own wording
+        try:
+            # The plan as it will be run, so the page's step list always matches the server's.
+            yield _ndjson({'t': 'plan', **deep_research.plan_for_page(plan)})
+            pool = deep_research.SourcePool()
+            topic = deep_research.topic_of(question)
+            for event in deep_research.research(plan['steps'], pool, topic=topic, question=question):
+                yield _ndjson(event)
+            logger.info(
+                'AI timing research_gathered=%.1fs sources=%d', time.monotonic() - started, len(pool),
+            )
+
+            yield _ndjson({'t': 'write', 'i': len(plan['steps'])})
+            writing = True
+            stream = ai_chat.stream_chat(
+                [{'role': 'user', 'content': deep_research.research_brief(question, plan, context_text)}],
+                model_key=worker_model, identity_model_key=identity_model,
+                retrieved_context=deep_research.build_context(pool), retrieved_source='web_search',
+                language=language,
+                document_instruction=deep_research.report_instruction(has_sources=bool(len(pool))),
+                max_tokens=deep_research.REPORT_MAX_TOKENS,
+            )
+            report, released = '', 0
+            for chunk in stream:
+                report += chunk
+                # Only text older than a short tail is released: the public-name
+                # rewrite runs over the whole report each time, so a vendor name
+                # split across two chunks is still caught before it is shown.
+                cleaned = public_text(report)
+                safe = len(cleaned) - CHATGPT_STREAM_HOLDBACK_CHARS
+                if safe > released:
+                    yield _ndjson({'t': 'd', 'x': cleaned[released:safe]})
+                    released = safe
+            writing = False
+            report = public_text(report)
+            if len(report.strip()) < 400:
+                raise ValueError('The report came back empty or far too short.')
+
+            created = timezone.now()
+            markdown, cited = deep_research.finalize_report(
+                report, pool, plan_title=plan['title'], brand=brand, created=created,
+            )
+            title = deep_research.report_title(markdown) or plan['title']
+            slug = deep_research.file_slug(title) or 'report'
+            files = []
+            for extension, label in AI_RESEARCH_FORMATS:
+                saved = AIGeneratedFile.objects.create(
+                    user=user, file_name=f'deep-research-{slug}.{extension}', content=markdown,
+                )
+                files.append({
+                    'kind': extension, 'label': label, 'name': saved.file_name,
+                    'url': request.build_absolute_uri(reverse('ai_generated_file_download', args=[saved.token])),
+                })
+            stored = markdown.rstrip() + '\n\n**Download this report:** ' + ' · '.join(
+                f"[{item['label']}]({item['url']})" for item in files
+            ) + '\n'
+            reply = AIMessage.objects.create(
+                conversation=conversation, role=AIMessage.ROLE_ASSISTANT, content=stored, model_key=shown_model,
+            )
+            seconds = round(time.monotonic() - started)
+            logger.info('AI timing research_total=%ds sources=%d cited=%d', seconds, len(pool), len(cited))
+            yield _ndjson({
+                't': 'final', 'md': stored, 'message_id': reply.pk, 'files': files, 'sources': cited,
+                'stats': {'reviewed': len(pool), 'cited': len(cited), 'seconds': seconds, 'steps': len(plan['steps'])},
+            })
+        except Exception as exc:
+            logger.exception('Deep research failed: %s', exc)
+            if writing:
+                detail = _ai_chat_failure_reply(exc, shown_model, is_staff=is_staff)
+            else:
+                detail = (
+                    'The report could not be finished this time, and nothing was saved. '
+                    'Please try again — a narrower question often works better.'
+                )
+            yield _ndjson({'t': 'error', 'msg': detail})
+        finally:
+            cache.delete(active_key)
+            _AI_RESEARCH_SLOTS.release()
+
+    response = StreamingHttpResponse(event_stream(), content_type='application/x-ndjson; charset=utf-8')
+    response['Cache-Control'] = 'private, no-cache, no-store, no-transform'
+    response['X-Accel-Buffering'] = 'no'
+    response['X-Conversation-Id'] = str(conversation.id)
+    response['X-User-Message-Id'] = str(user_message.pk)
+    response['X-Model-Key'] = shown_model
     return response
 
 
@@ -5488,7 +6045,7 @@ def ai_conversation_messages(request, conversation_id):
     request.session[AI_CURRENT_CONVERSATION_SESSION_KEY] = conversation.id
     messages_qs = list(
         conversation.messages.filter(superseded=False).order_by('created_at')
-        .values('id', 'role', 'content', 'image_data', 'document_name', 'model_key')
+        .values('id', 'role', 'content', 'image_data', 'document_name', 'model_key', 'reply_to_text')
     )
     return JsonResponse({'status': 'ok', 'title': conversation.title, 'messages': messages_qs})
 

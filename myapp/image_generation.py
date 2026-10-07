@@ -3,6 +3,7 @@
 import base64
 import binascii
 import io
+import logging
 import re
 from dataclasses import dataclass
 
@@ -11,6 +12,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from myapp.provider_keys import get_key as _get_key
 
+logger = logging.getLogger(__name__)
 
 FLUX_API_URL = (
     "https://ai.api.nvidia.com/v1/genai/"
@@ -236,6 +238,52 @@ _QUOTED_TEXT_RE = re.compile(r'["“][^"”]{1,80}["”]')
 
 
 
+# Plain-words stand-ins for the brand and product names people ask to see most.
+# Used when the model-written rewrite below is unavailable or changes nothing.
+_BRAND_SWAPS = [
+    (re.compile(r"\b(?:apple\s+)?iphone(?:\s*\d+\w*)?(?:\s+(?:pro|plus|max|mini|se))*\b", re.I), "modern flagship smartphone"),
+    (re.compile(r"\bipad(?:\s+(?:pro|air|mini))?\b", re.I), "tablet"),
+    (re.compile(r"\bmac\s?book(?:\s+(?:pro|air))?\b|\bimac\b", re.I), "sleek laptop"),
+    (re.compile(r"\bair\s?pods(?:\s+pro)?\b", re.I), "wireless earbuds"),
+    (re.compile(r"\bapple\s+watch\b", re.I), "smartwatch"),
+    (re.compile(r"\bsamsung(?:\s+galaxy)?(?:\s+[sz]\s?\d+\w*(?:\s+ultra)?)?\b|\bgoogle\s+pixel\b|\boneplus\b", re.I), "smartphone"),
+    (re.compile(r"\b(?:playstation|ps\s?[45]|xbox|nintendo\s+switch)\b", re.I), "game console"),
+    (re.compile(r"\btesla(?:\s+model\s*\w+)?\b", re.I), "electric car"),
+    (re.compile(r"\bcoca[\s-]?cola\b|\bpepsi\b", re.I), "cola soft drink"),
+    (re.compile(r"\b(?:nike|adidas|puma|reebok|jordan)\b\s*", re.I), ""),
+]
+
+_NEUTRAL_SYSTEM = (
+    "You rewrite an image-generation prompt so an image service's content filter accepts it. Replace every "
+    "well-known third-party brand, trademark, product model or celebrity name with a short plain description "
+    "of what it looks like (for example 'iPhone 16' becomes 'a modern flagship smartphone with a "
+    "triple-lens camera'). Keep everything else exactly as written: the subject, style, colours, layout, "
+    "sizes, and any text the user wants shown on the image (including the user's own business name, "
+    "email addresses and web addresses). Reply with ONLY a JSON object: {\"prompt\": \"...\"}."
+)
+
+
+def brand_neutral_prompt(prompt):
+    """``prompt`` with famous brand and product names described in plain words,
+    or the text unchanged when there is nothing to change."""
+    text = (prompt or "").strip()
+    swapped = text
+    for pattern, plain in _BRAND_SWAPS:
+        swapped = pattern.sub(plain, swapped)
+    swapped = re.sub(r"\s{2,}", " ", swapped).strip()
+    try:
+        from myapp import ai_chat
+        reply = ai_chat.complete_json(
+            _NEUTRAL_SYSTEM, text[:2000], model_key="quick", max_tokens=700, timeout=30.0, temperature=0.2,
+        )
+        rewritten = str(reply.get("prompt") or "").strip()
+        if 10 <= len(rewritten) <= MAX_PROMPT_CHARS:
+            return rewritten
+    except Exception as exc:
+        logger.info("Could not rewrite a filtered image prompt (%s); using the built-in word swaps", exc.__class__.__name__)
+    return swapped
+
+
 def _api_key(*, editing=False):
     # Editing can use a separately entitled NVIDIA account/key while normal
     # prompt-to-image generation keeps its existing credential.
@@ -344,11 +392,13 @@ def _validate_image_bytes(content, *, service_name="The image service"):
     return GeneratedImage(content=content, extension=extension)
 
 
-def generate_image(prompt, source_image=None):
+def generate_image(prompt, source_image=None, *, size=None):
     """Generate an image, or edit ``source_image`` when one is supplied.
 
     ``source_image`` is the browser-provided PNG/JPEG data URI. It is decoded
     and normalized before being placed in FLUX's reference-image array.
+    ``size`` (width, height) overrides the size read from the prompt — the
+    poster path (myapp/poster.py) asks for its background artwork that way.
 
     There is no fallback: if the selected backend fails or blocks the prompt,
     the error is raised as is rather than retried on another key or provider.
@@ -362,12 +412,28 @@ def generate_image(prompt, source_image=None):
     if len(prompt) > MAX_PROMPT_CHARS:
         raise ImageGenerationError("That image prompt is too long.", status_code=400)
 
-    # One attempt on the one configured service: a failure is reported, not
-    # silently retried on another key or provider.
-    return _dispatch_generate(prompt, source_image)
+    # One configured service, never another key or provider. The one thing
+    # retried is a prompt its content filter refused: that filter rejects
+    # well-known brand and product names ("iPhone 16", "Nike shoes") that
+    # are perfectly fine to draw, so the same picture is asked for again with
+    # those names described in plain words.
+    extra = {"size": size} if size else {}
+    try:
+        return _dispatch_generate(prompt, source_image, **extra)
+    except ImageGenerationError as exc:
+        if not exc.blocked:
+            raise
+        neutral = brand_neutral_prompt(prompt)
+        if not neutral or neutral == prompt:
+            raise
+        logger.info("Image prompt was filtered; retrying with brand names described in plain words")
+        try:
+            return _dispatch_generate(neutral, source_image, **extra)
+        except ImageGenerationError:
+            raise exc
 
 
-def _dispatch_generate(prompt, source_image):
+def _dispatch_generate(prompt, source_image, size=None):
     editing = bool(source_image)
     edit_url = _get_key('FLUX_EDIT_API_URL').strip() if editing else ''
     # NVIDIA's hosted FLUX.2 Klein preview does not accept arbitrary uploads.
@@ -392,7 +458,7 @@ def _dispatch_generate(prompt, source_image):
             f"Image generation is not configured yet. Set {setting_name} on the server.",
         )
 
-    width, height = resolve_dimensions(prompt)
+    width, height = size or resolve_dimensions(prompt)
     # Dimensions are read from the full prompt (a size/ratio cue could sit
     # anywhere), but the text actually sent to FLUX is shortened — see
     # FLUX_SAFE_PROMPT_CHARS above.

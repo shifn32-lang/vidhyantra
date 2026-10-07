@@ -716,6 +716,105 @@ def is_rewrite_request(text):
     return bool(_REWRITE_REQUEST_RE.search(text or ''))
 
 
+# A reply that hands the user a finished piece of text to copy somewhere else —
+# a rewritten message, a translation, a prompt for another AI tool, a drafted
+# email — is shown by the chat as a card with its own Copy button, so the user
+# copies exactly that text and not the sentence around it. The model opts in by
+# putting the text in a fenced block with one of these language tags (the page
+# knows them: ai.html, COPY_CARDS). Only a few request shapes are matched, and
+# the "how do I write…" kind of question is excluded, so ordinary answers are
+# never turned into cards.
+# "prompt" has to be the thing asked for — a few describing words may sit
+# between the verb and it ("write me a detailed midjourney prompt"), but not a
+# preposition that makes it a topic ("a blog post about prompt engineering").
+_PROMPT_REQUEST_RE = re.compile(
+    r"\b(?:write|create|generate|make|give|craft|draft|suggest|improve|refine|optimi[sz]e|"
+    r"rewrite|rephrase|enhance|polish|need|want)\b"
+    r"(?:\s+(?!(?:about|on|of|regarding|for)\b)[\w'-]+){0,4}?\s+prompts?\b(?!\s+engineer)"
+    r"|\bprompts?\s+(?:for|to)\b(?!\s+engineer)"
+    r"|\bprompts?\s+(?:banao|bana\s?do|likho|chahiye)\b",
+    re.IGNORECASE,
+)
+_DRAFT_REQUEST_RE = re.compile(
+    r"\b(?:write|draft|compose|create|generate|prepare|banao|bana\s?do|likho)\b"
+    r"(?:\s+\S+){0,4}?\s+"
+    r"(?:e-?mails?|mails?|messages?|msg|whatsapp|sms|letters?|captions?|tweets?|bio|replies|reply|"
+    r"invitations?|announcements?|ad\s+copy|slogans?|taglines?|speech)\b",
+    re.IGNORECASE,
+)
+_EXPLAIN_REQUEST_RE = re.compile(
+    r"\b(?:how\s+(?:to|do|can|should|would)|what\s+(?:is|are)|explain|difference\s+between|"
+    r"tips?\s+(?:for|on)|steps?\s+to)\b",
+    re.IGNORECASE,
+)
+
+
+# Narrower than _REWRITE_REQUEST_RE on purpose: "explain it in Hindi" or
+# "nothing else please" are fine reasons for the rewrite reminder but not for
+# wrapping an ordinary answer in a card.
+_CARD_REWRITE_RE = re.compile(
+    r"\b(?:rephrase|re-?word|re-?write|rewrite|paraphrase|proofread|translate|translation\s+of|"
+    r"make\s+(?:it|this|that)\s+(?:shorter|longer|professional|casual|formal|polite|persuasive|"
+    r"simple|natural|attractive|better|concise|sales.?focused)|"
+    r"(?:more|sound)\s+(?:professional|natural|casual|formal|polite|simple)|"
+    r"correct\s+(?:this|it|the\s+(?:grammar|spelling))|improve\s+(?:this|it|the\s+(?:wording|grammar)))\b",
+    re.IGNORECASE,
+)
+
+
+def is_card_rewrite_request(text):
+    text = text or ''
+    return bool(_CARD_REWRITE_RE.search(text)) and not _EXPLAIN_REQUEST_RE.search(text)
+
+
+def is_prompt_request(text):
+    text = text or ''
+    return bool(_PROMPT_REQUEST_RE.search(text)) and not _EXPLAIN_REQUEST_RE.search(text)
+
+
+def is_draft_request(text):
+    text = text or ''
+    return bool(_DRAFT_REQUEST_RE.search(text)) and not _EXPLAIN_REQUEST_RE.search(text)
+
+
+_COPY_CARD_RULE = (
+    " The chat turns a fenced block with this language tag into a card with its own Copy button, so "
+    "the user can copy exactly that text — display only, not extra formatting, so it is fine even if "
+    "they asked for only the text. Use ONE such block, put nothing but the finished text inside it, "
+    "and keep any comment of yours outside it to one short line (none if they asked for only the "
+    "text). Never use this tag for code."
+)
+
+
+def copy_card_reminder(text, language_hint=''):
+    """The late-reminder sentence that asks for the copy-card block, or '' when
+    the request is not one that produces copyable text.
+
+    ``language_hint`` is the instruction already attached to the turn: a live
+    voice call is read aloud, so nothing is wrapped for the screen there.
+    """
+    text = text or ''
+    if 'live voice call' in (language_hint or ''):
+        return ''
+    if is_card_rewrite_request(text):
+        tag = 'translation' if re.search(r'\b(?:translate|translation|in\s+(?:hindi|kannada|hinglish|english))\b', text, re.I) else 'rewrite'
+        return (
+            f" Put the rewritten text inside one fenced block tagged ```{tag}."
+            + _COPY_CARD_RULE
+        )
+    if is_prompt_request(text):
+        return (
+            " The user wants a ready-to-use prompt for an AI tool. Write the complete, self-contained "
+            "prompt itself inside one fenced block tagged ```prompt." + _COPY_CARD_RULE
+        )
+    if is_draft_request(text):
+        return (
+            " The user wants a drafted piece of text they will send or post (an email, message, caption "
+            "or similar). Put the finished text inside one fenced block tagged ```message." + _COPY_CARD_RULE
+        )
+    return ''
+
+
 # Catches a short follow-up that leans on conversation context to mean
 # anything ("do that", "the other one", "change the price", "continue")
 # rather than a normal self-contained question — live-testing found the
@@ -897,7 +996,64 @@ _IMAGE_CAPABILITY_QUESTION_RE = re.compile(
 
 
 def is_image_generation_request(text):
-    return bool(_IMAGE_GENERATION_RE.search(text or ''))
+    return bool(_IMAGE_GENERATION_RE.search(text or '')) and not is_question_about_images(text)
+
+
+# "how to make a poster in canva", "explain the poster design principles":
+# questions about pictures, answered in words — never a reason to draw one.
+_IMAGE_TOPIC_QUESTION_RE = re.compile(
+    r"^\s*(?:please\s+|pls\s+)?(?:how\s+(?:to|do|does|can|could|should|would|is|are)|explain|what\s+(?:is|are|makes)|"
+    r"why|tell\s+me\s+(?:about|how)|teach\s+me|tips?\s+(?:for|on)|difference\s+between|steps\s+to)\b",
+    re.IGNORECASE,
+)
+
+
+def is_question_about_images(text):
+    return bool(_IMAGE_TOPIC_QUESTION_RE.search(text or ''))
+
+
+# A design asked for by naming it, with no "create"/"image" word: "Instagram
+# poster 4:5 ...", "Diwali sale poster with 50% off", "need a flyer for my
+# yoga class", or any prompt carrying Midjourney flags (--ar 4:5 --v 6). The
+# design word has to come early, with nothing before it that makes it chat
+# about a design ("I saw a poster yesterday") rather than a request for one.
+_DESIGN_NOUN = (
+    r"poster|posters|flyer|flier|banner|brochure|pamphlet|leaflet|thumbnail|wallpaper|invitation|invite|"
+    r"greeting\s+card|visiting\s+card|business\s+card|post|story|ad|advert|advertisement|creative|"
+    r"hoarding|billboard|logo|menu\s+card|certificate"
+)
+_DESIGN_NOUN_RE = re.compile(rf"\b(?:{_DESIGN_NOUN})\b", re.IGNORECASE)
+_MIDJOURNEY_FLAG_RE = re.compile(r"(?:^|\s)--(?:ar|v|stylize|style|s|q|niji|chaos|no)\s+\S", re.IGNORECASE)
+_DESIGN_CHAT_WORDS = frozenset((
+    'saw', 'seen', 'see', 'liked', 'like', 'love', 'loved', 'hate', 'is', 'was', 'were', 'are', 'have', 'has',
+    'had', 'about', 'did', 'does', 'do', 'bought', 'found', 'read', 'printed', 'print', 'sent', 'shared',
+    'got', 'received', 'check', 'review', 'rate', 'describe', 'analyse', 'analyze', 'improve', 'feedback',
+    'this', 'that', 'these', 'those', 'your', 'his', 'her', 'their', 'its',
+))
+_DESIGN_POST_RE = re.compile(r"\b(?:instagram|insta|facebook|fb|linkedin|social\s+media|whatsapp|youtube|twitter|x)\s+(?:post|story|ad|banner|thumbnail|creative)\b", re.IGNORECASE)
+
+
+def is_design_request(text):
+    """A poster/flyer/banner/social post asked for by name alone."""
+    text = (text or '').strip()
+    if not text or is_question_about_images(text) or is_image_prompt_writing_request(text):
+        return False
+    if _MIDJOURNEY_FLAG_RE.search(text):
+        return True
+    if '?' in text:
+        return False
+    match = _DESIGN_NOUN_RE.search(text)
+    if not match:
+        return False
+    noun = match.group(0).lower()
+    # "post", "story", "ad" and "creative" are ordinary words too: only as
+    # "instagram post", "facebook ad" and the like.
+    if noun in ('post', 'story', 'ad', 'creative') and not _DESIGN_POST_RE.search(text):
+        return False
+    before = re.findall(r"[\w'₹%#&-]+", text[:match.start()].lower())
+    if len(before) > 6 or any(word in _DESIGN_CHAT_WORDS for word in before):
+        return False
+    return True
 
 
 def is_image_capability_question(text):
@@ -910,9 +1066,9 @@ def is_image_capability_question(text):
 # requested reusable prompt.
 _IMAGE_PROMPT_WRITING_RE = re.compile(
     r"\b(?:generate|create|write|make|give(?:\s+me)?)\b[\s\S]{0,35}\bprompt\b"
-    r"[\s\S]{0,60}\b(?:image|photo|picture|recreate|replicate)\b|"
+    r"[\s\S]{0,60}\b(?:image|photo|picture|recreate|replicate|poster|logo|banner|flyer|thumbnail|wallpaper)\b|"
     r"\bprompt\b[\s\S]{0,45}\b(?:recreate|replicate|for)\b[\s\S]{0,30}"
-    r"\b(?:image|photo|picture)\b",
+    r"\b(?:image|photo|picture|poster|logo|banner|flyer|thumbnail|wallpaper)\b",
     re.IGNORECASE,
 )
 
@@ -988,6 +1144,39 @@ _IMAGE_EDIT_ONLY_RE = re.compile(
 def is_image_edit_instruction(text):
     """Only meaningful when an image is already attached to this turn."""
     return bool(_IMAGE_EDIT_ONLY_RE.search(text or ''))
+
+
+# Right after the AI has shown a picture, people steer it with a few words and
+# no verb at all: "hands up pose", "red dress", "beach background", "make her
+# smile". Those went to the text model, which only echoed the history note
+# "[An image was generated in this turn.]". views._ai_previous_image_for_edit
+# consults this only when the latest message in the chat is that picture.
+_IMAGE_FOLLOWUP_CUE_RE = re.compile(
+    r"\b(?:pose|poses|posing|hands?|arms?|legs?|stand(?:ing)?|sit(?:ting)?|lying|walk(?:ing)?|run(?:ning)?|"
+    r"jump(?:ing)?|danc(?:e|ing)|smil(?:e|es|ing)|laugh(?:ing)?|look(?:ing)?|face|expression|eyes|hair|"
+    r"hairstyle|background|bg|dress|outfit|wear(?:ing)?|clothes|shirt|t-?shirt|saree|sari|kurta|lehenga|jeans|"
+    r"skirt|suit|jacket|shoes|glasses|hat|cap|colou?r|red|blue|green|yellow|black|white|pink|purple|orange|"
+    r"golden|lighting|light|shadow|style|angle|view|close-?up|zoom(?:ed)?|full\s+body|night|sunset|sunrise|"
+    r"rain(?:ing|y)?|snow(?:ing|y)?|beach|park|city|street|room|cafe|garden|sky|cartoon|anime|realistic|"
+    r"painting|sketch|ghibli|3d|bigger|smaller|darker|brighter|younger|older|instead|without|haath|baal|kapde)\b",
+    re.IGNORECASE,
+)
+_NOT_AN_IMAGE_FOLLOWUP_RE = re.compile(
+    r"^\s*(?:what|why|how|who|when|where|which|is|are|was|can|could|would|should|do|does|did|tell|explain|"
+    r"describe|write|thanks?|thank\s+you|ok(?:ay)?|nice|good|great|wow|cool|lol|hi|hello|hey|awesome|perfect|"
+    r"beautiful|love)\b",
+    re.IGNORECASE,
+)
+
+
+def is_image_followup(text):
+    """A short "make it look like this" instruction for the picture just shown."""
+    text = (text or '').strip()
+    if not text or '?' in text or len(text.split()) > 16:
+        return False
+    if _NOT_AN_IMAGE_FOLLOWUP_RE.search(text):
+        return False
+    return bool(_IMAGE_FOLLOWUP_CUE_RE.search(text) or _IMAGE_EDIT_ONLY_RE.search(text))
 
 
 # A raw scene/style description with no request verb at all — the classic
@@ -2187,6 +2376,8 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
             "reply with only the rewritten text. Give exactly ONE rewritten "
             "version, not a list of alternative options to choose from."
         )
+    if isinstance(last_user_text, str) and not document_instruction:
+        mode_reminder += copy_card_reminder(last_user_text, document_instruction)
     # Same idea, for a short context-dependent follow-up ("do that", "the
     # other one", "change the price", "continue"). Live-testing found the
     # model completely ignoring its own immediately preceding reply on
@@ -2525,3 +2716,92 @@ def github_plan_changes(prompt, file_paths, file_contents):
         client, MODELS[GITHUB_MODEL_KEY]['id'], system, user_content,
         max_tokens=GITHUB_PLAN_MAX_TOKENS, timeout=GITHUB_PLAN_TIMEOUT,
     )
+
+
+# ── A single JSON answer from a chat model (deep research's plan) ────────────
+
+def _backend_for(model_key, identity_model_key=None):
+    """(model config, key setting) that a turn on `model_key` is really sent
+    to — the same choice _stream_chat_impl makes: a ChatGPT-persona turn is
+    answered by its own backend and credential, and Luna keeps hers even when
+    a Quick/Code worker is doing the work."""
+    cfg = MODELS.get(model_key) or MODELS[DEFAULT_MODEL_KEY]
+    identity_key = identity_model_key or model_key
+    identity_cfg = MODELS.get(identity_key) or cfg
+    if identity_key in (CHATGPT_56_MODEL_KEY, TERRA_MODEL_KEY) and not cfg.get('vision'):
+        cfg = {**cfg, 'id': identity_cfg['id'],
+               'api_key_setting': identity_cfg['api_key_setting'],
+               'reasoning': identity_cfg['reasoning']}
+    api_key_setting = cfg.get('api_key_setting')
+    if identity_key == CHATGPT_56_MODEL_KEY:
+        api_key_setting = 'NVIDIA_LUNA_API_KEY'
+    return cfg, api_key_setting
+
+
+def _json_object_from(text):
+    """The first JSON object in a model's reply, which may be wrapped in a
+    code fence or have a sentence in front of it. Raises ValueError if there
+    is none."""
+    text = (text or '').strip()
+    fenced = re.match(r'^```[a-zA-Z]*\s*\n?(.*?)\n?```\s*$', text, re.S)
+    if fenced:
+        text = fenced.group(1).strip()
+    start = text.find('{')
+    end = text.rfind('}')
+    if start < 0 or end <= start:
+        raise ValueError('The reply had no JSON object.')
+    value = json.loads(text[start:end + 1])
+    if not isinstance(value, dict):
+        raise ValueError('The reply was not a JSON object.')
+    return value
+
+
+def complete_json(system, user_content, *, model_key, identity_model_key=None,
+                  max_tokens=900, timeout=45.0, temperature=0.3):
+    """One short, non-chat model call whose answer must be a JSON object.
+
+    Uses the credentials, the hidden-reasoning switch and the dashboard's
+    on/off switch and usage counters exactly as stream_chat does. Raises on a
+    failure — the caller decides what to fall back to. A momentary upstream
+    hiccup is retried once on the same model."""
+    cfg, api_key_setting = _backend_for(model_key, identity_model_key)
+    identity_key = identity_model_key or model_key
+    control_key = next(
+        (key for key in (identity_key, model_key) if key in TEXT_CONTROLLED_MODEL_KEYS), None,
+    )
+    if control_key is None and model_key in CHAT_GROUP_KEYS:
+        control_key = CHAT_CONTROL_KEY
+    from myapp import model_controls
+    if control_key in TEXT_CONTROLLED_MODEL_KEYS and not model_controls.is_enabled(control_key):
+        raise ModelDisabledError(f"{MODELS[control_key]['label']} is currently disabled.")
+    kwargs = dict(
+        model=cfg['id'],
+        messages=[{'role': 'system', 'content': system}, {'role': 'user', 'content': user_content}],
+        temperature=temperature, top_p=TOP_P, max_tokens=max_tokens, timeout=timeout,
+        # Streamed and stitched together, like every other long call here: one
+        # silent connection used to hit the read timeout before the first byte.
+        stream=True,
+    )
+    if cfg.get('extra_body'):
+        kwargs['extra_body'] = cfg['extra_body']
+    elif cfg['reasoning']:
+        kwargs['extra_body'] = {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
+    if control_key:
+        model_controls.record_request(control_key)
+    try:
+        for attempt in range(2):
+            try:
+                reply = ''.join(_stream_content(_get_client(api_key_setting), kwargs))
+                break
+            except Exception as exc:
+                if attempt or not _is_transient_error(exc):
+                    raise
+                time.sleep(STREAM_RETRY_BACKOFF_SECONDS)
+        result = _json_object_from(reply)
+    except Exception as exc:
+        if control_key:
+            model_controls.record_error(control_key, f'{exc.__class__.__name__}: {exc}')
+        raise
+    if control_key:
+        model_controls.record_success(control_key)
+    return result
