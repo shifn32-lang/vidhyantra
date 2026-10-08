@@ -5441,13 +5441,18 @@ from myapp import model_controls  # noqa: E402  (used by CodingApiTests)
 
 
 class CodingApiTests(TestCase):
-    """The Start coding backend: an OpenAI-compatible endpoint for OpenCode."""
+    """The Start coding backend: an OpenAI-compatible endpoint for OpenCode.
+    These use the manual key, so they run with the manual setup switched on
+    (it is off on the site for now — see CodingManualSetupOffTests)."""
     CHAT = '/api/v1/code/chat/completions'
     MODELS = '/api/v1/code/models'
 
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
+        manual_on = patch('myapp.coding_api.MANUAL_SETUP_ENABLED', True)
+        manual_on.start()
+        self.addCleanup(manual_on.stop)
         self.user = User.objects.create_user('coder', password='pw')
         StoreProfile.objects.update_or_create(
             user=self.user, defaults={'ai_subscription_until': timezone.now() + timedelta(days=30)},
@@ -5723,6 +5728,41 @@ class CodingApiTests(TestCase):
         self.assertTrue(model_controls.is_enabled('coding-cli'))
 
 
+class CodingManualSetupOffTests(TestCase):
+    """While coding_api.MANUAL_SETUP_ENABLED is False (the site default for
+    now) nobody can make or use a manual key; computers connected with the
+    one-command setup keep working."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user('manual-off', password='pw')
+        StoreProfile.objects.update_or_create(
+            user=self.user, defaults={'ai_subscription_until': timezone.now() + timedelta(days=30)},
+        )
+
+    def test_manual_keys_cannot_be_created(self):
+        from .models import AICodingKey
+        self.client.force_login(self.user)
+        response = self.client.post('/AI/api/coding-key/generate/')
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('Manual setup is switched off', response.json()['detail'])
+        self.assertFalse(AICodingKey.objects.filter(user=self.user).exists())
+
+    def test_old_manual_keys_are_refused_and_computer_keys_still_work(self):
+        from .models import AICodingKey
+        manual = AICodingKey.generate_for(self.user)
+        computer = AICodingKey.generate_for(self.user, label='MY-LAPTOP')
+        refused = self.client.get('/api/v1/code/models', HTTP_AUTHORIZATION=f'Bearer {manual}')
+        self.assertEqual(refused.status_code, 401)
+        self.assertEqual(refused.json()['error']['code'], 'manual_keys_disabled')
+        self.assertEqual(self.client.get('/api/v1/code/models', HTTP_AUTHORIZATION=f'Bearer {computer}').status_code, 200)
+
+    def test_account_panel_is_told_the_manual_setup_is_off(self):
+        self.client.force_login(self.user)
+        self.assertFalse(self.client.get('/AI/api/account/').json()['coding']['manual_enabled'])
+
+
 class CodingDeviceLoginTests(TestCase):
     """The one-line setup: script asks for a code, the user approves in the browser."""
     START = '/api/v1/code/device/start'
@@ -5784,6 +5824,7 @@ class CodingDeviceLoginTests(TestCase):
         self.assertEqual(self._poll(data['device_code']).json()['status'], 'invalid')
         self.assertEqual(AICodingKey.objects.filter(user=self.user).count(), 1)
 
+    @patch('myapp.coding_api.MANUAL_SETUP_ENABLED', True)
     def test_a_second_computer_does_not_sign_out_the_first_and_manual_key_is_separate(self):
         from .models import AICodingKey
         keys = []
