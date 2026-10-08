@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 MODEL_ID = 'vidhyora-code'           # what the client sees and configures
 CONTROL_KEY = 'coding-cli'           # dashboard on/off switch and counters
+# The manual setup (a personal key copied into OpenCode by hand) is switched
+# off for now: no new manual keys, and manual keys made earlier are refused.
+# The one-command setup, with one key per approved computer, is unaffected.
+MANUAL_SETUP_ENABLED = False
 UPSTREAM_MODEL_KEY = 'code'          # the ai_chat.MODELS entry that answers
 
 MAX_MESSAGES = 400
@@ -134,6 +138,12 @@ def _authenticate(request):
             'Invalid or missing API key. Create one under Start coding in your Vidhyora account '
             'and sign in again with `opencode auth login`.',
             401, kind='authentication_error', code='invalid_api_key',
+        )
+    if not key.label and not MANUAL_SETUP_ENABLED:
+        return None, _error(
+            'Manual keys are switched off. Connect this computer with the one-command setup under '
+            'Start coding in your Vidhyora account instead.',
+            401, kind='authentication_error', code='manual_keys_disabled',
         )
     if not has_access(key.user):
         return None, _error(
@@ -544,6 +554,7 @@ def account_summary(user, allowed, purchase_url=''):
         'model': {'id': MODEL_ID, 'label': _label()},
         'brand': ai_chat.get_ai_brand_name(),
         'limits': {'per_minute': per_minute, 'per_day': per_day},
+        'manual_enabled': MANUAL_SETUP_ENABLED,
         # The manual key (step 2 of the manual setup).
         'has_key': bool(manual),
         'key_prefix': manual['prefix'] if manual else None,
@@ -571,6 +582,11 @@ def key_generate(request):
         return JsonResponse({
             'status': 'error', 'detail': f'Start coding is switched off right now. {_contact()}',
         }, status=503)
+    if not MANUAL_SETUP_ENABLED:
+        return JsonResponse({
+            'status': 'error',
+            'detail': 'Manual setup is switched off. Use the one-command setup under Start coding instead.',
+        }, status=403)
     raw_key = AICodingKey.generate_for(request.user)
     return JsonResponse({'status': 'ok', 'api_key': raw_key, 'key_prefix': raw_key[:11]})
 

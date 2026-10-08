@@ -139,6 +139,86 @@ a{color:var(--red);text-decoration:none}
 .aw-details span{color:var(--text);flex-shrink:0}
 .aw-details strong{color:var(--head);font-weight:650;text-align:right;word-break:break-word}
 @media (prefers-reduced-motion:reduce){.aw-card{animation:none}}
+/* ---- superuser Maps: full-screen map of users who shared location ---- */
+.umap{position:fixed;inset:0;z-index:13000;background:var(--bg);display:flex}
+.umap[hidden]{display:none}
+.umap-canvas{position:absolute;inset:0;background:var(--bg-alt)}
+.umap .leaflet-container{font-family:var(--font-body),system-ui,sans-serif;background:var(--bg-alt)}
+.umap-glass{background:color-mix(in srgb,var(--surface) 86%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid color-mix(in srgb,var(--line) 80%,transparent);box-shadow:0 10px 30px rgba(8,12,18,.18)}
+.umap-top{position:absolute;top:max(.9rem,env(safe-area-inset-top));left:.9rem;right:.9rem;z-index:1001;display:flex;align-items:center;gap:.6rem;pointer-events:none}
+.umap-top>*{pointer-events:auto}
+.umap-title{display:flex;align-items:center;gap:.65rem;padding:.55rem .95rem .55rem .6rem;border-radius:999px;min-width:0}
+.umap-title-icon{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,var(--red),var(--red-dark))}
+.umap-title strong{display:block;font-family:var(--font-head);font-size:1rem;font-weight:800;color:var(--head);line-height:1.1}
+.umap-title small{display:block;font-size:.72rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.umap-close{margin-left:auto;width:46px;height:46px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:var(--head);cursor:pointer;transition:transform .15s}
+.umap-close:hover{transform:scale(1.07)}
+.umap-close:active{transform:scale(.94)}
+.umap-ctrls{position:absolute;right:.9rem;bottom:max(1.1rem,env(safe-area-inset-bottom));z-index:1001;display:flex;flex-direction:column;gap:.5rem}
+.umap-btn{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1rem;color:var(--head);cursor:pointer;transition:transform .15s,color .15s}
+.umap-btn:hover{color:var(--red);transform:scale(1.06)}
+.umap-btn:active{transform:scale(.94)}
+.umap-btn.active{color:#fff;background:linear-gradient(135deg,var(--red),var(--red-dark));border-color:transparent}
+.umap-zoom{display:flex;flex-direction:column;border-radius:23px;overflow:hidden}
+.umap-zoom .umap-btn{border-radius:0;border:none;box-shadow:none;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
+.umap-zoom .umap-btn+.umap-btn{border-top:1px solid var(--line)}
+.umap-layers{position:absolute;right:4.1rem;bottom:max(1.1rem,env(safe-area-inset-bottom));z-index:1001;display:flex;gap:.35rem;padding:.35rem;border-radius:999px}
+.umap-layers[hidden]{display:none}
+.umap-layers button{border:none;background:transparent;font:inherit;font-size:.78rem;font-weight:700;color:var(--text);padding:.5rem .8rem;border-radius:999px;cursor:pointer}
+.umap-layers button.active{background:var(--red);color:#fff}
+.umap-people{position:absolute;left:.9rem;top:calc(max(.9rem,env(safe-area-inset-top)) + 4.1rem);bottom:max(1.1rem,env(safe-area-inset-bottom));z-index:1001;width:300px;border-radius:20px;display:flex;flex-direction:column;overflow:hidden;transition:transform .25s ease,opacity .25s ease}
+.umap-people.collapsed{transform:translateX(calc(-100% - 1rem));opacity:0;pointer-events:none}
+.umap-search{margin:.75rem .75rem .5rem;display:flex;align-items:center;gap:.5rem;padding:.6rem .8rem;border-radius:12px;background:var(--bg-alt);border:1px solid var(--line);color:var(--text)}
+.umap-search input{flex:1;min-width:0;border:none;background:none;font:inherit;font-size:.85rem;color:var(--head);outline:none}
+.umap-list{flex:1;overflow-y:auto;padding:0 .45rem .6rem;list-style:none;margin:0}
+.umap-list li{display:flex;align-items:center;gap:.65rem;padding:.55rem .5rem;border-radius:12px;cursor:pointer}
+.umap-list li:hover,.umap-list li.active{background:var(--tint)}
+.umap-list .umap-li-text{min-width:0;flex:1}
+.umap-list strong{display:block;font-size:.84rem;font-weight:700;color:var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.umap-list small{display:block;font-size:.72rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.umap-empty{padding:1.2rem 1rem;font-size:.82rem;color:var(--text);text-align:center;line-height:1.5}
+.umap-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--font-head);font-weight:800;font-size:.95rem;color:#fff;background:linear-gradient(135deg,var(--red),var(--red-dark))}
+.umap-av img{width:100%;height:100%;object-fit:cover}
+.umap-status{position:absolute;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.umap-status span{padding:.7rem 1.1rem;border-radius:999px;font-size:.84rem;font-weight:650;color:var(--head);pointer-events:auto}
+.umap-status[hidden]{display:none}
+/* Snapchat-style avatar pins */
+.umap-pin{background:none;border:none}
+.umap-pin-inner{position:relative;width:24px;height:36px;transform-origin:50% 100%;transition:transform .18s ease}
+.umap-pin:hover .umap-pin-inner{transform:scale(1.18)}
+.umap-pin svg{position:relative;z-index:1;display:block;width:24px;height:36px;filter:drop-shadow(0 3px 4px rgba(8,12,18,.4))}
+.umap-pin-shadow{position:absolute;left:50%;bottom:-3px;width:12px;height:5px;margin-left:-6px;border-radius:50%;background:rgba(8,12,18,.35)}
+.umap-pin-shadow::after{content:'';position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--pin);animation:umap-pulse 2.2s ease-out infinite}
+.umap-pin-name{position:absolute;left:25px;top:3px;max-width:120px;padding:.12rem .45rem;border-radius:999px;background:var(--pin);color:#fff;font-size:.66rem;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px rgba(8,12,18,.3);opacity:0;transform:translateX(-4px);pointer-events:none;transition:opacity .2s,transform .2s}
+.umap-show-names .umap-pin-name,.umap-pin:hover .umap-pin-name{opacity:1;transform:none}
+@keyframes umap-pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(3.2);opacity:0}}
+.umap-cluster{background:none;border:none}
+.umap-cluster div{width:100%;height:100%;border-radius:50%;padding:5px;box-shadow:0 0 0 2px #fff,0 6px 16px rgba(8,12,18,.35);transition:transform .15s}
+.umap-cluster span{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#111418;font-family:var(--font-head);font-weight:800;font-size:.85rem}
+.umap-cluster:hover div{transform:scale(1.08)}
+.umap-me-dot{width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 6px rgba(37,99,235,.25),0 2px 6px rgba(0,0,0,.3)}
+.umap .leaflet-popup-content-wrapper{border-radius:16px;background:var(--surface);color:var(--text);box-shadow:0 14px 34px rgba(8,12,18,.25)}
+.umap .leaflet-popup-tip{background:var(--surface)}
+.umap .leaflet-popup-content{margin:.95rem 1rem;min-width:220px;font-size:.8rem;line-height:1.45}
+.umap .leaflet-container a.leaflet-popup-close-button{top:6px;right:6px;color:var(--text)}
+.umap-pop-head{display:flex;align-items:center;gap:.65rem;margin-bottom:.65rem}
+.umap-pop-head strong{display:block;font-size:.95rem;font-weight:800;color:var(--head);line-height:1.2}
+.umap-pop-head small{display:block;color:var(--text);font-size:.74rem}
+.umap-pop-rows{display:grid;grid-template-columns:auto 1fr;gap:.25rem .75rem;margin:0}
+.umap-pop-rows dt{color:var(--text)}
+.umap-pop-rows dd{margin:0;color:var(--head);font-weight:600;text-align:right;word-break:break-word}
+.umap-pop-link{display:block;margin-top:.75rem;text-align:center;padding:.5rem;border-radius:10px;background:var(--tint);color:var(--red)!important;font-weight:700}
+.umap .leaflet-control-attribution{font-size:.6rem;background:color-mix(in srgb,var(--surface) 70%,transparent);color:var(--text)}
+.umap .leaflet-control-attribution a{color:var(--text)}
+@media (max-width:640px){
+  .umap-people{left:.6rem;right:.6rem;width:auto;top:auto;height:42vh;bottom:max(.6rem,env(safe-area-inset-bottom));border-radius:20px}
+  .umap-people.collapsed{transform:translateY(calc(100% + 1rem))}
+  .umap-ctrls{right:.6rem}
+  .umap-people:not(.collapsed)~.umap-ctrls,.umap-people:not(.collapsed)~.umap-layers{bottom:calc(42vh + 1.2rem)}
+  .umap-layers{right:3.8rem}
+  .umap-top{left:.6rem;right:.6rem}
+}
+@media (prefers-reduced-motion:reduce){.umap-pin-shadow::after{animation:none;opacity:0}}
 
 /* ---- brand logo ---- */
 .logo-wrap{display:flex;flex-direction:column;justify-content:center;text-decoration:none;flex:none;line-height:1.15}
@@ -1625,7 +1705,8 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
           {% if ai_pwa_ready %}<button type="button" class="acct-menu-item" id="installAppMenuBtn" role="menuitem"><i class="fas fa-mobile-screen-button"></i> Install app</button>{% endif %}
           <button type="button" class="acct-menu-item" id="guideMenuBtn" role="menuitem"><i class="fas fa-circle-question"></i> How to use</button>
           <button type="button" class="acct-menu-item" id="supportMenuBtn" role="menuitem"><i class="fas fa-headset"></i> Support</button>
-          {% if ai_user.is_superuser %}<a class="acct-menu-item" href="{% url 'dashboard_home' %}" role="menuitem"><i class="fas fa-gauge-high"></i> Admin Panel</a>{% endif %}
+          {% if ai_user.is_superuser %}<a class="acct-menu-item" href="{% url 'dashboard_home' %}" role="menuitem"><i class="fas fa-gauge-high"></i> Admin Panel</a>
+          <button type="button" class="acct-menu-item" id="mapsMenuBtn" role="menuitem"><i class="fas fa-map-location-dot"></i> Maps</button>{% endif %}
           <button type="button" class="acct-menu-item acct-menu-logout" id="logoutBtn" role="menuitem"><i class="fas fa-arrow-right-from-bracket"></i> Log out</button>
         </div>
       </div>
@@ -2419,6 +2500,39 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
     <p class="call-note" id="callNote">Speak loudly and clearly. You can talk over the reply to interrupt it.</p>
   </div>
 </div>
+
+{% if ai_user.is_superuser %}
+<div class="umap" id="userMap" role="dialog" aria-modal="true" aria-labelledby="userMapTitle" hidden>
+  <div class="umap-canvas" id="userMapCanvas"></div>
+  <div class="umap-status" id="userMapStatus" hidden><span class="umap-glass" id="userMapStatusText">Loading map…</span></div>
+  <div class="umap-top">
+    <div class="umap-title umap-glass">
+      <span class="umap-title-icon"><i class="fas fa-map-location-dot"></i></span>
+      <span><strong id="userMapTitle">Maps</strong><small id="userMapCount">Loading users…</small></span>
+    </div>
+    <button type="button" class="umap-close umap-glass" id="userMapClose" aria-label="Close map"><i class="fas fa-xmark"></i></button>
+  </div>
+  <aside class="umap-people umap-glass" id="userMapPeople">
+    <label class="umap-search"><i class="fas fa-magnifying-glass"></i><input type="search" id="userMapSearch" placeholder="Search people or places" autocomplete="off"></label>
+    <ul class="umap-list" id="userMapList"></ul>
+  </aside>
+  <div class="umap-layers umap-glass" id="userMapLayers" hidden>
+    <button type="button" data-layer="map">Map</button>
+    <button type="button" data-layer="dark">Dark</button>
+    <button type="button" data-layer="satellite">Satellite</button>
+  </div>
+  <div class="umap-ctrls">
+    <button type="button" class="umap-btn umap-glass active" id="userMapPeopleBtn" aria-label="Show people list" title="People"><i class="fas fa-users"></i></button>
+    <button type="button" class="umap-btn umap-glass" id="userMapLayersBtn" aria-label="Map style" title="Map style"><i class="fas fa-layer-group"></i></button>
+    <button type="button" class="umap-btn umap-glass" id="userMapFit" aria-label="Show all users" title="Show all users"><i class="fas fa-expand"></i></button>
+    <button type="button" class="umap-btn umap-glass" id="userMapMe" aria-label="Go to my location" title="My location"><i class="fas fa-location-crosshairs"></i></button>
+    <div class="umap-zoom umap-glass">
+      <button type="button" class="umap-btn" id="userMapZoomIn" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
+      <button type="button" class="umap-btn" id="userMapZoomOut" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% csrf_token %}
 {{ ai_conversations|json_script:"boot-conversations" }}
@@ -7318,11 +7432,14 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       '<section class="cc-step"><div class="cc-step-head"><span class="cc-step-num"><i class="fas fa-laptop-code" style="font-size:.65rem"></i></span><h3 class="cc-step-title">Connected computers</h3></div>' + devicesHtml + '</section>' +
       '</div></div>';
 
-    var modeSwitch = '<div class="cc-mode-switch" role="tablist">' +
+    // Manual setup is switched off on the server (coding_api.MANUAL_SETUP_ENABLED):
+    // no Manual tab, and only the one-command setup is shown.
+    if (!coding.manual_enabled) ccMode = 'auto';
+    var modeSwitch = !coding.manual_enabled ? '' : '<div class="cc-mode-switch" role="tablist">' +
       '<button type="button" class="cc-mode' + (ccMode === 'auto' ? ' active' : '') + '" data-mode="auto"><strong>Automatic</strong><small>One command · recommended</small></button>' +
       '<button type="button" class="cc-mode' + (ccMode === 'manual' ? ' active' : '') + '" data-mode="manual"><strong>Manual</strong><small>Step by step</small></button></div>';
 
-    panel.innerHTML = hero + modeSwitch + autoPane + '<div class="cc-pane" data-mode-pane="manual"' + (ccMode === 'manual' ? '' : ' hidden') + '><div class="cc-steps">' +
+    panel.innerHTML = hero + modeSwitch + autoPane + (!coding.manual_enabled ? '' : '<div class="cc-pane" data-mode-pane="manual"' + (ccMode === 'manual' ? '' : ' hidden') + '><div class="cc-steps">' +
       '<section class="cc-step"><div class="cc-step-head"><span class="cc-step-num">1</span><h3 class="cc-step-title">Install OpenCode</h3></div>' + installHtml + '</section>' +
 
       '<section class="cc-step"><div class="cc-step-head"><span class="cc-step-num">2</span><h3 class="cc-step-title">Create your ' + escHtml(coding.brand) + ' key</h3></div>' +
@@ -7353,7 +7470,7 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       '<li>Press <code>Tab</code> to switch between <strong>Plan</strong> (discuss, read-only) and <strong>Build</strong> (edits files). OpenCode asks before it changes things.</li>' +
       '<li>For a one-off task without the full screen: <code>opencode run "explain what this project does"</code></li></ul>' +
       '<p>Check your key and connection any time:</p>' + ccBlock('curl ' + baseUrl + '/models -H "Authorization: Bearer YOUR_KEY"') + '</section>' +
-      '</div></div>' +
+      '</div></div>') +
 
       '<h3 class="account-section-title" style="margin-top:1.2rem">Good to know</h3>' +
       '<ul class="cc-help-list account-help" style="padding-left:1.1rem;margin:0 0 .8rem">' +
@@ -7657,6 +7774,270 @@ footer{flex:none;border-top:1px solid var(--line);background:var(--surface);padd
       if (e.key === 'Escape' && !guideModal.hidden) closeGuide();
     });
   }
+
+  // ---- superuser Maps: where users who shared their location are ----
+  (function setupUserMap(){
+    var mapsBtn = document.getElementById('mapsMenuBtn');
+    var box = document.getElementById('userMap');
+    if (!mapsBtn || !box) return;
+    var LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+    var CLUSTER = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/';
+    var ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+    var ESRI_TILE = '/MapServer/tile/{z}/{y}/{x}';
+    var TILES = {
+      map: { url: ESRI + 'World_Street_Map' + ESRI_TILE, maxZoom: 19 },
+      dark: { url: ESRI + 'Canvas/World_Dark_Gray_Base' + ESRI_TILE, labels: ESRI + 'Canvas/World_Dark_Gray_Reference' + ESRI_TILE, maxZoom: 16 },
+      satellite: { url: ESRI + 'World_Imagery' + ESRI_TILE, labels: ESRI + 'Reference/World_Boundaries_and_Places' + ESRI_TILE, maxZoom: 19 }
+    };
+    var canvas = document.getElementById('userMapCanvas');
+    var statusBox = document.getElementById('userMapStatus');
+    var statusText = document.getElementById('userMapStatusText');
+    var countEl = document.getElementById('userMapCount');
+    var listEl = document.getElementById('userMapList');
+    var searchEl = document.getElementById('userMapSearch');
+    var people = document.getElementById('userMapPeople');
+    var peopleBtn = document.getElementById('userMapPeopleBtn');
+    var layersBox = document.getElementById('userMapLayers');
+    var layersBtn = document.getElementById('userMapLayersBtn');
+    var libsPromise = null, map = null, tileLayer = null, cluster = null, accuracyCircle = null, meMarker = null;
+    var users = [], markers = {};
+    var LAYER_KEY = 'ai_user_map_layer';
+
+    function setStatus(text){
+      statusBox.hidden = !text;
+      if (text) statusText.textContent = text;
+    }
+    function loadCss(href){
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.appendChild(link);
+    }
+    function loadScript(src){
+      return new Promise(function(resolve, reject){
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = function(){ reject(new Error('Could not load ' + src)); };
+        document.head.appendChild(s);
+      });
+    }
+    function loadLibs(){
+      if (!libsPromise) {
+        loadCss(LEAFLET + 'leaflet.min.css');
+        loadCss(CLUSTER + 'MarkerCluster.css');
+        libsPromise = loadScript(LEAFLET + 'leaflet.min.js')
+          .then(function(){ return loadScript(CLUSTER + 'leaflet.markercluster.min.js'); })
+          .catch(function(err){ libsPromise = null; throw err; });
+      }
+      return libsPromise;
+    }
+    function setLayer(name){
+      var cfg = TILES[name] || TILES.map;
+      if (tileLayer) map.removeLayer(tileLayer);
+      var opts = { attribution: 'Tiles &copy; Esri', maxZoom: 20, maxNativeZoom: cfg.maxZoom };
+      tileLayer = L.layerGroup([L.tileLayer(cfg.url, opts)]);
+      if (cfg.labels) tileLayer.addLayer(L.tileLayer(cfg.labels, { maxZoom: 20, maxNativeZoom: cfg.maxZoom }));
+      tileLayer.addTo(map);
+      layersBox.querySelectorAll('[data-layer]').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-layer') === name); });
+    }
+    // One stable colour per user, so the same person keeps the same pin colour.
+    var PIN_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#ec4899'];
+    function colorFor(u){ return PIN_COLORS[Math.abs(Number(u.id) || 0) % PIN_COLORS.length]; }
+    function avatarHtml(u){
+      return '<span class="umap-av" style="background:' + colorFor(u) + '">' + (u.avatar_url ? '<img src="' + escHtml(u.avatar_url) + '" alt="">' : escHtml((u.name || '?').charAt(0).toUpperCase())) + '</span>';
+    }
+    function ago(iso){
+      if (!iso) return '—';
+      var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + ' min ago';
+      var hrs = Math.round(mins / 60);
+      if (hrs < 24) return hrs + ' h ago';
+      var days = Math.round(hrs / 24);
+      if (days < 31) return days + (days === 1 ? ' day ago' : ' days ago');
+      return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    function popupHtml(u){
+      var rows = [
+        ['Email', u.email],
+        ['Phone', u.phone],
+        ['Location shared', ago(u.located_at)],
+        ['Last login', ago(u.last_login)],
+        ['Accuracy', u.accuracy_m != null ? '± ' + u.accuracy_m + ' m' : '']
+      ].filter(function(r){ return r[1]; });
+      return '<div class="umap-pop-head">' + avatarHtml(u) + '<span><strong>' + escHtml(u.name) + '</strong>' +
+        '<small>' + escHtml(u.place || (u.lat.toFixed(4) + ', ' + u.lng.toFixed(4))) + '</small></span></div>' +
+        '<dl class="umap-pop-rows">' + rows.map(function(r){ return '<dt>' + r[0] + '</dt><dd>' + escHtml(r[1]) + '</dd>'; }).join('') + '</dl>' +
+        '<a class="umap-pop-link" href="https://www.google.com/maps?q=' + u.lat + ',' + u.lng + '" target="_blank" rel="noopener">Open in Google Maps</a>';
+    }
+    function pinIcon(u){
+      return L.divIcon({
+        className: 'umap-pin',
+        html: '<div class="umap-pin-inner" style="--pin:' + colorFor(u) + '"><span class="umap-pin-shadow"></span>' +
+          '<svg viewBox="0 0 24 36" aria-hidden="true"><path d="M12 1C5.9 1 1 5.9 1 12c0 7.6 9.2 19.4 10.2 22.6.3.9 1.3.9 1.6 0C13.8 31.4 23 19.6 23 12 23 5.9 18.1 1 12 1z" fill="' + colorFor(u) + '" stroke="#fff" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" fill="#fff"/></svg>' +
+          '<span class="umap-pin-name">' + escHtml((u.name || '').split(' ')[0]) + '</span></div>',
+        iconSize: [24, 36],
+        iconAnchor: [12, 36],
+        popupAnchor: [0, -32]
+      });
+    }
+    function showAccuracy(u){
+      if (accuracyCircle) { map.removeLayer(accuracyCircle); accuracyCircle = null; }
+      if (!u || !u.accuracy_m) return;
+      var color = colorFor(u);
+      accuracyCircle = L.circle([u.lat, u.lng], { radius: u.accuracy_m, color: color, weight: 1.5, fillColor: color, fillOpacity: .12, interactive: false }).addTo(map);
+    }
+    function focusUser(u){
+      var marker = markers[u.id];
+      if (!marker) return;
+      listEl.querySelectorAll('li').forEach(function(li){ li.classList.toggle('active', li.getAttribute('data-id') === String(u.id)); });
+      if (window.innerWidth <= 640) setPeopleOpen(false);
+      cluster.zoomToShowLayer(marker, function(){
+        map.flyTo([u.lat, u.lng], Math.max(map.getZoom(), 15), { duration: .8 });
+        map.once('moveend', function(){ marker.openPopup(); });
+      });
+    }
+    function renderList(){
+      var q = searchEl.value.trim().toLowerCase();
+      var shown = users.filter(function(u){
+        return !q || [u.name, u.email, u.phone, u.place].join(' ').toLowerCase().indexOf(q) !== -1;
+      });
+      if (!shown.length) {
+        listEl.innerHTML = '<li class="umap-empty">' + (users.length ? 'Nobody matches that search.' : 'No users have shared their location yet.') + '</li>';
+        return;
+      }
+      listEl.innerHTML = shown.map(function(u){
+        return '<li data-id="' + u.id + '">' + avatarHtml(u) + '<span class="umap-li-text"><strong>' + escHtml(u.name) + '</strong>' +
+          '<small>' + escHtml(u.place || 'Unknown place') + ' · ' + escHtml(ago(u.located_at)) + '</small></span></li>';
+      }).join('');
+    }
+    function fitAll(){
+      if (!users.length) { map.setView([22.5, 79], 4); return; }
+      map.flyToBounds(L.latLngBounds(users.map(function(u){ return [u.lat, u.lng]; })), { padding: [80, 80], maxZoom: 13, duration: .8 });
+    }
+    function render(data){
+      users = data.users || [];
+      cluster.clearLayers();
+      markers = {};
+      users.forEach(function(u){
+        var m = L.marker([u.lat, u.lng], { icon: pinIcon(u), title: u.name, riseOnHover: true, pinColor: colorFor(u) });
+        m.bindPopup(popupHtml(u), { maxWidth: 300 });
+        m.on('popupopen', function(){ showAccuracy(u); });
+        m.on('popupclose', function(){ showAccuracy(null); });
+        markers[u.id] = m;
+        cluster.addLayer(m);
+      });
+      countEl.textContent = users.length + ' of ' + data.total_users + ' users on the map';
+      renderList();
+      fitAll();
+    }
+    function buildMap(){
+      if (map) return;
+      map = L.map(canvas, { zoomControl: false, worldCopyJump: true, minZoom: 2, center: [22.5, 79], zoom: 4 });
+      var savedLayer = null;
+      try { savedLayer = localStorage.getItem(LAYER_KEY); } catch (e) {}
+      setLayer(TILES[savedLayer] ? savedLayer : 'map');
+      // Names next to pins only once zoomed in far enough to read them.
+      function syncNames(){ canvas.classList.toggle('umap-show-names', map.getZoom() >= 8); }
+      map.on('zoomend', syncNames);
+      syncNames();
+      cluster = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 55,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: function(c){
+          // The ring is split into the pin colours of the users inside the group.
+          var n = c.getChildCount();
+          var colors = c.getAllChildMarkers().map(function(m){ return m.options.pinColor; }).sort();
+          var stops = colors.map(function(col, i){ return col + ' ' + (i * 360 / n) + 'deg ' + ((i + 1) * 360 / n) + 'deg'; });
+          var size = n < 5 ? 36 : n < 20 ? 42 : n < 50 ? 48 : 54;
+          return L.divIcon({ className: 'umap-cluster', html: '<div style="background:conic-gradient(' + stops.join(',') + ')"><span>' + n + '</span></div>', iconSize: [size, size] });
+        }
+      });
+      map.addLayer(cluster);
+    }
+    function loadUsers(){
+      setStatus('Finding users…');
+      return fetch('/AI/api/admin/user-map/', { credentials: 'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          if (data.status !== 'ok') throw new Error(data.detail || 'Could not load users.');
+          setStatus('');
+          render(data);
+        });
+    }
+    function setPeopleOpen(open){
+      people.classList.toggle('collapsed', !open);
+      peopleBtn.classList.toggle('active', open);
+    }
+    function open(){
+      box.hidden = false;
+      if (accountMenuWrap) accountMenuWrap.classList.remove('open');
+      if (accountMenuBtn) accountMenuBtn.setAttribute('aria-expanded', 'false');
+      if (window.innerWidth <= 640) setPeopleOpen(false);
+      document.getElementById('userMapClose').focus();
+      setStatus('Loading map…');
+      loadLibs()
+        .then(function(){
+          buildMap();
+          map.invalidateSize();
+          return loadUsers();
+        })
+        .catch(function(err){
+          setStatus((err && err.message && err.message.indexOf('Could not load https') !== 0) ? err.message : 'The map could not load. Check your internet connection and try again.');
+        });
+    }
+    function close(){
+      box.hidden = true;
+      if (map) map.closePopup();
+      layersBox.hidden = true;
+      layersBtn.classList.remove('active');
+      if (accountMenuBtn) accountMenuBtn.focus();
+    }
+
+    mapsBtn.addEventListener('click', open);
+    document.getElementById('userMapClose').addEventListener('click', close);
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && !box.hidden) close();
+    });
+    document.getElementById('userMapZoomIn').addEventListener('click', function(){ if (map) map.zoomIn(); });
+    document.getElementById('userMapZoomOut').addEventListener('click', function(){ if (map) map.zoomOut(); });
+    document.getElementById('userMapFit').addEventListener('click', function(){ if (map) fitAll(); });
+    peopleBtn.addEventListener('click', function(){ setPeopleOpen(people.classList.contains('collapsed')); });
+    layersBtn.addEventListener('click', function(){
+      layersBox.hidden = !layersBox.hidden;
+      layersBtn.classList.toggle('active', !layersBox.hidden);
+    });
+    layersBox.addEventListener('click', function(e){
+      var b = e.target.closest('[data-layer]');
+      if (!b || !map) return;
+      setLayer(b.getAttribute('data-layer'));
+      try { localStorage.setItem(LAYER_KEY, b.getAttribute('data-layer')); } catch (err) {}
+    });
+    searchEl.addEventListener('input', renderList);
+    listEl.addEventListener('click', function(e){
+      var li = e.target.closest('li[data-id]');
+      if (!li) return;
+      var id = Number(li.getAttribute('data-id'));
+      var u = users.filter(function(x){ return x.id === id; })[0];
+      if (u) focusUser(u);
+    });
+    document.getElementById('userMapMe').addEventListener('click', function(){
+      if (!map || !navigator.geolocation) return;
+      setStatus('Finding your location…');
+      navigator.geolocation.getCurrentPosition(function(pos){
+        setStatus('');
+        var ll = [pos.coords.latitude, pos.coords.longitude];
+        if (meMarker) meMarker.setLatLng(ll);
+        else meMarker = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="umap-me-dot"></div>', iconSize: [18, 18] }), zIndexOffset: 1000 }).addTo(map);
+        map.flyTo(ll, 15, { duration: .8 });
+      }, function(){
+        setStatus('Location permission was blocked.');
+        setTimeout(function(){ setStatus(''); }, 2500);
+      }, { enableHighAccuracy: true, timeout: 12000 });
+    });
+  })();
 
   if (supportMenuBtn) supportMenuBtn.addEventListener('click', openSupportModal);
   if (supportModalClose) supportModalClose.addEventListener('click', closeSupportModal);

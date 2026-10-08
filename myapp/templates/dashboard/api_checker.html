@@ -1,0 +1,431 @@
+{% extends "dashboard/base.html" %}
+{% block title %}API Checker{% endblock %}
+{% block page_title %}API Checker{% endblock %}
+
+{% block extra_head %}
+<style>
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.76rem}
+.ck-intro{font-size:.85rem;color:var(--text);margin:0 0 1.2rem;line-height:1.55}
+.ck-intro a{color:var(--red);font-weight:700}
+.ck-key{padding:1.2rem 1.4rem}
+.ck-key-row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.ck-key-row .pw-toggle-wrap,.ck-key-row>input{flex:1 1 320px;min-width:0}
+.ck-key-row input{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.7rem 2.6rem .7rem .9rem;font-family:inherit;font-size:.88rem;background:var(--bg-alt);color:var(--head)}
+.ck-key-row input:focus{outline:none;border-color:var(--red)}
+.ck-note{font-size:.74rem;color:var(--text);opacity:.75;margin-top:.55rem}
+.ck-result{margin-top:.8rem;font-size:.86rem;font-weight:600;display:none;align-items:center;gap:.5rem;padding:.7rem .9rem;border-radius:12px}
+.ck-result.show{display:flex}
+.ck-result.works{background:#e8f8ee;color:#177245}
+.ck-result.bad_key,.ck-result.error{background:#fee2e2;color:#b91c1c}
+.ck-result.busy{background:#fff7e6;color:#b45309}
+.ck-result.wait{background:var(--bg-alt);color:var(--text)}
+.ck-toolbar{display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;padding:1rem 1.4rem;border-bottom:1px solid var(--line)}
+.ck-toolbar select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 .7rem;font-family:inherit;font-size:.82rem;background:var(--bg-alt);color:var(--head)}
+.ck-toolbar .panel-search input{width:240px}
+.ck-chips{display:flex;flex-wrap:wrap;gap:.4rem;padding:.9rem 1.4rem;border-bottom:1px solid var(--line)}
+.ck-chip{border:1.5px solid var(--line);background:#fff;border-radius:50px;padding:.3rem .75rem;font:inherit;font-size:.76rem;font-weight:700;color:var(--head);cursor:pointer;display:inline-flex;gap:.35rem;align-items:center}
+.ck-chip b{font-weight:800;color:var(--text);opacity:.7}
+.ck-chip.on{background:var(--red);border-color:var(--red);color:#fff}
+.ck-chip.on b{color:#fff;opacity:.85}
+.ck-testall{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;padding:1rem 1.4rem;border-bottom:1px solid var(--line);background:var(--bg-alt)}
+.ck-testall .btn{background:var(--red);color:#fff}
+.ck-testall .btn.ck-stop{background:#fff;color:#b91c1c;border:1px solid #fecaca}
+.ck-testall .btn:disabled{opacity:.5;cursor:not-allowed}
+.ck-testall .btn[hidden]{display:none}
+.ck-progress{flex:1 1 200px;height:8px;border-radius:99px;background:var(--line);overflow:hidden;min-width:120px}
+.ck-progress div{height:100%;width:0;background:var(--red);transition:width .3s}
+.ck-tally{font-size:.8rem;color:var(--text);font-weight:600}
+.ck-tally span{margin-right:.7rem}
+.ck-count{padding:.8rem 1.4rem 0;font-size:.8rem;color:var(--text)}
+.ck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;padding:1rem 1.4rem 1.4rem}
+@media (max-width:520px){.ck-grid{grid-template-columns:1fr}.ck-toolbar .panel-search input{width:100%}}
+.ck-card{border:1px solid var(--line);border-radius:16px;padding:1rem 1.05rem;display:flex;flex-direction:column;gap:.6rem;background:#fff;min-width:0}
+.ck-card[hidden]{display:none}
+.ck-card.st-works{border-color:#9ae6b4;box-shadow:0 0 0 3px #e8f8ee}
+.ck-card.st-no_access,.ck-card.st-error{border-color:#fecaca}
+.ck-head{display:flex;gap:.7rem;align-items:flex-start}
+.ck-logo{width:40px;height:40px;border-radius:10px;flex-shrink:0;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;overflow:hidden}
+.ck-logo img{width:100%;height:100%;object-fit:cover}
+.ck-title{min-width:0;flex:1}
+.ck-title strong{display:block;font-size:.92rem;color:var(--head);word-break:break-word}
+.ck-title .mono{color:var(--text);word-break:break-all}
+.ck-meta{font-size:.72rem;color:var(--text);opacity:.85;display:flex;flex-wrap:wrap;gap:.25rem .7rem}
+.ck-desc{font-size:.8rem;color:var(--text);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ck-desc.guess{font-style:italic;opacity:.8}
+.ck-caps{display:flex;flex-wrap:wrap;gap:.3rem}
+.ck-cap{font-size:.68rem;font-weight:700;padding:.18rem .5rem;border-radius:50px;background:var(--bg-alt);border:1px solid var(--line);color:var(--head)}
+.ck-cap.k-chat{background:#eef2ff;color:#3b5bdb;border-color:#dbe4ff}
+.ck-cap.k-reasoning{background:#f3e8ff;color:#7c3aed;border-color:#e9d5ff}
+.ck-cap.k-vision{background:#ecfeff;color:#0e7490;border-color:#cffafe}
+.ck-cap.k-code{background:#fef3c7;color:#92400e;border-color:#fde68a}
+.ck-cap.k-free{background:#e8f8ee;color:#177245;border-color:#c6f0d6}
+.ck-foot{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:auto;padding-top:.4rem;border-top:1px dashed var(--line)}
+.ck-status{flex:1;min-width:0;font-size:.76rem;font-weight:600;color:var(--text)}
+.ck-status.works{color:#177245}
+.ck-status.no_access,.ck-status.error,.ck-status.bad_key{color:#b91c1c}
+.ck-status.busy{color:#b45309}
+.ck-status.retired{color:#6b7280}
+.ck-card.st-retired{opacity:.7}
+.ck-btn{border:1px solid var(--line);background:var(--bg-alt);color:var(--head);border-radius:50px;padding:.38rem .8rem;font:inherit;font-size:.75rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;text-decoration:none}
+.ck-btn:disabled{opacity:.5;cursor:not-allowed}
+.ck-btn.ck-add{background:var(--red);border-color:var(--red);color:#fff}
+.ck-tag-note{font-size:.72rem;color:var(--text);opacity:.7}
+.ck-warn{background:#fff7e6;color:#b45309;border-radius:12px;padding:.75rem 1rem;font-size:.82rem;font-weight:600;margin-bottom:1rem}
+.flash{background:#e8f8ee;color:#177245;border-radius:12px;padding:.85rem 1rem;font-size:.88rem;font-weight:600;margin-bottom:1.2rem}
+.ck-result a{color:inherit;text-decoration:underline;margin-left:.3rem}
+details.ck-history{margin-bottom:1.6rem}
+details.ck-history>summary{list-style:none;cursor:pointer}
+details.ck-history>summary::-webkit-details-marker{display:none}
+.ck-history .panel-head i.ck-chev{transition:transform .2s;color:var(--text)}
+details.ck-history[open] .panel-head i.ck-chev{transform:rotate(180deg)}
+.ck-hist-table td{vertical-align:middle;font-size:.82rem}
+.ck-hist-key{display:inline-flex;align-items:center;gap:.35rem}
+.ck-pill{display:inline-block;font-size:.7rem;font-weight:700;padding:.15rem .55rem;border-radius:50px;white-space:nowrap}
+.ck-pill.works{background:#e8f8ee;color:#177245}
+.ck-pill.bad_key,.ck-pill.error{background:#fee2e2;color:#b91c1c}
+.ck-pill.busy{background:#fff7e6;color:#b45309}
+.ck-nums span{margin-right:.55rem;white-space:nowrap}
+.ck-hist-actions{display:flex;gap:.35rem;justify-content:flex-end}
+.ck-hist-actions form{margin:0}
+.ck-icon-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--bg-alt);color:var(--head);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;text-decoration:none}
+.ck-icon-btn:hover{color:var(--red);border-color:var(--red)}
+.ck-icon-btn.danger:hover{color:#b91c1c;border-color:#fecaca}
+</style>
+{% endblock %}
+
+{% block content %}
+{% for message in messages %}<div class="flash"><i class="fas fa-circle-check"></i> {{ message }}</div>{% endfor %}
+<p class="ck-intro">See what an NVIDIA API key can do: every model NVIDIA offers, what each one is good at, and — with your key — which ones actually answer. Model details come from the <a href="https://build.nvidia.com/models" target="_blank" rel="noopener">build.nvidia.com catalog</a>; older models that are no longer in the catalog have their abilities guessed from their name.</p>
+{% if not info.catalog_ok or not info.api_ok %}
+<div class="ck-warn"><i class="fas fa-triangle-exclamation"></i>
+  {% if not info.api_ok %}NVIDIA's model list could not be read right now. {% endif %}
+  {% if not info.catalog_ok %}The model catalog could not be read right now, so descriptions and tags are missing. {% endif %}
+  <a href="?refresh=1">Try again</a>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-head"><h3><i class="fas fa-key" style="color:var(--red)"></i> 1. Check your key</h3></div>
+  <div class="ck-key">
+    <div class="ck-key-row">
+      <input type="password" id="ckKey" placeholder="nvapi-…" autocomplete="off">
+      <button type="button" class="btn btn-primary" id="ckKeyBtn"><i class="fas fa-vial-circle-check"></i> Check key</button>
+    </div>
+    <div class="ck-note"><i class="fas fa-clock-rotate-left"></i> Every check is saved in History below — the key, the time, the model data NVIDIA listed and each test result — so you can look back or re-use the key. Only administrators can see saved keys. Each test sends one tiny message (“Reply with OK”).</div>
+    <div class="ck-result" id="ckKeyResult"></div>
+  </div>
+</div>
+
+<details class="panel ck-history" id="ckHistory"{% if runs %} open{% endif %}>
+  <summary class="panel-head"><h3><i class="fas fa-clock-rotate-left" style="color:var(--red)"></i> History <span class="ck-tag-note">({{ runs|length }}{% if runs|length == 50 %} newest{% endif %} check{{ runs|length|pluralize }})</span></h3><i class="fas fa-chevron-down ck-chev"></i></summary>
+  <div class="table-scroll">
+  <table class="ck-hist-table">
+    <thead><tr><th>When</th><th>By</th><th>Key</th><th>Key result</th><th>Models tested</th><th>Fastest working</th><th></th></tr></thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>{{ run.created_at|date:"d M Y" }}<br><span class="mono">{{ run.created_at|date:"h:i:s A" }}</span></td>
+        <td>{{ run.created_by.first_name|default:run.created_by.username|default:"—" }}</td>
+        <td><span class="ck-hist-key mono">{{ run.masked_key }}</span></td>
+        <td><span class="ck-pill {{ run.key_status }}">{% if run.key_status == 'works' %}Works{% elif run.key_status == 'busy' %}Busy{% else %}Rejected{% endif %}</span>{% if run.key_seconds %} <span class="ck-tag-note">{{ run.key_seconds }} s</span>{% endif %}</td>
+        <td class="ck-nums">{% if run.counts.tested %}<span>{{ run.counts.tested }} tested</span><span style="color:#177245">✔ {{ run.counts.works }}</span><span style="color:#6b7280">⊘ {{ run.counts.retired }}</span><span style="color:#b45309">⏳ {{ run.counts.busy }}</span>{% if run.counts.no_access %}<span style="color:#b91c1c">✖ {{ run.counts.no_access }}</span>{% endif %}{% else %}<span class="ck-tag-note">None tested</span>{% endif %}</td>
+        <td>{% if run.counts.fastest %}<span class="mono">{{ run.counts.fastest.model_id }}</span><br><span class="ck-tag-note">{{ run.counts.fastest.seconds }} s</span>{% else %}—{% endif %}</td>
+        <td><div class="ck-hist-actions">
+          <a class="ck-icon-btn" href="{% url 'dashboard_api_checker_run' run.pk %}" title="View everything saved for this check"><i class="fas fa-eye"></i></a>
+          {% if can_see_keys %}<button type="button" class="ck-icon-btn ck-use-key" data-key="{{ run.api_key }}" title="Check this key again"><i class="fas fa-rotate-right"></i></button>{% endif %}
+          <form method="post" action="{% url 'dashboard_api_checker_run_delete' run.pk %}" onsubmit="return confirm('Delete this check and its saved key from History?')">{% csrf_token %}<button type="submit" class="ck-icon-btn danger" title="Delete"><i class="fas fa-trash"></i></button></form>
+        </div></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="empty-row">No checks yet — check a key above and it will be saved here.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-ico"><i class="fas fa-layer-group"></i></div><div><div class="stat-num">{{ summary.total }}</div><div class="stat-lbl">Models in total</div></div></div>
+  <div class="stat-card"><div class="stat-ico"><i class="fas fa-plug"></i></div><div><div class="stat-num">{{ summary.on_api }}</div><div class="stat-lbl">On the chat API (callable with a key)</div></div></div>
+  <div class="stat-card"><div class="stat-ico"><i class="fas fa-comments"></i></div><div><div class="stat-num">{{ summary.testable }}</div><div class="stat-lbl">Chat models you can test &amp; add</div></div></div>
+  <div class="stat-card"><div class="stat-ico"><i class="fas fa-gift"></i></div><div><div class="stat-num">{% for c in summary.caps %}{% if c.key == 'free' %}{{ c.count }}{% endif %}{% endfor %}</div><div class="stat-lbl">Free endpoints</div></div></div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h3>2. Models &amp; what they can do</h3><a class="panel-link" href="?refresh=1"><i class="fas fa-rotate"></i> Refresh from NVIDIA</a></div>
+  <div class="ck-toolbar">
+    <span class="panel-search"><i class="fas fa-magnifying-glass"></i><input type="search" id="ckSearch" placeholder="Search name, publisher, description…"></span>
+    <select id="ckWhere" aria-label="Where">
+      <option value="api">On the chat API ({{ summary.on_api }})</option>
+      <option value="testable">Chat models only ({{ summary.testable }})</option>
+      <option value="catalog">Catalog only ({{ summary.catalog_only }})</option>
+      <option value="all">All models ({{ summary.total }})</option>
+    </select>
+    <select id="ckStatus" aria-label="Test result">
+      <option value="">Any test result</option>
+      <option value="works">Works with my key</option>
+      <option value="no_access">No access with my key</option>
+      <option value="retired">No longer served by NVIDIA</option>
+      <option value="busy">Busy / rate-limited</option>
+      <option value="untested">Not tested yet</option>
+    </select>
+    <select id="ckSort" aria-label="Sort">
+      <option value="calls">Most used</option>
+      <option value="released">Newest</option>
+      <option value="name">Name</option>
+      <option value="speed">Fastest (tested)</option>
+    </select>
+  </div>
+  <div class="ck-chips" id="ckChips">
+    {% for c in summary.caps %}<button type="button" class="ck-chip" data-cap="{{ c.key }}">{{ c.label }} <b>{{ c.count }}</b></button>{% endfor %}
+  </div>
+  <div class="ck-testall">
+    <button type="button" class="btn" id="ckAllBtn" disabled><i class="fas fa-list-check"></i> Test all chat models</button>
+    <button type="button" class="btn ck-stop" id="ckStopBtn" hidden><i class="fas fa-stop"></i> Stop</button>
+    <div class="ck-progress"><div id="ckBar"></div></div>
+    <div class="ck-tally" id="ckTally">Check your key first, then test models one by one or all at once (about 2–3 minutes).</div>
+  </div>
+  <div class="ck-count" id="ckCount"></div>
+  <div class="ck-grid" id="ckGrid">
+    {% for m in models %}
+    <div class="ck-card" data-id="{{ m.id }}" data-caps="{{ m.caps|join:' ' }}" data-onapi="{{ m.on_api|yesno:'1,0' }}" data-testable="{{ m.testable|yesno:'1,0' }}"
+         data-calls="{{ m.calls_last_month }}" data-released="{{ m.released }}" data-search="{{ m.id|lower }} {{ m.name|lower }} {{ m.publisher|lower }} {{ m.description|lower }} {{ m.tags|join:' '|lower }}">
+      <div class="ck-head">
+        <span class="ck-logo" data-letter="{{ m.publisher|slice:":1"|upper }}">{% if m.logo %}<img src="{{ m.logo }}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.textContent = this.parentNode.dataset.letter">{% else %}{{ m.publisher|slice:":1"|upper }}{% endif %}</span>
+        <span class="ck-title"><strong>{{ m.name }}</strong><span class="mono">{{ m.id }}</span></span>
+      </div>
+      <div class="ck-meta">
+        <span><i class="fas fa-building"></i> {{ m.publisher|default:"—" }}</span>
+        {% if m.released %}<span><i class="fas fa-calendar"></i> {{ m.released }}</span>{% endif %}
+        {% if m.calls_last_month %}<span><i class="fas fa-chart-line"></i> <span class="ck-calls" data-n="{{ m.calls_last_month }}"></span> calls last month</span>{% endif %}
+        {% if m.preview %}<span>Preview</span>{% endif %}
+      </div>
+      {% if m.description %}<div class="ck-desc">{{ m.description }}</div>{% else %}<div class="ck-desc guess">No catalog details for this model — its abilities below are guessed from its name.</div>{% endif %}
+      <div class="ck-caps">
+        {% for cap in m.caps %}<span class="ck-cap k-{{ cap }}">{% for key, label in capability_labels.items %}{% if key == cap %}{{ label }}{% endif %}{% endfor %}</span>{% endfor %}
+      </div>
+      <div class="ck-foot">
+        {% if m.testable %}
+        <span class="ck-status">Not tested yet</span>
+        <button type="button" class="ck-btn ck-test" disabled><i class="fas fa-vial"></i> Test</button>
+        {% if m.already_added %}<span class="ck-btn" title="Already in the model picker"><i class="fas fa-check"></i> Added</span>{% else %}<button type="button" class="ck-btn ck-add" hidden><i class="fas fa-plus"></i> Add to picker</button>{% endif %}
+        {% elif m.on_api %}
+        <span class="ck-status">Not a chat model — {% if m.kind == 'retrieval' %}used for search/embeddings{% elif m.kind == 'safety' %}a safety checker{% elif m.kind == 'image' %}makes images{% elif m.kind == 'speech' %}speech{% else %}special purpose{% endif %}, so it can't be added to the chat.</span>
+        {% else %}
+        <span class="ck-status">Not on the chat API — runs through its own NVIDIA endpoint.</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+(function(){
+  var keyInput = document.getElementById('ckKey');
+  var keyBtn = document.getElementById('ckKeyBtn');
+  var keyResult = document.getElementById('ckKeyResult');
+  var grid = document.getElementById('ckGrid');
+  var cards = Array.prototype.slice.call(grid.querySelectorAll('.ck-card'));
+  var allBtn = document.getElementById('ckAllBtn');
+  var stopBtn = document.getElementById('ckStopBtn');
+  var bar = document.getElementById('ckBar');
+  var tally = document.getElementById('ckTally');
+  var search = document.getElementById('ckSearch');
+  var where = document.getElementById('ckWhere');
+  var statusSel = document.getElementById('ckStatus');
+  var sortSel = document.getElementById('ckSort');
+  var countEl = document.getElementById('ckCount');
+  var activeCaps = {};
+  var key = '';
+  var runId = null;
+  var stopRequested = false;
+
+  // "3334103" -> "3.3M"
+  grid.querySelectorAll('.ck-calls').forEach(function(el){
+    var n = Number(el.getAttribute('data-n'));
+    el.textContent = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
+  });
+
+  function csrf(){
+    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function post(url, body){
+    return fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+      body: JSON.stringify(body)
+    }).then(function(r){ return r.json(); });
+  }
+  function esc(s){ return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // ---- filters
+  function applyFilters(){
+    var q = search.value.trim().toLowerCase();
+    var w = where.value, st = statusSel.value;
+    var caps = Object.keys(activeCaps);
+    var shown = 0;
+    cards.forEach(function(card){
+      var ok = true;
+      if (w === 'api') ok = card.dataset.onapi === '1';
+      else if (w === 'testable') ok = card.dataset.testable === '1';
+      else if (w === 'catalog') ok = card.dataset.onapi === '0';
+      if (ok && q) ok = card.dataset.search.indexOf(q) !== -1;
+      if (ok && caps.length) {
+        var have = ' ' + card.dataset.caps + ' ';
+        ok = caps.every(function(c){ return have.indexOf(' ' + c + ' ') !== -1; });
+      }
+      if (ok && st) ok = st === 'untested' ? !card.dataset.status && card.dataset.testable === '1' : card.dataset.status === st;
+      card.hidden = !ok;
+      if (ok) shown++;
+    });
+    countEl.textContent = 'Showing ' + shown + ' of ' + cards.length + ' models';
+  }
+  function applySort(){
+    var s = sortSel.value;
+    var sorted = cards.slice().sort(function(a, b){
+      if (s === 'released') return (b.dataset.released || '').localeCompare(a.dataset.released || '');
+      if (s === 'name') return a.dataset.id.localeCompare(b.dataset.id);
+      if (s === 'speed') return (Number(a.dataset.seconds) || 1e9) - (Number(b.dataset.seconds) || 1e9);
+      return Number(b.dataset.calls) - Number(a.dataset.calls);
+    });
+    sorted.forEach(function(card){ grid.appendChild(card); });
+  }
+  search.addEventListener('input', applyFilters);
+  where.addEventListener('change', applyFilters);
+  statusSel.addEventListener('change', applyFilters);
+  sortSel.addEventListener('change', applySort);
+  document.getElementById('ckChips').addEventListener('click', function(e){
+    var chip = e.target.closest('.ck-chip');
+    if (!chip) return;
+    var cap = chip.dataset.cap;
+    if (activeCaps[cap]) delete activeCaps[cap]; else activeCaps[cap] = true;
+    chip.classList.toggle('on', !!activeCaps[cap]);
+    applyFilters();
+  });
+  applyFilters();
+
+  // ---- key check
+  function showKeyResult(cls, html){
+    keyResult.className = 'ck-result show ' + cls;
+    keyResult.innerHTML = html;
+  }
+  keyBtn.addEventListener('click', function(){
+    var value = keyInput.value.trim();
+    keyBtn.disabled = true;
+    showKeyResult('wait', '<i class="fas fa-spinner fa-spin"></i> Checking the key…');
+    post('{% url "dashboard_api_checker_key" %}', { key: value }).then(function(res){
+      var icon = res.status === 'works' ? 'fa-circle-check' : res.status === 'busy' ? 'fa-triangle-exclamation' : 'fa-circle-xmark';
+      runId = res.run_id || null;
+      showKeyResult(res.status, '<i class="fas ' + icon + '"></i> ' + esc(res.detail) +
+        (runId ? ' <a href="{% url "dashboard_api_checker" %}history/' + runId + '/">Saved to History</a>' : ''));
+      key = (res.status === 'works' || res.status === 'busy') ? value : '';
+      allBtn.disabled = !key;
+      grid.querySelectorAll('.ck-test').forEach(function(b){ b.disabled = !key; });
+      if (key) tally.textContent = 'Key ready. Test models one by one, or all ' + grid.querySelectorAll('.ck-test').length + ' chat models at once.';
+    }).catch(function(){
+      showKeyResult('error', '<i class="fas fa-circle-xmark"></i> Could not reach the server. Try again.');
+    }).then(function(){ keyBtn.disabled = false; });
+  });
+  keyInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') keyBtn.click(); });
+
+  // ---- testing models
+  var LABELS = { works: 'Works', no_access: 'No access', retired: 'Not served', busy: 'Busy', error: 'Error', bad_key: 'Key problem' };
+  function setCard(card, res){
+    card.dataset.status = res.status;
+    if (res.seconds != null && res.status === 'works') card.dataset.seconds = res.seconds;
+    card.classList.remove('st-works', 'st-no_access', 'st-retired', 'st-busy', 'st-error');
+    card.classList.add('st-' + res.status);
+    var status = card.querySelector('.ck-status');
+    status.className = 'ck-status ' + res.status;
+    status.textContent = res.status === 'works'
+      ? 'Works — first words in ' + res.seconds + ' s'
+      : (LABELS[res.status] || 'Error') + ' — ' + res.detail;
+    var add = card.querySelector('.ck-add');
+    if (add) add.hidden = res.status !== 'works';
+  }
+  function testCard(card){
+    var btn = card.querySelector('.ck-test');
+    btn.disabled = true;
+    var status = card.querySelector('.ck-status');
+    status.className = 'ck-status';
+    status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing…';
+    return post('{% url "dashboard_api_checker_test" %}', { key: key, model: card.dataset.id, run_id: runId })
+      .then(function(res){ setCard(card, res); return res; })
+      .catch(function(){ var res = { status: 'error', detail: 'Could not reach the server.' }; setCard(card, res); return res; })
+      .then(function(res){ btn.disabled = !key; return res; });
+  }
+  grid.addEventListener('click', function(e){
+    var card = e.target.closest('.ck-card');
+    if (!card) return;
+    if (e.target.closest('.ck-test') && key) { testCard(card).then(applyFilters); return; }
+    if (e.target.closest('.ck-add')) {
+      try { sessionStorage.setItem('api_checker_key', key); } catch (err) {}
+      window.location.href = '{% url "dashboard_api_settings" %}?add_model=' + encodeURIComponent(card.dataset.id);
+    }
+  });
+
+  // Free NVIDIA keys are rate-limited (about 40 requests a minute), so tests
+  // start no faster than one every 1.8 s, two at a time, and back off when
+  // NVIDIA says "too many requests".
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  allBtn.addEventListener('click', function(){
+    if (!key) return;
+    var queue = cards.filter(function(c){ return c.dataset.testable === '1'; });
+    var total = queue.length, done = 0, counts = { works: 0, no_access: 0, retired: 0, busy: 0, error: 0 };
+    stopRequested = false;
+    allBtn.disabled = true; stopBtn.hidden = false;
+    function updateTally(){
+      bar.style.width = Math.round(done / total * 100) + '%';
+      tally.innerHTML = '<span>' + done + ' / ' + total + ' tested</span><span style="color:#177245">✔ ' + counts.works + ' work</span>' +
+        (counts.no_access ? '<span style="color:#b91c1c">✖ ' + counts.no_access + ' no access</span>' : '') +
+        '<span style="color:#6b7280">⊘ ' + counts.retired + ' no longer served</span><span style="color:#b45309">⏳ ' + counts.busy + ' busy</span>' +
+        (counts.error ? '<span>' + counts.error + ' errors</span>' : '');
+    }
+    updateTally();
+    var nextStart = 0;
+    function worker(){
+      if (stopRequested || !queue.length) return Promise.resolve();
+      var card = queue.shift();
+      var wait = Math.max(0, nextStart - Date.now());
+      nextStart = Math.max(Date.now(), nextStart) + 1800;
+      return sleep(wait).then(function(){
+        if (stopRequested) return;
+        return testCard(card).then(function(res){
+          if (res.status === 'busy' && /rate limit/i.test(res.detail || '') && !card.dataset.retried) {
+            card.dataset.retried = '1';
+            queue.push(card);
+            nextStart = Date.now() + 20000;
+            return;
+          }
+          counts[res.status in counts ? res.status : 'error']++;
+          done++;
+          updateTally();
+        });
+      }).then(worker);
+    }
+    Promise.all([worker(), worker()]).then(function(){
+      stopBtn.hidden = true; allBtn.disabled = !key;
+      tally.innerHTML = (stopRequested ? 'Stopped. ' : 'Finished. ') + tally.innerHTML;
+      applyFilters();
+    });
+  });
+  stopBtn.addEventListener('click', function(){ stopRequested = true; stopBtn.hidden = true; });
+
+  // "Check this key again" from History (here, or from a saved check's page).
+  function useKey(saved){
+    keyInput.value = saved;
+    keyInput.scrollIntoView({ block: 'center' });
+    keyBtn.click();
+  }
+  document.querySelectorAll('.ck-use-key').forEach(function(btn){
+    btn.addEventListener('click', function(){ useKey(btn.getAttribute('data-key')); });
+  });
+  try {
+    var handed = sessionStorage.getItem('api_checker_use_key');
+    if (handed) { sessionStorage.removeItem('api_checker_use_key'); useKey(handed); }
+  } catch (e) {}
+})();
+</script>
+{% endblock %}

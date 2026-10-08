@@ -1,6 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from myapp import ai_calls, coding_api, coding_dashboard, views
+from myapp import ai_calls, api_checker, calls_dashboard, coding_api, coding_dashboard, views
 
 urlpatterns = [
     path('', views.ai_page, name='home'),
@@ -31,6 +31,16 @@ urlpatterns = [
     path('store/dashboard/ai/<int:pk>/revoke/', views.dashboard_ai_revoke, name='dashboard_ai_revoke'),
     path('store/dashboard/ai/activity/', views.dashboard_ai_activity, name='dashboard_ai_activity'),
     path('store/dashboard/ai/activity/<int:pk>/', views.dashboard_ai_activity_detail, name='dashboard_ai_activity_detail'),
+    path('store/dashboard/api-checker/', api_checker.dashboard_api_checker, name='dashboard_api_checker'),
+    path('store/dashboard/api-checker/key/', api_checker.dashboard_api_checker_key, name='dashboard_api_checker_key'),
+    path('store/dashboard/api-checker/test/', api_checker.dashboard_api_checker_test, name='dashboard_api_checker_test'),
+    path('store/dashboard/api-checker/history/<int:pk>/', api_checker.dashboard_api_checker_run, name='dashboard_api_checker_run'),
+    path('store/dashboard/api-checker/history/<int:pk>/delete/', api_checker.dashboard_api_checker_run_delete, name='dashboard_api_checker_run_delete'),
+    path('store/dashboard/calls/', calls_dashboard.dashboard_calls, name='dashboard_calls'),
+    path('store/dashboard/calls/<int:pk>/', calls_dashboard.dashboard_call_detail, name='dashboard_call_detail'),
+    path('store/dashboard/calls/<int:pk>/audio/', calls_dashboard.dashboard_call_audio, name='dashboard_call_audio'),
+    path('store/dashboard/calls/<int:pk>/download/<str:file_format>/', calls_dashboard.dashboard_call_download, name='dashboard_call_download'),
+    path('store/dashboard/calls/<int:pk>/delete/', calls_dashboard.dashboard_call_delete, name='dashboard_call_delete'),
     path('store/dashboard/opencode/', coding_dashboard.dashboard_opencode, name='dashboard_opencode'),
     path('store/dashboard/opencode/user/<int:user_id>/', coding_dashboard.dashboard_opencode_user, name='dashboard_opencode_user'),
     path('store/dashboard/opencode/session/<int:pk>/', coding_dashboard.dashboard_opencode_session, name='dashboard_opencode_session'),
@@ -41,6 +51,7 @@ urlpatterns = [
     path('store/dashboard/ai/reports/', views.dashboard_ai_reports, name='dashboard_ai_reports'),
     path('store/dashboard/ai/reports/<int:pk>/', views.dashboard_ai_report_detail, name='dashboard_ai_report_detail'),
     path('store/dashboard/ai/reports/<int:pk>/image/<str:side>/', views.dashboard_ai_report_image, name='dashboard_ai_report_image'),
+    path('store/dashboard/ai/reports/<int:pk>/chat/', views.dashboard_ai_report_chat, name='dashboard_ai_report_chat'),
     path('store/dashboard/ai/reports/<int:pk>/status/', views.dashboard_ai_report_status_update, name='dashboard_ai_report_status_update'),
     path('store/dashboard/ai/reports/<int:pk>/delete/', views.dashboard_ai_report_delete, name='dashboard_ai_report_delete'),
     path('store/dashboard/api-data/', views.dashboard_api_data, name='dashboard_api_data'),
@@ -68,6 +79,7 @@ urlpatterns = [
     path('AI/api/login/', views.ai_login, name='ai_login'),
     path('AI/api/logout/', views.ai_logout, name='ai_logout'),
     path('AI/api/location/', views.ai_location_update, name='ai_location_update'),
+    path('AI/api/admin/user-map/', views.ai_user_map, name='ai_user_map'),
     path('AI/api/amount-paid/', views.ai_amount_paid_update, name='ai_amount_paid_update'),
     path('AI/api/profile/update/', views.ai_profile_update, name='ai_profile_update'),
     path('AI/api/profile/password/', views.ai_password_change, name='ai_password_change'),

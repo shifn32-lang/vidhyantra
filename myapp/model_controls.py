@@ -99,3 +99,63 @@ def set_text(model_key, display_name, description):
         defaults={'display_name': display_name.strip(), 'description': description.strip()},
     )
     cache.delete(_TEXT_PREFIX + model_key)
+
+
+_REMOVED_PREFIX = 'model_removed:'
+
+
+def is_removed(model_key):
+    """Removed on API Settings: hidden from the picker until restored."""
+    cache_key = _REMOVED_PREFIX + model_key
+    removed = cache.get(cache_key, _UNSET)
+    if removed is _UNSET:
+        try:
+            from myapp.models import AIModelControl
+            removed = bool(AIModelControl.objects.filter(model_key=model_key, is_removed=True).exists())
+        except Exception:
+            removed = False
+        cache.set(cache_key, removed, _CACHE_TTL)
+    return removed
+
+
+def set_removed(model_key, removed):
+    """Remove (switch off and hide) or restore (switch back on) a model."""
+    from myapp.models import AIModelControl
+    AIModelControl.objects.update_or_create(
+        model_key=model_key, defaults={'is_removed': bool(removed), 'is_enabled': not removed},
+    )
+    cache.delete(_REMOVED_PREFIX + model_key)
+    cache.delete(_CACHE_PREFIX + model_key)
+
+
+IDENTITY_FIELDS = ('name', 'creator', 'model', 'notes')
+_IDENTITY_PREFIX = 'model_identity:'
+
+
+def get_identity(model_key):
+    """{'name', 'creator', 'model', 'notes'} with only the fields the site
+    owner filled in, or {} when the built-in identity rules apply."""
+    cache_key = _IDENTITY_PREFIX + str(model_key)
+    value = cache.get(cache_key, _UNSET)
+    if value is _UNSET:
+        value = {}
+        try:
+            from myapp.models import AIModelControl
+            row = AIModelControl.objects.filter(model_key=model_key).values_list(
+                'identity_name', 'identity_creator', 'identity_model', 'identity_notes').first()
+            if row:
+                value = {field: text.strip() for field, text in zip(IDENTITY_FIELDS, row) if (text or '').strip()}
+        except Exception:
+            value = {}
+        cache.set(cache_key, value, _CACHE_TTL)
+    return value
+
+
+def set_identity(model_key, name='', creator='', model='', notes=''):
+    from myapp.models import AIModelControl
+    AIModelControl.objects.update_or_create(model_key=model_key, defaults={
+        'identity_name': name.strip()[:80], 'identity_creator': creator.strip()[:120],
+        'identity_model': model.strip()[:120], 'identity_notes': notes.strip()[:1000],
+    })
+    cache.delete(_IDENTITY_PREFIX + model_key)
+

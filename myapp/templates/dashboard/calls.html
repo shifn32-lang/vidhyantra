@@ -1,0 +1,153 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Call Data{% endblock %}
+{% block page_title %}Call Data{% endblock %}
+
+{% block extra_head %}
+<style>
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem}
+.panel-note{padding:0 1.4rem 1.1rem;font-size:.8rem;color:var(--text)}
+.flash{background:#e8f8ee;color:#177245;border-radius:12px;padding:.85rem 1rem;font-size:.88rem;font-weight:600;margin-bottom:1.2rem}
+.flash.error{background:#fee2e2;color:#b91c1c}
+.call-filters{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;padding:1rem 1.4rem;border-bottom:1px solid var(--line)}
+.call-filters select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 .7rem;font-family:inherit;font-size:.82rem;background:var(--bg-alt);color:var(--head)}
+.call-filters select:focus{outline:none;border-color:var(--red)}
+.call-filters .panel-search input{width:260px}
+.call-clear{font-size:.8rem;font-weight:700;color:var(--red);margin-left:.2rem}
+.call-who a{font-weight:700;color:var(--head)}
+.call-who a:hover{color:var(--red)}
+.call-said{display:block;font-size:.72rem;color:var(--text);opacity:.8;margin-top:.15rem}
+.call-preview{max-width:320px;font-size:.8rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.call-play{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--red);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.call-play:hover,.call-play.playing{background:var(--red);color:#fff;border-color:var(--red)}
+.badge.call-live{background:#fff7e6;color:#b45309}
+.badge.call-done{background:#e8fbf0;color:#1da851}
+.call-none{font-size:.75rem;color:#9aa3b0}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.4rem;font-size:.82rem;color:var(--text);border-top:1px solid var(--line);flex-wrap:wrap}
+.pager a{font-weight:700;color:var(--red)}
+.pager span.off{opacity:.4}
+</style>
+{% endblock %}
+
+{% block content %}
+{% for message in messages %}
+<div class="flash {{ message.tags }}"><i class="fas {% if message.tags == 'error' %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}"></i> {{ message }}</div>
+{% endfor %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-ico"><i class="fas fa-phone-volume"></i></div>
+    <div><div class="stat-num">{{ stats.calls }}</div><div class="stat-lbl">Calls in total · {{ stats.today }} today</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-ico"><i class="fas fa-clock"></i></div>
+    <div><div class="stat-num">{{ stats.talk_time }}</div><div class="stat-lbl">Total talk time</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-ico"><i class="fas fa-users"></i></div>
+    <div><div class="stat-num">{{ stats.callers }}</div><div class="stat-lbl">People who called</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-ico"><i class="fas fa-microphone"></i></div>
+    <div><div class="stat-num">{{ stats.recorded }}</div><div class="stat-lbl">Calls with a recording</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>{{ match_count }} call{{ match_count|pluralize }}{% if filter_user %} by {{ filter_user }}{% endif %}</h3>
+  </div>
+  <form class="call-filters" method="get">
+    {% if user_id %}<input type="hidden" name="user" value="{{ user_id }}">{% endif %}
+    <span class="panel-search">
+      <i class="fas fa-magnifying-glass"></i>
+      <input type="search" name="q" value="{{ q }}" placeholder="Search name or words said…">
+    </span>
+    <select name="when" onchange="this.form.submit()" aria-label="When">
+      <option value="all" {% if when == 'all' %}selected{% endif %}>All time</option>
+      <option value="today" {% if when == 'today' %}selected{% endif %}>Today</option>
+      <option value="yesterday" {% if when == 'yesterday' %}selected{% endif %}>Yesterday</option>
+      <option value="week" {% if when == 'week' %}selected{% endif %}>Last 7 days</option>
+      <option value="month" {% if when == 'month' %}selected{% endif %}>Last 30 days</option>
+    </select>
+    <select name="length" onchange="this.form.submit()" aria-label="Call length">
+      <option value="all" {% if length == 'all' %}selected{% endif %}>Any length</option>
+      <option value="short" {% if length == 'short' %}selected{% endif %}>Under 1 minute</option>
+      <option value="medium" {% if length == 'medium' %}selected{% endif %}>1–5 minutes</option>
+      <option value="long" {% if length == 'long' %}selected{% endif %}>Over 5 minutes</option>
+    </select>
+    <select name="recording" onchange="this.form.submit()" aria-label="Recording">
+      <option value="all" {% if recording == 'all' %}selected{% endif %}>With or without recording</option>
+      <option value="yes" {% if recording == 'yes' %}selected{% endif %}>Has a recording</option>
+      <option value="no" {% if recording == 'no' %}selected{% endif %}>No recording</option>
+    </select>
+    <select name="status" onchange="this.form.submit()" aria-label="Status">
+      <option value="all" {% if status == 'all' %}selected{% endif %}>Any status</option>
+      <option value="ended" {% if status == 'ended' %}selected{% endif %}>Ended normally</option>
+      <option value="unfinished" {% if status == 'unfinished' %}selected{% endif %}>Cut off / still running</option>
+    </select>
+    <select name="sort" onchange="this.form.submit()" aria-label="Sort by">
+      <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Newest first</option>
+      <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+      <option value="longest" {% if sort == 'longest' %}selected{% endif %}>Longest first</option>
+      <option value="most_lines" {% if sort == 'most_lines' %}selected{% endif %}>Most talking</option>
+    </select>
+    {% if q or when != 'all' or length != 'all' or recording != 'all' or status != 'all' or sort != 'recent' or user_id %}<a class="call-clear" href="{% url 'dashboard_calls' %}">Clear filters</a>{% endif %}
+  </form>
+  <p class="panel-note" style="padding-top:1rem">Every call made with the phone button. Recordings hold the caller's own voice only — the AI voice is spoken by their browser and is in the transcript instead. Open a call for the full transcript.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>User</th><th>Started</th><th>Length</th><th>Lines</th><th>What they said first</th><th>Recording</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="call-who">
+          <a href="?user={{ r.call.user_id }}" title="Show only this user's calls">{{ r.name }}</a><br>
+          <span class="mono">{{ r.call.user.email|default:r.call.user.username }}</span>
+          {% if r.call.caller_name %}<span class="call-said">Said their name is “{{ r.call.caller_name }}”</span>{% endif %}
+        </td>
+        <td>{{ r.call.started_at|date:"d M Y" }}<br><span class="mono">{{ r.call.started_at|date:"h:i A" }}</span></td>
+        <td>{{ r.duration }}</td>
+        <td>{{ r.call.turn_count }}</td>
+        <td><div class="call-preview">{{ r.preview|default:"—" }}</div></td>
+        <td>{% if r.has_audio %}<button type="button" class="call-play" data-src="{% url 'dashboard_call_audio' r.call.pk %}" aria-label="Play recording"><i class="fas fa-play"></i></button>{% else %}<span class="call-none">None</span>{% endif %}</td>
+        <td>{% if r.call.ended_at %}<span class="badge call-done">Ended</span>{% else %}<span class="badge call-live">Cut off</span>{% endif %}</td>
+        <td><div class="row-actions"><a class="edit-btn" href="{% url 'dashboard_call_detail' r.call.pk %}" title="Open call"><i class="fas fa-eye"></i></a></div></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="empty-row">No calls match these filters</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if page.paginator.num_pages > 1 %}
+  <div class="pager">
+    {% if page.has_previous %}<a href="?{{ query_string }}{% if query_string %}&{% endif %}page={{ page.previous_page_number }}"><i class="fas fa-arrow-left"></i> Newer</a>{% else %}<span class="off"><i class="fas fa-arrow-left"></i> Newer</span>{% endif %}
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?{{ query_string }}{% if query_string %}&{% endif %}page={{ page.next_page_number }}">Older <i class="fas fa-arrow-right"></i></a>{% else %}<span class="off">Older <i class="fas fa-arrow-right"></i></span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  // One shared player for the play buttons in the table.
+  var player = new Audio();
+  var current = null;
+  function reset(btn){ if (btn) { btn.classList.remove('playing'); btn.innerHTML = '<i class="fas fa-play"></i>'; } }
+  player.addEventListener('ended', function(){ reset(current); current = null; });
+  document.querySelectorAll('.call-play').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if (current === btn && !player.paused) { player.pause(); reset(btn); return; }
+      if (current !== btn) { reset(current); player.src = btn.getAttribute('data-src'); current = btn; }
+      player.play().then(function(){
+        btn.classList.add('playing');
+        btn.innerHTML = '<i class="fas fa-pause"></i>';
+      }).catch(function(){ reset(btn); });
+    });
+  });
+  // Stop playback when the admin switches to another dashboard page.
+  window.addEventListener('popstate', function(){ player.pause(); });
+  document.querySelector('.dash-nav').addEventListener('click', function(){ player.pause(); }, { once: true });
+})();
+</script>
+{% endblock %}

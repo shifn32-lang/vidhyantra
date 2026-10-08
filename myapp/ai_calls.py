@@ -297,7 +297,11 @@ def download(request, pk, file_format):
         return refused
     if file_format not in ('txt', 'pdf'):
         return _error('Unsupported format.', 400)
-    call = _own(request, pk)
+    return download_response(_own(request, pk), file_format)
+
+
+def download_response(call, file_format):
+    """One call as a .txt or .pdf transcript (also used by the dashboard)."""
     if not call:
         return _error('Call not found.', 404)
     brand = ai_chat.get_ai_brand_name()
@@ -335,7 +339,11 @@ def audio(request, pk):
     refused = _guard(request, 'GET')
     if refused:
         return refused
-    call = _own(request, pk)
+    return audio_response(request, _own(request, pk))
+
+
+def audio_response(request, call):
+    """Stream one call's recording (also used by the dashboard's Call Data)."""
     if not call or not call.audio or not call.audio_bytes:
         return _error('There is no recording for this call.', 404)
     try:

@@ -409,6 +409,44 @@ def ai_location_update(request):
     })
 
 
+def ai_user_map(request):
+    """Superuser-only: every account that shared its browser location, for
+    the Maps view in the AI account menu."""
+    if request.method != 'GET':
+        return JsonResponse({'status': 'error', 'detail': 'Invalid request method.'}, status=405)
+    if not request.user.is_authenticated or not request.user.is_superuser:
+        return JsonResponse({'status': 'error', 'detail': 'Maps is only available to the site owner.'}, status=403)
+
+    profiles = (
+        StoreProfile.objects
+        .filter(location_latitude__isnull=False, location_longitude__isnull=False)
+        .select_related('user')
+        .order_by('-location_updated_at')
+    )
+    users = []
+    for profile in profiles:
+        user = profile.user
+        users.append({
+            'id': user.pk,
+            'name': user.get_full_name().strip() or user.username,
+            'email': user.email,
+            'phone': profile.phone,
+            'place': profile.location_place_name,
+            'lat': float(profile.location_latitude),
+            'lng': float(profile.location_longitude),
+            'accuracy_m': profile.location_accuracy_m,
+            'located_at': profile.location_updated_at.isoformat() if profile.location_updated_at else None,
+            'last_login': user.last_login.isoformat() if user.last_login else None,
+            'avatar_url': profile.avatar.url if profile.avatar else None,
+            'is_superuser': user.is_superuser,
+        })
+    return JsonResponse({
+        'status': 'ok',
+        'users': users,
+        'total_users': User.objects.count(),
+    })
+
+
 AMOUNT_PAID_MAX = Decimal(str(MAX_AMOUNT_PAID))
 
 
@@ -722,7 +760,10 @@ def api_chat_completions(request):
     # Same public-facing sanitization the in-app chat gets — an external caller
     # leaking the real backend vendor or borrowing a persona name it wasn't
     # given is just as much a trust problem here as it is in the browser UI.
-    if model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
+    identity = ai_chat.owner_identity(model_key)
+    if identity:
+        reply = _owner_identity_public_reply(reply, identity, ai_chat.MODELS[model_key]['label'])
+    elif model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
         reply = _chatgpt_public_reply(reply, ai_chat.chatgpt_persona_name(model_key))
     else:
         reply = _vidhyora_public_reply(reply, ai_chat.MODELS[model_key]['label'])
@@ -1622,15 +1663,24 @@ def dashboard_api_settings(request):
     each ChatGPT model, image generation and web search get a key, a
     live connection test, an on/off checkbox and request counters."""
     from myapp import api_controls
+    from myapp.models import CustomAIModel
     message = None
+    add_result = None
     if request.method == 'POST':
-        panel_id, ok, text = api_controls.handle_post(request)
-        if text:
-            message = {'panel': panel_id, 'ok': ok, 'text': text}
+        if request.POST.get('action') == 'add_model':
+            add_result = api_controls.add_model(request)
+        else:
+            panel_id, ok, text = api_controls.handle_post(request)
+            if text:
+                message = {'panel': panel_id, 'ok': ok, 'text': text}
+    panels, removed_models = api_controls.split_removed(api_controls.panel_context())
     return render(request, 'dashboard/api_settings.html', {
         'active': 'api_settings',
-        'panels': api_controls.panel_context(),
+        'panels': panels,
+        'removed_models': removed_models,
         'message': message,
+        'add_result': add_result,
+        'api_types': CustomAIModel.API_TYPE_CHOICES,
     })
 
 
@@ -1947,6 +1997,47 @@ def _dashboard_ai_image_response(image_value):
     response['Cache-Control'] = 'private, no-store'
     response['X-Content-Type-Options'] = 'nosniff'
     return response
+
+
+AI_REPORT_CHAT_LIMIT = 300
+
+
+@dashboard_staff_required
+def dashboard_ai_report_chat(request, pk):
+    """The whole conversation a report came from, for the eye button's
+    pop-up on AI Reports. The reported reply is marked so it can be
+    highlighted; long chats are trimmed to their newest messages."""
+    report = get_object_or_404(AIReport.objects.select_related('conversation'), pk=pk)
+    messages_out = []
+    total = 0
+    if report.conversation_id:
+        queryset = AIMessage.objects.filter(conversation_id=report.conversation_id).only(
+            'id', 'role', 'content', 'image_data', 'document_name', 'model_key', 'created_at', 'superseded',
+        ).order_by('created_at', 'pk')
+        total = queryset.count()
+        rows = list(queryset[max(0, total - AI_REPORT_CHAT_LIMIT):])
+        for m in rows:
+            messages_out.append({
+                'id': m.pk,
+                'role': m.role,
+                'text': m.content,
+                'model': m.model_key,
+                'document': m.document_name,
+                'image': reverse('dashboard_ai_message_image', args=[m.pk]) if m.image_data else '',
+                'time': timezone.localtime(m.created_at).strftime('%d %b %Y, %I:%M %p'),
+                'superseded': m.superseded,
+                'reported': m.pk == report.message_id,
+            })
+    conversation = report.conversation
+    return JsonResponse({
+        'status': 'ok',
+        'title': (conversation.title if conversation else '') or 'Conversation',
+        'total': total,
+        'shown': len(messages_out),
+        'messages': messages_out,
+        'conversation_url': reverse('dashboard_ai_activity_detail', args=[conversation.pk]) if conversation else '',
+        'review_url': reverse('dashboard_ai_report_detail', args=[report.pk]),
+    })
 
 
 @dashboard_staff_required
@@ -3946,6 +4037,28 @@ def _vidhyora_public_reply(reply, mode_label):
     return cleaned
 
 
+def _owner_identity_public_reply(reply, identity, mode_label):
+    """The reply filter for a model whose identity the site owner set on API
+    Settings: a backend vendor the model names as its maker is replaced by the
+    owner's answer instead of the built-in one. When the owner's identity
+    itself names such a vendor (say "trained by NVIDIA"), that is the wanted
+    answer and nothing is rewritten."""
+    cleaned = str(reply or '')
+    if re.search(_CHATGPT_BACKEND_VENDOR, ' '.join(identity.values()), re.IGNORECASE):
+        return _normalize_ai_home_links(cleaned)
+    creator = identity.get('creator') or f'the {ai_chat.get_ai_brand_name()} team'
+    name = identity.get('name') or mode_label
+    for _ in range(_CHATGPT_SANITIZE_MAX_PASSES):
+        replaced = _CHATGPT_SELF_ATTRIBUTION_RE.sub(lambda m: m.group(1) + creator, cleaned)
+        replaced = _CHATGPT_SELF_IDENTITY_RE.sub(f'I am {name}', replaced)
+        replaced = _CHATGPT_SELF_NAME_RE.sub(f'My name is {name}', replaced)
+        if replaced == cleaned:
+            break
+        cleaned = replaced
+    cleaned = _CHATGPT_ARCHITECTURE_RE.sub(identity.get('model') or name, cleaned)
+    return _normalize_ai_home_links(cleaned)
+
+
 def _ai_public_routed_model_key(response_model_key, routed_model_key):
     """Never expose ChatGPT's private worker selection to the browser."""
     if response_model_key in (ai_chat.CHATGPT_56_MODEL_KEY, ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):
@@ -5106,8 +5219,12 @@ def _ai_chat_send(request):
         # mid-reply and streamed text cannot be taken back. public_text is run
         # over the WHOLE reply each time and the browser is only ever fed from
         # its output, so a fake link is removed before any of it is released.
+        owner_identity = ai_chat.owner_identity(response_model_key)
+
         def public_text(text):
-            if hide_chatgpt_worker:
+            if owner_identity:
+                text = _owner_identity_public_reply(text, owner_identity, response_model_label)
+            elif hide_chatgpt_worker:
                 text = _chatgpt_public_reply(text, ai_chat.chatgpt_persona_name(response_model_key))
             elif fix_wrong_persona_identity:
                 text = _vidhyora_public_reply(text, response_model_label)
@@ -5115,7 +5232,7 @@ def _ai_chat_send(request):
                 text = _strip_fake_download_links(text)
             return text
 
-        buffered = hide_chatgpt_worker or fix_wrong_persona_identity or bool(generated_file_spec)
+        buffered = hide_chatgpt_worker or fix_wrong_persona_identity or bool(owner_identity) or bool(generated_file_spec)
         try:
             for chunk in model_stream():
                 full_reply += chunk
@@ -5514,9 +5631,13 @@ def ai_research_run(request):
     model_label = ai_chat.MODELS.get(shown_model, {}).get('label', 'Vidhyora AI')
     persona_name = ai_chat.chatgpt_persona_name(shown_model)
 
+    owner_identity = ai_chat.owner_identity(shown_model)
+
     def public_text(text):
         """Keeps the backend vendor's and other modes' names out of the report,
         the same way a chat reply does."""
+        if owner_identity:
+            return _owner_identity_public_reply(text, owner_identity, model_label)
         if shown_model == ai_chat.CHATGPT_56_MODEL_KEY:
             return _chatgpt_public_reply(text, persona_name)
         if shown_model not in (ai_chat.SOL_MODEL_KEY, ai_chat.TERRA_MODEL_KEY):

@@ -1138,6 +1138,16 @@ class AIModelControl(models.Model):
     last_tested_at = models.DateTimeField(null=True, blank=True)
     last_test_ok = models.BooleanField(null=True, blank=True)
     last_test_message = models.CharField(max_length=300, blank=True)
+    # "Remove" on API Settings: off, out of the model picker, and listed under
+    # Removed models until restored (built-in models live in code, so they
+    # are hidden rather than deleted).
+    is_removed = models.BooleanField(default=False)
+    # How the model answers "who are you / who made you / which model are
+    # you"; blank fields keep the built-in identity rules.
+    identity_name = models.CharField(max_length=80, blank=True)
+    identity_creator = models.CharField(max_length=120, blank=True)
+    identity_model = models.CharField(max_length=120, blank=True)
+    identity_notes = models.TextField(max_length=1000, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -1146,6 +1156,96 @@ class AIModelControl(models.Model):
 
     def __str__(self):
         return f"{self.model_key} ({'on' if self.is_enabled else 'off'})"
+
+
+class CustomAIModel(models.Model):
+    """A chat model added on the dashboard's API Settings page (see
+    myapp.custom_models), served to the model picker as ai_chat.MODELS
+    entry ``custom-<pk>``. Its API key is a ProviderAPICredential named by
+    ``key_setting``; on/off and counters are its AIModelControl row."""
+    API_NVIDIA = 'nvidia'
+    API_OPENAI_COMPATIBLE = 'openai'
+    API_TYPE_CHOICES = [
+        (API_NVIDIA, 'NVIDIA NIM (build.nvidia.com)'),
+        (API_OPENAI_COMPATIBLE, 'Other OpenAI-compatible API'),
+    ]
+
+    api_type = models.CharField(max_length=10, choices=API_TYPE_CHOICES, default=API_NVIDIA)
+    base_url = models.URLField(max_length=300, blank=True, help_text='Only for an OpenAI-compatible API; NVIDIA uses its own.')
+    model_id = models.CharField(max_length=200, help_text='The provider\'s model name, e.g. nvidia/nemotron-3-super-120b-a12b.')
+    display_name = models.CharField(max_length=60)
+    description = models.CharField(max_length=300, blank=True)
+    # Found by the checks when the model is added (or re-tested).
+    thinking_control = models.BooleanField(default=False, help_text='Accepts the "no visible thinking" switch NVIDIA reasoning models use.')
+    vision = models.BooleanField(default=False, help_text='Can read attached images.')
+    check_report = models.JSONField(default=list, blank=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Added AI Model'
+        verbose_name_plural = 'Added AI Models'
+
+    def __str__(self):
+        return f'{self.display_name} ({self.model_id})'
+
+    @property
+    def model_key(self):
+        return f'custom-{self.pk}'
+
+    @property
+    def key_setting(self):
+        return f'CUSTOM_MODEL_{self.pk}_API_KEY'
+
+
+class APICheckRun(models.Model):
+    """One use of the dashboard's API Checker: the key that was checked (kept
+    so it can be re-used from History), whether it worked, and a snapshot of
+    every model and its abilities as NVIDIA listed them at that moment.
+    The models tested in this run are its APICheckResult rows."""
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    api_key = models.CharField(max_length=300)
+    key_status = models.CharField(max_length=20, blank=True)
+    key_detail = models.CharField(max_length=300, blank=True)
+    key_seconds = models.FloatField(null=True, blank=True)
+    key_model = models.CharField(max_length=200, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    models_snapshot = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'API Checker Run'
+        verbose_name_plural = 'API Checker Runs'
+
+    def __str__(self):
+        return f'API check #{self.pk} ({self.key_status})'
+
+    @property
+    def masked_key(self):
+        key = self.api_key or ''
+        return key[:10] + '…' + key[-4:] if len(key) > 16 else '…'
+
+
+class APICheckResult(models.Model):
+    """One model tested with the key of an API Checker run."""
+    run = models.ForeignKey(APICheckRun, on_delete=models.CASCADE, related_name='results')
+    model_id = models.CharField(max_length=200)
+    status = models.CharField(max_length=20)
+    seconds = models.FloatField(null=True, blank=True)
+    detail = models.CharField(max_length=300, blank=True)
+    reply = models.CharField(max_length=200, blank=True)
+    tested_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['tested_at']
+        verbose_name = 'API Checker Result'
+        verbose_name_plural = 'API Checker Results'
+
+    def __str__(self):
+        return f'{self.model_id}: {self.status}'
 
 
 class AICall(models.Model):

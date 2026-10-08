@@ -44,6 +44,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'myapp.middleware.CanonicalHostMiddleware',
     'myapp.middleware.SiteDisabledMiddleware',
+    'myapp.middleware.CustomModelsMiddleware',
     'myapp.middleware.PublicAssetCacheMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

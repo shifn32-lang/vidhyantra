@@ -6,9 +6,27 @@
 <style>
 .badge.api-connected{background:#e8fbf0;color:#1da851}
 .badge.api-disconnected{background:#fee2e2;color:#b91c1c}
+.badge.api-custom{background:#eef2ff;color:#3b5bdb}
 .panel-note{padding:0 1.4rem 1.1rem;font-size:.8rem;color:var(--text)}
 .settings-intro{font-size:.85rem;color:var(--text);margin:0 0 1.2rem}
 .save-msg.error{background:#fee2e2;color:#b91c1c}
+.api-section-title{font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text);opacity:.8;margin:1.8rem 0 .7rem}
+/* Each section opens and closes from its header row. */
+details.api-panel{margin-bottom:.9rem}
+.api-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.8rem;padding:1rem 1.3rem;user-select:none}
+.api-sum::-webkit-details-marker{display:none}
+.api-sum:hover{background:var(--bg-alt)}
+.api-sum-text{flex:1;min-width:0}
+.api-sum-text h3{font-size:.98rem;font-weight:800;color:var(--head);margin:0}
+.api-sum-text small{display:block;font-size:.74rem;color:var(--text);opacity:.75;margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.api-sum-badges{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+.api-dot{width:9px;height:9px;border-radius:50%;background:#cbd2dc;flex-shrink:0}
+.api-dot.ok{background:#1da851}
+.api-dot.bad{background:#dc2626}
+.api-chevron{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text);background:var(--bg-alt);transition:transform .25s ease,background .2s}
+details[open] > .api-sum .api-chevron{transform:rotate(180deg);background:var(--red-soft);color:var(--red)}
+details[open] > .api-sum{border-bottom:1px solid var(--line)}
+.api-add .api-sum-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--red);color:#fff;flex-shrink:0}
 .api-field label,.gem-text-field label{display:block;font-size:.72rem;font-weight:700;color:var(--text);opacity:.75;margin-bottom:.25rem}
 .api-field-row{display:flex;gap:.4rem;align-items:center}
 /* The eye toggle flips type=password to type=text, so style the input
@@ -20,9 +38,9 @@
 .api-field-clear{flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;padding:.35rem .55rem;font-size:.68rem;cursor:pointer;color:var(--text)}
 .api-field-clear:hover{background:var(--bg-alt)}
 .gem-text-field{margin-bottom:1rem}
-.gem-text-field input[type=text],.gem-text-field textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.6rem .85rem;font-family:inherit;font-size:.85rem;background:var(--bg-alt);color:var(--head);resize:vertical}
-.gem-text-field input[type=text]:focus,.gem-text-field textarea:focus{outline:none;border-color:var(--red)}
-.gem-body{padding:0 1.4rem 1.4rem}
+.gem-text-field input[type=text],.gem-text-field input[type=url],.gem-text-field textarea,.gem-text-field select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:.6rem .85rem;font-family:inherit;font-size:.85rem;background:var(--bg-alt);color:var(--head);resize:vertical}
+.gem-text-field input:focus,.gem-text-field textarea:focus,.gem-text-field select:focus{outline:none;border-color:var(--red)}
+.gem-body{padding:1.1rem 1.4rem 1.4rem}
 .gem-sub{font-size:.8rem;color:var(--text);opacity:.75;margin:0 0 1rem}
 .gem-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.7rem;margin-bottom:1.1rem}
 .gem-stat{border:1px solid var(--line);border-radius:12px;padding:.7rem .9rem;background:var(--bg-alt)}
@@ -32,23 +50,140 @@
 .gem-toggle input{width:18px;height:18px;accent-color:var(--red)}
 .gem-actions{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
 .gem-actions .btn:not(.btn-primary){background:var(--bg-alt);color:var(--head);border:1px solid var(--line)}
+.gem-actions .btn.api-delete{margin-left:auto;background:#fff;color:#b91c1c;border-color:#fecaca}
+.gem-actions .btn:disabled{opacity:.6;cursor:wait}
 .gem-test-line{font-size:.78rem;margin-top:.8rem;color:var(--text)}
 .gem-test-line.ok{color:#1da851}
 .gem-test-line.bad{color:#dc2626}
+.api-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+@media (max-width:700px){.api-grid{grid-template-columns:1fr}}
+.api-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1rem}
+.api-chip{display:inline-flex;align-items:center;gap:.35rem;font-size:.72rem;font-weight:700;padding:.25rem .6rem;border-radius:50px;background:var(--bg-alt);border:1px solid var(--line);color:var(--head)}
+.api-chip i{color:var(--red)}
+.api-checks{list-style:none;margin:0 0 1rem;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.api-checks li{display:flex;gap:.7rem;align-items:flex-start;padding:.65rem .9rem;font-size:.82rem;background:#fff}
+.api-checks li+li{border-top:1px solid var(--line)}
+.api-checks i{margin-top:.15rem;flex-shrink:0}
+.api-checks .ok i{color:#1da851}
+.api-checks .warn i{color:#d97706}
+.api-checks .fail{background:#fff5f5}
+.api-checks .fail i{color:#dc2626}
+.api-checks b{color:var(--head);margin-right:.3rem}
+.api-help{font-size:.78rem;color:var(--text);background:var(--bg-alt);border:1px solid var(--line);border-radius:12px;padding:.75rem .9rem;margin:0 0 1rem;line-height:1.55}
+.api-help a{color:var(--red);font-weight:700}
+.api-identity{border:1px solid var(--line);border-radius:12px;margin:0 0 1rem;background:#fff}
+.api-identity>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.55rem;padding:.75rem .9rem;font-size:.85rem;font-weight:700;color:var(--head)}
+.api-identity>summary::-webkit-details-marker{display:none}
+.api-identity>summary>i:first-child{color:var(--red)}
+.api-identity>summary>span:first-of-type{flex:1;min-width:0}
+.api-identity-default{font-size:.72rem;font-weight:600;color:var(--text);opacity:.7}
+.api-identity-chev{font-size:.75rem;color:var(--text);transition:transform .2s}
+.api-identity[open] .api-identity-chev{transform:rotate(180deg)}
+.api-identity[open]>summary{border-bottom:1px solid var(--line)}
+.api-identity>p,.api-identity>.api-grid,.api-identity>.api-field{margin-left:.9rem;margin-right:.9rem}
+.api-identity-help{font-size:.76rem;color:var(--text);margin:.75rem .9rem;line-height:1.5}
+.api-identity .gem-text-field:last-child{margin-bottom:.9rem}
+.gem-actions .btn.api-delete-more{margin-left:0}
+.api-keep-note{font-size:.74rem;color:var(--text);opacity:.8;margin:.7rem 0 0}
+.api-keep-note i{margin-right:.3rem}
+.api-removed-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem 0;font-size:.88rem;font-weight:600;color:var(--head)}
+.api-removed-row+.api-removed-row{border-top:1px solid var(--line)}
+.api-removed-row i{color:var(--text);margin-right:.4rem}
+.api-removed-row .btn{background:var(--bg-alt);color:var(--head);border:1px solid var(--line)}
 </style>
 {% endblock %}
 
 {% block content %}
-<p class="settings-intro">One section per feature. Saving a new key tests it straight away; turn a feature off to hide it from users until you switch it back on.</p>
+<p class="settings-intro">One section per feature — tap a section to open it. Saving a new key tests it straight away; turn a feature off to hide it from users until you switch it back on.</p>
+
+{% if message and not message.panel %}
+<div class="save-msg{% if not message.ok %} error{% endif %}"><i class="fas {% if message.ok %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i> {{ message.text }}</div>
+{% endif %}
+{% if add_result and add_result.ok %}
+<div class="save-msg"><i class="fas fa-circle-check"></i> {{ add_result.message }}</div>
+{% endif %}
+
+{# ---- add a model ---- #}
+<details class="panel api-panel api-add" id="panel-add"{% if add_result and not add_result.ok %} open{% endif %}>
+  <summary class="api-sum">
+    <span class="api-sum-icon"><i class="fas fa-plus"></i></span>
+    <span class="api-sum-text"><h3>Add a new model</h3><small>Any NVIDIA NIM chat model (Nemotron, Llama, GPT-OSS…) or another OpenAI-compatible API</small></span>
+    <span class="api-chevron"><i class="fas fa-chevron-down"></i></span>
+  </summary>
+  <div class="gem-body">
+    <p class="api-help">
+      On <a href="https://build.nvidia.com/models" target="_blank" rel="noopener">build.nvidia.com/models</a>, open a model with a <b>Free Endpoint</b>, then copy its name (or just the page link) and your API key from “Get API Key”.
+      Before the model is added it is checked live: the key, that the name exists, that it is a chat model, that it answers and streams, and whether it can read images. Nothing is saved unless it works.
+    </p>
+    {% if add_result and not add_result.ok %}
+    <div class="save-msg error"><i class="fas fa-circle-exclamation"></i> {{ add_result.message }}</div>
+    {% endif %}
+    {% if add_result.report %}
+    <ul class="api-checks">
+      {% for item in add_result.report %}
+      <li class="{{ item.status }}"><i class="fas {% if item.status == 'ok' %}fa-circle-check{% elif item.status == 'warn' %}fa-triangle-exclamation{% else %}fa-circle-xmark{% endif %}"></i><span><b>{{ item.label }}</b>{{ item.detail }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" id="addModelForm">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_model">
+      <div class="api-grid">
+        <div class="api-field gem-text-field">
+          <label for="id_api_type">API type</label>
+          <select id="id_api_type" name="api_type">
+            {% for value, label in api_types %}<option value="{{ value }}"{% if add_result.values.api_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="api-field gem-text-field" id="baseUrlField"{% if add_result.values.api_type != 'openai' %} hidden{% endif %}>
+          <label for="id_base_url">API address</label>
+          <input type="url" id="id_base_url" name="base_url" value="{{ add_result.values.base_url|default:'' }}" placeholder="https://api.example.com/v1">
+        </div>
+      </div>
+      <div class="api-field gem-text-field">
+        <label for="id_model_id">Model name</label>
+        <input type="text" id="id_model_id" name="model_id" value="{{ add_result.values.model_id|default:'' }}" required placeholder="nvidia/nemotron-3-super-120b-a12b">
+        <div class="api-field-meta">The name shown on the model's page, or paste the page link — it is turned into the name for you.</div>
+      </div>
+      <div class="api-grid">
+        <div class="api-field gem-text-field">
+          <label for="id_display_name">Display name (optional)</label>
+          <input type="text" id="id_display_name" name="display_name" value="{{ add_result.values.display_name|default:'' }}" maxlength="60" placeholder="Made from the model name">
+        </div>
+        <div class="api-field gem-text-field">
+          <label for="id_description">Description (optional)</label>
+          <input type="text" id="id_description" name="description" value="{{ add_result.values.description|default:'' }}" maxlength="300" placeholder="Shown under the name in the model picker">
+        </div>
+      </div>
+      <div class="api-field gem-text-field">
+        <label for="id_api_key">API key</label>
+        <div class="api-field-row"><input type="password" id="id_api_key" name="api_key" required autocomplete="new-password" placeholder="nvapi-…"></div>
+      </div>
+      <div class="gem-actions">
+        <button type="submit" class="btn btn-primary" id="addModelBtn"><i class="fas fa-vial-circle-check"></i> Check &amp; add model</button>
+      </div>
+    </form>
+  </div>
+</details>
 
 {% for panel in panels %}
-<div class="panel" id="panel-{{ panel.id }}">
-  <div class="panel-head">
-    <h3>{{ panel.title }}</h3>
-    {% if panel.toggle %}{% if panel.enabled %}<span class="badge api-connected">Enabled</span>{% else %}<span class="badge api-disconnected">Disabled</span>{% endif %}{% endif %}
-  </div>
+{% if forloop.first %}<div class="api-section-title">Built-in features</div>{% endif %}
+{% if panel.custom %}{% ifchanged panel.custom.pk|yesno:"custom,builtin" %}<div class="api-section-title">Your added models</div>{% endifchanged %}{% endif %}
+<details class="panel api-panel" id="panel-{{ panel.id }}"{% if message and message.panel == panel.id or add_result.new_panel == panel.id %} open{% endif %}>
+  <summary class="api-sum">
+    <span class="api-sum-text">
+      <h3>{{ panel.title }}</h3>
+      {% if panel.custom %}<small>{{ panel.note }}</small>{% elif panel.note %}<small>{{ panel.note }}</small>{% endif %}
+    </span>
+    <span class="api-sum-badges">
+      {% if panel.control.last_tested_at %}<span class="api-dot {% if panel.control.last_test_ok %}ok{% else %}bad{% endif %}" title="Last test {% if panel.control.last_test_ok %}passed{% else %}failed{% endif %}"></span>{% endif %}
+      {% if panel.custom %}<span class="badge api-custom">Added</span>{% endif %}
+      {% if panel.toggle %}{% if panel.enabled %}<span class="badge api-connected">Enabled</span>{% else %}<span class="badge api-disconnected">Disabled</span>{% endif %}{% endif %}
+    </span>
+    <span class="api-chevron"><i class="fas fa-chevron-down"></i></span>
+  </summary>
   <div class="gem-body">
-    {% if panel.note %}<p class="gem-sub">{{ panel.note }}</p>{% endif %}
+    {% if panel.note and not panel.custom %}<p class="gem-sub">{{ panel.note }}</p>{% endif %}
     {% if message and message.panel == panel.id %}
     <div class="save-msg{% if not message.ok %} error{% endif %}"><i class="fas {% if message.ok %}fa-circle-check{% else %}fa-circle-exclamation{% endif %}"></i> {{ message.text }}</div>
     {% endif %}
@@ -58,9 +193,36 @@
       <div class="gem-stat"><b>{{ panel.control.error_count|default:0 }}</b><span>Failed</span></div>
       <div class="gem-stat"><b>{% if panel.control.last_used_at %}{{ panel.control.last_used_at|timesince }} ago{% else %}Never{% endif %}</b><span>Last used</span></div>
     </div>
-    <form method="post">
+    {% if panel.custom %}
+    <div class="api-chips">
+      <span class="api-chip"><i class="fas fa-microchip"></i> {{ panel.custom.model_id }}</span>
+      <span class="api-chip"><i class="fas fa-plug"></i> {{ panel.custom.get_api_type_display }}</span>
+      <span class="api-chip"><i class="fas {% if panel.custom.vision %}fa-image{% else %}fa-font{% endif %}"></i> {% if panel.custom.vision %}Reads images{% else %}Text only{% endif %}</span>
+      {% if panel.custom.thinking_control %}<span class="api-chip"><i class="fas fa-brain"></i> Thinking hidden</span>{% endif %}
+    </div>
+    {% if panel.custom.check_report %}
+    <ul class="api-checks">
+      {% for item in panel.custom.check_report %}
+      <li class="{{ item.status }}"><i class="fas {% if item.status == 'ok' %}fa-circle-check{% elif item.status == 'warn' %}fa-triangle-exclamation{% else %}fa-circle-xmark{% endif %}"></i><span><b>{{ item.label }}</b>{{ item.detail }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
+    <form method="post" class="api-panel-form">
       {% csrf_token %}
       <input type="hidden" name="panel" value="{{ panel.id }}">
+      {% if panel.custom %}
+      <div class="api-field gem-text-field">
+        <label for="id_{{ panel.id }}_name">Display name</label>
+        <input type="text" id="id_{{ panel.id }}_name" name="custom_name" value="{{ panel.custom.display_name }}" maxlength="60">
+        <div class="api-field-meta">Shown in the model picker and on every reply from this model.</div>
+      </div>
+      <div class="api-field gem-text-field">
+        <label for="id_{{ panel.id }}_description">Description</label>
+        <textarea id="id_{{ panel.id }}_description" name="custom_description" rows="2" maxlength="300">{{ panel.custom.description }}</textarea>
+        <div class="api-field-meta">Shown under the name in the model picker (max 300 characters).</div>
+      </div>
+      {% endif %}
       {% for item in panel.items %}
       <div class="api-field gem-text-field">
         <label for="id_{{ panel.id }}_{{ item.key }}_name">{% if panel.items|length > 1 %}{{ item.default_name }} — {% endif %}Display name</label>
@@ -73,15 +235,45 @@
         <div class="api-field-meta">Shown under the name in the model picker (max 300 characters). Clear a field to restore its default.</div>
       </div>
       {% endfor %}
+      {% for ident in panel.identities %}
+      <details class="api-identity"{% if ident.values %} open{% endif %}>
+        <summary>
+          <i class="fas fa-id-badge"></i>
+          <span>How {{ ident.label }} describes itself</span>
+          {% if ident.values %}<span class="badge api-custom">Custom identity</span>{% else %}<span class="api-identity-default">Built-in answers</span>{% endif %}
+          <i class="fas fa-chevron-down api-identity-chev"></i>
+        </summary>
+        <p class="api-identity-help">What it answers to “Who are you?”, “Who made / trained you?” and “Which model are you?”. Leave a field blank to keep the built-in answer shown in grey. This takes priority over its usual identity rules.</p>
+        <div class="api-grid">
+          <div class="api-field gem-text-field">
+            <label for="id_{{ ident.key }}_identity_name">Name it gives — “Who are you?”</label>
+            <input type="text" id="id_{{ ident.key }}_identity_name" name="identity_name__{{ ident.key }}" value="{{ ident.values.name|default:'' }}" maxlength="80" placeholder="{{ ident.defaults.name }}">
+          </div>
+          <div class="api-field gem-text-field">
+            <label for="id_{{ ident.key }}_identity_creator">Made / trained by — “Who made you?”</label>
+            <input type="text" id="id_{{ ident.key }}_identity_creator" name="identity_creator__{{ ident.key }}" value="{{ ident.values.creator|default:'' }}" maxlength="120" placeholder="{{ ident.defaults.creator }}">
+          </div>
+        </div>
+        <div class="api-field gem-text-field">
+          <label for="id_{{ ident.key }}_identity_model">Model / version — “Which model are you?”</label>
+          <input type="text" id="id_{{ ident.key }}_identity_model" name="identity_model__{{ ident.key }}" value="{{ ident.values.model|default:'' }}" maxlength="120" placeholder="{{ ident.defaults.model }}">
+        </div>
+        <div class="api-field gem-text-field">
+          <label for="id_{{ ident.key }}_identity_notes">Other facts about itself (optional)</label>
+          <textarea id="id_{{ ident.key }}_identity_notes" name="identity_notes__{{ ident.key }}" rows="2" maxlength="1000" placeholder="e.g. Released in 2026, built in India, specialises in study help">{{ ident.values.notes|default:'' }}</textarea>
+        </div>
+      </details>
+      {% endfor %}
       {% for field in panel.fields %}
       <div class="api-field gem-text-field">
         <label for="id_{{ panel.id }}_{{ field.setting }}">{{ field.label }}</label>
         <div class="api-field-row">
           <input type="password" id="id_{{ panel.id }}_{{ field.setting }}" name="key__{{ field.setting }}" value="" autocomplete="new-password" placeholder="{% if field.configured %}{{ field.preview }}{% else %}Paste your API key{% endif %}">
-          {% if field.overridden %}<button type="submit" name="action" value="clear:{{ field.setting }}" class="api-field-clear" title="Revert to the server default" formnovalidate>Clear</button>{% endif %}
+          {% if field.overridden and not panel.custom %}<button type="submit" name="action" value="clear:{{ field.setting }}" class="api-field-clear" title="Revert to the server default" formnovalidate>Clear</button>{% endif %}
         </div>
         <div class="api-field-meta">
-          {% if field.overridden %}Custom key{% if field.updated_at %}, saved {{ field.updated_at|date:"d M Y, h:i A" }}{% endif %}
+          {% if panel.custom %}Saved {% if field.updated_at %}{{ field.updated_at|date:"d M Y, h:i A" }}{% endif %} — paste a new key to replace it (it is checked first)
+          {% elif field.overridden %}Custom key{% if field.updated_at %}, saved {{ field.updated_at|date:"d M Y, h:i A" }}{% endif %}
           {% elif field.configured %}Using server default
           {% else %}No key configured{% endif %}
         </div>
@@ -95,8 +287,13 @@
       {% endif %}
       <div class="gem-actions">
         <button type="submit" name="action" value="save" class="btn btn-primary"><i class="fas fa-check"></i> Save{% if not panel.configured %} &amp; test{% endif %}</button>
-        <button type="submit" name="action" value="test" class="btn"><i class="fas fa-vial"></i> Test connection</button>
+        <button type="submit" name="action" value="test" class="btn"><i class="fas fa-vial"></i> {% if panel.custom %}Run all checks{% else %}Test connection{% endif %}</button>
+        {% if panel.custom %}<button type="submit" name="action" value="delete" class="btn api-delete" formnovalidate data-confirm="Remove {{ panel.title }} for good? Its key is deleted too. Chats that used it keep their history."><i class="fas fa-trash"></i> Remove model</button>{% endif %}
+        {% for r in panel.removable %}{% if not r.removed %}
+        <button type="submit" name="action" value="remove:{{ r.key }}" class="btn api-delete{% if not forloop.first %} api-delete-more{% endif %}" formnovalidate data-confirm="Remove {{ r.label }} from the model picker? It is switched off and listed under Removed models, where you can restore it any time."><i class="fas fa-trash"></i> Remove {% if panel.removable|length > 1 %}{{ r.label }}{% else %}model{% endif %}</button>
+        {% endif %}{% endfor %}
       </div>
+      {% if panel.id == 'chat' %}<p class="api-keep-note"><i class="fas fa-lock"></i> {{ panel.items.1.label|default:"Vidhyora Quick" }} can't be removed — it is the free users' default and the backup for every other model.</p>{% endif %}
     </form>
     {% if panel.control.last_tested_at %}
     <div class="gem-test-line {% if panel.control.last_test_ok %}ok{% else %}bad{% endif %}">
@@ -106,7 +303,77 @@
     {% endif %}
     {% if panel.control.last_error %}<div class="gem-test-line bad">Last request error: {{ panel.control.last_error }}</div>{% endif %}
   </div>
-</div>
+</details>
 {% endfor %}
-<p class="panel-note">Request counts cover every request made since this page was added; failed requests are included. A disabled feature is refused in the app and the developer API; existing chats keep their history.</p>
+
+{% if removed_models %}
+<div class="api-section-title">Removed models</div>
+<details class="panel api-panel" id="panel-removed" open>
+  <summary class="api-sum">
+    <span class="api-sum-text"><h3>{{ removed_models|length }} removed model{{ removed_models|length|pluralize }}</h3><small>Off and hidden from the model picker. Restore one to switch it back on.</small></span>
+    <span class="api-chevron"><i class="fas fa-chevron-down"></i></span>
+  </summary>
+  <div class="gem-body">
+    {% for r in removed_models %}
+    <form method="post" class="api-removed-row">
+      {% csrf_token %}
+      <input type="hidden" name="panel" value="{{ r.panel }}">
+      <span><i class="fas fa-box-archive"></i> {{ r.label }}</span>
+      <button type="submit" name="action" value="restore:{{ r.key }}" class="btn"><i class="fas fa-rotate-left"></i> Restore</button>
+    </form>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+<p class="panel-note">Request counts cover every request made since this page was added; failed requests are included. A disabled feature is refused in the app and the developer API; existing chats keep their history. Added models are offered to staff and subscribers, like the other full-access models.</p>
+
+<script>
+(function(){
+  var type = document.getElementById('id_api_type');
+  var urlField = document.getElementById('baseUrlField');
+  var urlInput = document.getElementById('id_base_url');
+  function syncType(){
+    var other = type.value === 'openai';
+    urlField.hidden = !other;
+    urlInput.required = other;
+    document.getElementById('id_api_key').placeholder = other ? 'Your API key' : 'nvapi-…';
+  }
+  type.addEventListener('change', syncType);
+  syncType();
+
+  // Arriving from API Checker's "Add to picker": open the form with the
+  // model name filled in, and the key the checker just used.
+  var wanted = new URLSearchParams(window.location.search).get('add_model');
+  if (wanted) {
+    var addPanel = document.getElementById('panel-add');
+    addPanel.open = true;
+    type.value = 'nvidia'; syncType();
+    document.getElementById('id_model_id').value = wanted;
+    try {
+      var savedKey = sessionStorage.getItem('api_checker_key');
+      if (savedKey) document.getElementById('id_api_key').value = savedKey;
+      sessionStorage.removeItem('api_checker_key');
+    } catch (e) {}
+    addPanel.scrollIntoView({ block: 'start' });
+    document.getElementById('addModelBtn').focus();
+  }
+
+  // Checks can take up to a minute, so show that something is happening.
+  document.querySelectorAll('#addModelForm, .api-panel-form').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      var btn = e.submitter;
+      if (btn && btn.dataset.confirm && !confirm(btn.dataset.confirm)) { e.preventDefault(); return; }
+      if (btn && (btn.id === 'addModelBtn' || btn.value === 'test' || btn.value === 'save')) {
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = btn.name;
+        hidden.value = btn.value;
+        if (btn.name) form.appendChild(hidden);
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking… this can take up to a minute';
+        form.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

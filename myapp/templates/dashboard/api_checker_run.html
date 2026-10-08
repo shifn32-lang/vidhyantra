@@ -1,0 +1,143 @@
+{% extends "dashboard/base.html" %}
+{% block title %}API check #{{ run.pk }}{% endblock %}
+{% block page_title %}API check #{{ run.pk }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem}
+.rk-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1.1rem 1.6rem;padding:1.2rem 1.4rem;font-size:.86rem;color:var(--head)}
+.rk-meta b{display:block;color:var(--text);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem}
+.rk-key{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.rk-key code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem;background:var(--bg-alt);border:1px solid var(--line);border-radius:8px;padding:.25rem .5rem;word-break:break-all}
+.rk-btn{border:1px solid var(--line);background:var(--bg-alt);color:var(--head);border-radius:50px;padding:.35rem .75rem;font:inherit;font-size:.74rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem;text-decoration:none}
+.rk-btn:hover{border-color:var(--red);color:var(--red)}
+.rk-actions{display:flex;gap:.6rem;padding:0 1.4rem 1.3rem;flex-wrap:wrap;align-items:center}
+.rk-actions form{margin-left:auto}
+.rk-actions .btn-danger{background:#fff;color:#b91c1c;border:1px solid #fecaca}
+.ck-pill{display:inline-block;font-size:.72rem;font-weight:700;padding:.15rem .6rem;border-radius:50px;white-space:nowrap}
+.ck-pill.works{background:#e8f8ee;color:#177245}
+.ck-pill.bad_key,.ck-pill.error,.ck-pill.no_access{background:#fee2e2;color:#b91c1c}
+.ck-pill.busy{background:#fff7e6;color:#b45309}
+.ck-pill.retired{background:#f1f3f5;color:#6b7280}
+.rk-cap{display:inline-block;font-size:.66rem;font-weight:700;padding:.12rem .45rem;border-radius:50px;background:var(--bg-alt);border:1px solid var(--line);margin:.1rem .15rem .1rem 0;white-space:nowrap}
+.rk-detail{font-size:.78rem;color:var(--text);max-width:360px}
+.rk-desc{font-size:.76rem;color:var(--text);max-width:420px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+details.rk-snap>summary{list-style:none;cursor:pointer}
+details.rk-snap>summary::-webkit-details-marker{display:none}
+details.rk-snap .rk-chev{transition:transform .2s;color:var(--text)}
+details.rk-snap[open] .rk-chev{transform:rotate(180deg)}
+.rk-filter{padding:1rem 1.4rem;border-bottom:1px solid var(--line)}
+.rk-filter input{width:min(360px,100%);height:38px;border:1.5px solid var(--line);border-radius:50px;padding:0 1rem;font:inherit;font-size:.85rem;background:var(--bg-alt)}
+.rk-note{font-size:.78rem;color:var(--text);padding:0 1.4rem 1rem}
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'dashboard_api_checker' %}" class="panel-link"><i class="fas fa-arrow-left"></i> Back to API Checker</a>
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-head">
+    <h3>Check from {{ run.created_at|date:"d M Y, h:i:s A" }}</h3>
+    <span class="ck-pill {{ run.key_status }}">{% if run.key_status == 'works' %}Key works{% elif run.key_status == 'busy' %}Key not rejected — NVIDIA busy{% else %}Key rejected{% endif %}</span>
+  </div>
+  <div class="rk-meta">
+    <div><b>API key</b>
+      <span class="rk-key">
+        <code id="rkKey" data-full="{% if can_see_keys %}{{ run.api_key }}{% endif %}">{{ run.masked_key }}</code>
+        {% if can_see_keys %}
+        <button type="button" class="rk-btn" id="rkReveal"><i class="fas fa-eye"></i> Show</button>
+        <button type="button" class="rk-btn" id="rkCopy"><i class="fas fa-copy"></i> Copy</button>
+        {% endif %}
+      </span>
+    </div>
+    <div><b>Checked by</b>{{ run.created_by.get_full_name|default:run.created_by.username|default:"—" }}</div>
+    <div><b>Key result</b>{{ run.key_detail|default:"—" }}</div>
+    <div><b>Models NVIDIA listed then</b>{{ snapshot_summary.total|default:"—" }} in total · {{ snapshot_summary.on_api|default:0 }} on the chat API · {{ snapshot_summary.testable|default:0 }} chat models</div>
+    <div><b>Models tested</b>{{ results|length }}{% if results %} — <span style="color:#177245">{{ counts.works }} work</span> · {{ counts.retired }} no longer served · {{ counts.busy }} busy{% if counts.no_access %} · {{ counts.no_access }} no access{% endif %}{% if counts.error %} · {{ counts.error }} errors{% endif %}{% endif %}</div>
+  </div>
+  <div class="rk-actions">
+    {% if can_see_keys %}<button type="button" class="btn btn-primary" id="rkAgain"><i class="fas fa-rotate-right"></i> Check this key again</button>{% endif %}
+    <form method="post" action="{% url 'dashboard_api_checker_run_delete' run.pk %}" onsubmit="return confirm('Delete this check and its saved key from History?')">
+      {% csrf_token %}<button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h3>Test results ({{ results|length }})</h3></div>
+  {% if snapshot_summary.caps %}<p class="rk-note" style="padding-top:1rem">Abilities across all models at the time: {% for c in snapshot_summary.caps %}{{ c.label }} {{ c.count }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Model</th><th>Result</th><th>First words</th><th>What happened</th><th>Abilities</th><th>Tested</th></tr></thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td><b>{{ r.model.name|default:r.model_id }}</b><br><span class="mono">{{ r.model_id }}</span></td>
+        <td><span class="ck-pill {{ r.status }}">{% if r.status == 'works' %}Works{% elif r.status == 'retired' %}No longer served{% elif r.status == 'no_access' %}No access{% elif r.status == 'busy' %}Busy{% else %}Error{% endif %}</span></td>
+        <td>{% if r.seconds and r.status == 'works' %}{{ r.seconds }} s{% else %}—{% endif %}</td>
+        <td class="rk-detail">{% if r.status == 'works' and r.reply %}Replied “{{ r.reply|truncatechars:40 }}”{% else %}{{ r.detail }}{% endif %}</td>
+        <td>{% for cap in r.model.caps %}<span class="rk-cap">{% for key, label in capability_labels.items %}{% if key == cap %}{{ label }}{% endif %}{% endfor %}</span>{% endfor %}</td>
+        <td><span class="mono">{{ r.tested_at|date:"h:i:s A" }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty-row">No models were tested in this check — only the key was checked.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<details class="panel rk-snap">
+  <summary class="panel-head"><h3>All {{ snapshot|length }} models NVIDIA listed at the time</h3><i class="fas fa-chevron-down rk-chev"></i></summary>
+  <div class="rk-filter"><input type="search" id="rkSearch" placeholder="Search the saved model list…"></div>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Model</th><th>Publisher</th><th>Abilities</th><th>Calls last month</th><th>Released</th><th>Description</th></tr></thead>
+    <tbody id="rkSnap">
+      {% for m in snapshot %}
+      <tr data-search="{{ m.id|lower }} {{ m.publisher|lower }} {{ m.description|lower }}">
+        <td><span class="mono">{{ m.id }}</span>{% if not m.on_api %}<br><span class="rk-cap">not on the chat API</span>{% endif %}</td>
+        <td>{{ m.publisher|default:"—" }}</td>
+        <td>{% for cap in m.caps %}<span class="rk-cap">{% for key, label in capability_labels.items %}{% if key == cap %}{{ label }}{% endif %}{% endfor %}</span>{% endfor %}</td>
+        <td>{% if m.calls_last_month %}{{ m.calls_last_month }}{% else %}—{% endif %}</td>
+        <td>{{ m.released|default:"—" }}</td>
+        <td><div class="rk-desc">{{ m.description|default:"—" }}</div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+
+<script>
+(function(){
+  var keyEl = document.getElementById('rkKey');
+  var reveal = document.getElementById('rkReveal');
+  var copy = document.getElementById('rkCopy');
+  var again = document.getElementById('rkAgain');
+  var masked = keyEl.textContent;
+  if (reveal) reveal.addEventListener('click', function(){
+    var showing = keyEl.textContent !== masked;
+    keyEl.textContent = showing ? masked : keyEl.getAttribute('data-full');
+    reveal.innerHTML = showing ? '<i class="fas fa-eye"></i> Show' : '<i class="fas fa-eye-slash"></i> Hide';
+  });
+  if (copy) copy.addEventListener('click', function(){
+    navigator.clipboard.writeText(keyEl.getAttribute('data-full')).then(function(){
+      copy.innerHTML = '<i class="fas fa-check"></i> Copied';
+      setTimeout(function(){ copy.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 1500);
+    });
+  });
+  if (again) again.addEventListener('click', function(){
+    try { sessionStorage.setItem('api_checker_use_key', keyEl.getAttribute('data-full')); } catch (e) {}
+    window.location.href = '{% url "dashboard_api_checker" %}';
+  });
+  var search = document.getElementById('rkSearch');
+  search.addEventListener('input', function(){
+    var q = search.value.trim().toLowerCase();
+    document.querySelectorAll('#rkSnap tr').forEach(function(row){
+      row.hidden = q && row.getAttribute('data-search').indexOf(q) === -1;
+    });
+  });
+})();
+</script>
+{% endblock %}

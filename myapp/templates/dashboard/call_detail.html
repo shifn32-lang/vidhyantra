@@ -1,0 +1,89 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Call #{{ call.pk }}{% endblock %}
+{% block page_title %}Call #{{ call.pk }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem}
+.conv-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1.1rem 1.6rem;padding:1.2rem 1.4rem;font-size:.85rem;color:var(--head)}
+.conv-meta b{display:block;color:var(--text);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem}
+.conv-meta a{color:var(--red);font-weight:700}
+.call-actions{display:flex;gap:.6rem;padding:0 1.4rem 1.3rem;flex-wrap:wrap;align-items:center}
+.call-actions .btn{background:var(--bg-alt);color:var(--head);border:1px solid var(--line)}
+.call-actions form{margin-left:auto}
+.call-actions .btn-danger{background:#fff;color:#b91c1c;border-color:#fecaca}
+.call-audio{margin:0 1.4rem 1.3rem;padding:1rem 1.1rem;border:1px solid var(--line);border-radius:14px;background:var(--bg-alt);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.call-audio-ico{width:42px;height:42px;border-radius:12px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.call-audio-text{flex:0 1 auto;font-size:.8rem;color:var(--text)}
+.call-audio-text b{display:block;color:var(--head);font-size:.88rem}
+.call-audio audio{flex:1 1 280px;min-width:0;height:40px}
+.call-noaudio{margin:0 1.4rem 1.3rem;font-size:.82rem;color:var(--text);padding:.8rem 1rem;border:1px dashed var(--line);border-radius:12px}
+.transcript{padding:1.2rem 1.4rem 1.6rem;display:flex;flex-direction:column;gap:.85rem;background:var(--bg-alt)}
+.line{max-width:min(680px,85%);display:flex;flex-direction:column;gap:.2rem}
+.line.you{align-self:flex-end;align-items:flex-end}
+.line-who{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text)}
+.line.you .line-who{color:var(--red)}
+.line-bubble{padding:.7rem .95rem;border-radius:16px;font-size:.88rem;line-height:1.5;color:var(--head);background:#fff;border:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.line.you .line-bubble{background:var(--red);color:#fff;border-color:var(--red);border-bottom-right-radius:5px}
+.line.ai .line-bubble{border-bottom-left-radius:5px}
+.line-time{font-size:.7rem;color:#9aa3b0}
+.line-cut{font-size:.68rem;font-weight:700;color:#b45309;background:#fff7e6;border-radius:50px;padding:.05rem .5rem;margin-left:.3rem}
+.badge.call-live{background:#fff7e6;color:#b45309}
+.badge.call-done{background:#e8fbf0;color:#1da851}
+.empty-row{padding:1.4rem;text-align:center;color:var(--text);font-size:.85rem}
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'dashboard_calls' %}" class="panel-link"><i class="fas fa-arrow-left"></i> All calls</a>
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-head">
+    <h3>Call by {{ name }}</h3>
+    {% if call.ended_at %}<span class="badge call-done">Ended normally</span>{% else %}<span class="badge call-live">Cut off / not ended</span>{% endif %}
+  </div>
+  <div class="conv-meta">
+    <div><b>User</b>{{ name }}<br><span class="mono">{{ call.user.email|default:call.user.username }}</span></div>
+    <div><b>Name said on the call</b>{{ call.caller_name|default:"—" }}</div>
+    <div><b>Started</b>{{ call.started_at|date:"d M Y, h:i:s A" }}</div>
+    <div><b>Ended</b>{% if call.ended_at %}{{ call.ended_at|date:"d M Y, h:i:s A" }}{% else %}—{% endif %}</div>
+    <div><b>Length</b>{{ duration }}</div>
+    <div><b>Lines spoken by caller</b>{{ call.turn_count }}</div>
+    <div><b>Language</b>{{ call.language|default:"—"|upper }}</div>
+    <div><b>This user's calls</b><a href="{% url 'dashboard_calls' %}?user={{ call.user_id }}">{{ user_call_count }} call{{ user_call_count|pluralize }}</a> · {{ user_talk_time }}</div>
+    {% if call.conversation_id %}<div><b>Linked chat</b><a href="{% url 'dashboard_ai_activity_detail' call.conversation_id %}">{{ call.conversation.title|default:"Open chat"|truncatechars:40 }}</a></div>{% endif %}
+  </div>
+
+  {% if has_audio %}
+  <div class="call-audio">
+    <span class="call-audio-ico"><i class="fas fa-microphone"></i></span>
+    <span class="call-audio-text"><b>Recording</b>{{ audio_mb }} MB · caller's voice only</span>
+    <audio controls preload="metadata" src="{% url 'dashboard_call_audio' call.pk %}"></audio>
+  </div>
+  {% else %}
+  <div class="call-noaudio"><i class="fas fa-microphone-slash"></i> No recording — the caller did not allow it, or the call was too short.</div>
+  {% endif %}
+
+  <div class="call-actions">
+    <a class="btn" href="{% url 'dashboard_call_download' call.pk 'pdf' %}"><i class="fas fa-file-pdf"></i> Transcript PDF</a>
+    <a class="btn" href="{% url 'dashboard_call_download' call.pk 'txt' %}"><i class="fas fa-file-lines"></i> Transcript TXT</a>
+    {% if has_audio %}<a class="btn" href="{% url 'dashboard_call_audio' call.pk %}?download=1"><i class="fas fa-download"></i> Recording</a>{% endif %}
+    <form method="post" action="{% url 'dashboard_call_delete' call.pk %}" onsubmit="return confirm('Delete this call, its transcript and its recording? This cannot be undone.')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i> Delete call</button>
+    </form>
+  </div>
+
+  <div class="transcript">
+    {% for t in turns %}
+    <div class="line {% if t.ai %}ai{% else %}you{% endif %}">
+      <span class="line-who">{% if t.ai %}{{ SITE_AI_BRAND_NAME }} AI{% else %}{{ t.who }}{% endif %}{% if t.interrupted %}<span class="line-cut">interrupted</span>{% endif %}</span>
+      <div class="line-bubble">{{ t.text }}</div>
+      {% if t.time %}<span class="line-time">{{ t.time }}</span>{% endif %}
+    </div>
+    {% empty %}
+    <p class="empty-row">Nothing was said on this call.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

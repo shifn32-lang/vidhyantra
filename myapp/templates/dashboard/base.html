@@ -23,6 +23,47 @@
     }
   } catch (e) {}
 })();
+
+// The sidebar swaps pages in place (see the navigation script at the end
+// of <body>), so a page's document/window listeners and timers must be
+// undone when the admin moves to another page — otherwise they pile up
+// and, say, a form's submit handler runs twice. Everything a page registers
+// is recorded here and cleared by window.dashPage.reset().
+(function(){
+  var cleanups = [];
+  var orig = {
+    docAdd: document.addEventListener.bind(document),
+    winAdd: window.addEventListener.bind(window),
+    setTimeout: window.setTimeout.bind(window),
+    setInterval: window.setInterval.bind(window)
+  };
+  function track(target, add){
+    target.addEventListener = function(type, fn, opts){
+      add(type, fn, opts);
+      cleanups.push(function(){ target.removeEventListener(type, fn, opts); });
+    };
+  }
+  track(document, orig.docAdd);
+  track(window, orig.winAdd);
+  window.setTimeout = function(){
+    var id = orig.setTimeout.apply(null, arguments);
+    cleanups.push(function(){ clearTimeout(id); });
+    return id;
+  };
+  window.setInterval = function(){
+    var id = orig.setInterval.apply(null, arguments);
+    cleanups.push(function(){ clearInterval(id); });
+    return id;
+  };
+  window.dashPage = {
+    orig: orig,
+    reset: function(){
+      var list = cleanups;
+      cleanups = [];
+      list.forEach(function(fn){ try { fn(); } catch (e) {} });
+    }
+  };
+})();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -233,10 +274,16 @@ tbody tr:hover{background:var(--bg-alt)}
   .dash-topbar{padding:.75rem .85rem}
   .dash-admin .dav{width:32px;height:32px}
 }
+.dash-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:200;background:var(--red);box-shadow:0 0 8px var(--red);opacity:0;transition:width .25s ease,opacity .3s ease;pointer-events:none}
+.dash-progress.on{opacity:1}
+.dash-body{transition:opacity .15s ease}
+.dash-body.loading{opacity:.55}
 </style>
+<meta name="dash-page-head">
 {% block extra_head %}{% endblock %}
 </head>
 <body>
+<div class="dash-progress" id="dashProgress"></div>
 
 <div class="dash">
   <div class="dash-scrim" id="dashScrim"></div>
@@ -252,10 +299,12 @@ tbody tr:hover{background:var(--bg-alt)}
       <a href="{% url 'dashboard_ai_management' %}" class="{% if active == 'ai_management' %}active{% endif %}"><i class="fas fa-robot"></i> AI Management</a>
       <a href="{% url 'dashboard_ai_activity' %}" class="{% if active == 'ai_activity' %}active{% endif %}"><i class="fas fa-shield-halved"></i> AI Activity</a>
       <a href="{% url 'dashboard_opencode' %}" class="{% if active == 'opencode' %}active{% endif %}"><i class="fas fa-terminal"></i> OpenCode Data</a>
+      <a href="{% url 'dashboard_calls' %}" class="{% if active == 'calls' %}active{% endif %}"><i class="fas fa-phone-volume"></i> Call Data</a>
       <a href="{% url 'dashboard_ai_reports' %}" class="{% if active == 'ai_reports' %}active{% endif %}"><i class="fas fa-flag"></i> AI Reports</a>
       <a href="{% url 'dashboard_api_data' %}" class="{% if active == 'api_data' %}active{% endif %}"><i class="fas fa-plug"></i> API Data</a>
       <a href="{% url 'dashboard_api_settings' %}" class="{% if active == 'api_settings' %}active{% endif %}"><i class="fas fa-sliders"></i> API Settings</a>
       <a href="{% url 'dashboard_api_management' %}" class="{% if active == 'api_management' %}active{% endif %}"><i class="fas fa-key"></i> API Management</a>
+      <a href="{% url 'dashboard_api_checker' %}" class="{% if active == 'api_checker' %}active{% endif %}"><i class="fas fa-stethoscope"></i> API Checker</a>
       <a href="{% url 'dashboard_payments' %}" class="{% if active == 'payments' %}active{% endif %}"><i class="fas fa-indian-rupee-sign"></i> Payments</a>
       <a href="{% url 'dashboard_pwa_settings' %}" class="{% if active == 'pwa_settings' %}active{% endif %}"><i class="fas fa-mobile-screen-button"></i> PWA / Install App</a>
       <a href="{% url 'dashboard_customize' %}" class="{% if active == 'customize' %}active{% endif %}"><i class="fas fa-palette"></i> Customize</a>
@@ -302,9 +351,11 @@ tbody tr:hover{background:var(--bg-alt)}
 
 /* Adds a show/hide eye button to every password field on any dashboard
    page (SMTP password, Razorpay secret, Dropbox tokens, etc.) without
-   needing to touch each form individually. */
-(function(){
-  document.querySelectorAll('input[type="password"]').forEach(function(input){
+   needing to touch each form individually. Re-run after each in-place
+   page switch for the newly inserted fields. */
+function dashEnhancePasswords(root){
+  root.querySelectorAll('input[type="password"]').forEach(function(input){
+    if (input.parentNode.classList.contains('pw-toggle-wrap')) return;
     var wrap = document.createElement('div');
     wrap.className = 'pw-toggle-wrap';
     input.parentNode.insertBefore(wrap, input);
@@ -322,6 +373,121 @@ tbody tr:hover{background:var(--bg-alt)}
       btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
     });
     wrap.appendChild(btn);
+  });
+}
+dashEnhancePasswords(document);
+
+/* Sidebar navigation without a full page reload: fetch the chosen page,
+   then swap only the page-specific parts (title, styles, content). Any
+   problem falls back to an ordinary page load. */
+(function(){
+  var orig = window.dashPage.orig;
+  var nav = document.querySelector('.dash-nav');
+  var body = document.querySelector('.dash-body');
+  var titleEl = document.querySelector('.dash-title');
+  var progress = document.getElementById('dashProgress');
+  var marker = document.querySelector('meta[name="dash-page-head"]');
+  if (!nav || !body || !titleEl || !marker || !window.fetch || !window.DOMParser || !history.pushState) return;
+  var controller = null;
+  var progressTimer = null;
+
+  function startProgress(){
+    clearInterval(progressTimer);
+    var w = 12;
+    progress.style.width = w + '%';
+    progress.classList.add('on');
+    body.classList.add('loading');
+    progressTimer = orig.setInterval(function(){
+      w += (90 - w) * .15;
+      progress.style.width = w + '%';
+    }, 200);
+  }
+  function endProgress(){
+    clearInterval(progressTimer);
+    progress.style.width = '100%';
+    body.classList.remove('loading');
+    orig.setTimeout(function(){
+      progress.classList.remove('on');
+      orig.setTimeout(function(){ progress.style.width = '0'; }, 300);
+    }, 200);
+  }
+  function pageHead(doc){
+    var m = doc.querySelector('meta[name="dash-page-head"]');
+    var nodes = [];
+    for (var n = m && m.nextElementSibling; n; n = n.nextElementSibling) nodes.push(n);
+    return nodes;
+  }
+  function setActive(path){
+    nav.querySelectorAll('a').forEach(function(a){
+      a.classList.toggle('active', a.pathname === path);
+    });
+  }
+  function swap(doc, url){
+    var newBody = doc.querySelector('.dash-body');
+    var newTitle = doc.querySelector('.dash-title');
+    var newHead = pageHead(doc);
+    if (!newBody || !newTitle || newHead.some(function(n){ return n.tagName === 'SCRIPT'; })) return false;
+
+    window.dashPage.reset();
+    pageHead(document).forEach(function(n){ n.remove(); });
+    newHead.slice().reverse().forEach(function(n){ marker.after(document.importNode(n, true)); });
+    document.title = doc.title;
+    titleEl.innerHTML = newTitle.innerHTML;
+    var activeLink = doc.querySelector('.dash-nav a.active');
+    nav.querySelectorAll('a').forEach(function(a){
+      a.classList.toggle('active', !!activeLink && a.getAttribute('href') === activeLink.getAttribute('href'));
+    });
+    body.innerHTML = newBody.innerHTML;
+    // Scripts inserted via innerHTML don't run; recreate them so they do.
+    body.querySelectorAll('script').forEach(function(old){
+      var s = document.createElement('script');
+      Array.prototype.forEach.call(old.attributes, function(attr){ s.setAttribute(attr.name, attr.value); });
+      s.textContent = old.textContent;
+      old.replaceWith(s);
+    });
+    dashEnhancePasswords(body);
+    window.scrollTo(0, 0);
+    return true;
+  }
+  function go(url, push){
+    if (controller) controller.abort();
+    controller = new AbortController();
+    var mine = controller;
+    startProgress();
+    fetch(url, { credentials: 'same-origin', signal: mine.signal, headers: { 'X-Requested-With': 'dash-nav' } })
+      .then(function(resp){
+        var type = resp.headers.get('Content-Type') || '';
+        if (!resp.ok || type.indexOf('text/html') === -1) throw new Error('fallback');
+        // Following a redirect (e.g. to the login page) means this isn't
+        // the dashboard page we asked for — let the browser handle it.
+        if (resp.redirected && new URL(resp.url).pathname !== new URL(url, location.href).pathname) throw new Error('fallback');
+        return resp.text();
+      })
+      .then(function(html){
+        if (mine !== controller) return;
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        if (push) history.pushState({ dashNav: true }, '', url);
+        if (!swap(doc, url)) throw new Error('fallback');
+        endProgress();
+      })
+      .catch(function(err){
+        if (err && err.name === 'AbortError') return;
+        window.location.href = url;
+      });
+  }
+
+  history.replaceState({ dashNav: true }, '', location.href);
+  nav.addEventListener('click', function(e){
+    var a = e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (a.origin !== location.origin || a.target) return;
+    e.preventDefault();
+    if (a.pathname === location.pathname && !a.search) { window.scrollTo(0, 0); return; }
+    setActive(a.pathname);
+    go(a.href, true);
+  });
+  orig.winAdd('popstate', function(e){
+    if (e.state && e.state.dashNav) go(location.href, false);
   });
 })();
 </script>

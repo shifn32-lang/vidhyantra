@@ -36,6 +36,23 @@ class SiteDisabledMiddleware:
         return self.get_response(request)
 
 
+class CustomModelsMiddleware:
+    """Keeps models added on the dashboard (API Settings → Add a new model)
+    in ai_chat.MODELS for the pages and APIs that read it. Usually just a
+    cache read — see myapp.custom_models.sync."""
+
+    PREFIXES = ('/AI/', '/api/', '/store/dashboard/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith(self.PREFIXES):
+            from myapp import custom_models
+            custom_models.sync()
+        return self.get_response(request)
+
+
 class CanonicalHostMiddleware:
     """Consolidate the bare domain onto the canonical www hostname."""
 

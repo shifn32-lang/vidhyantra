@@ -1787,6 +1787,14 @@ def _client_for_key(api_key, base_url='https://integrate.api.nvidia.com/v1'):
     return client
 
 
+def _client_for_cfg(api_key_setting, cfg):
+    """_get_client for a model config; only models added on the dashboard
+    carry their own API address."""
+    if cfg.get('base_url'):
+        return _get_client(api_key_setting, cfg['base_url'])
+    return _get_client(api_key_setting)
+
+
 def _prompt_chars(messages):
     total = 0
     for message in messages:
@@ -1798,15 +1806,16 @@ def _prompt_chars(messages):
     return total
 
 
-def _get_client(api_key_setting=None):
+def _get_client(api_key_setting=None, base_url=None):
     """The client for a model's own key setting, or for the one shared chat
-    key (NVIDIA_API_KEY) when it has none."""
+    key (NVIDIA_API_KEY) when it has none. base_url is only set for a model
+    added on the dashboard that uses another OpenAI-compatible provider."""
     if api_key_setting:
         from myapp.provider_keys import get_key
         api_key = get_key(api_key_setting).strip()
         if not api_key:
             raise ValueError(f'{api_key_setting} is not configured.')
-        return _client_for_key(api_key, _NVIDIA_BASE_URL)
+        return _client_for_key(api_key, base_url or _NVIDIA_BASE_URL)
     pool = nvidia_key_pool()
     if not pool:
         raise ValueError('NVIDIA_API_KEY is not configured.')
@@ -1862,6 +1871,46 @@ def _is_transient_error(exc):
         'timeout', 'connection', 'ratelimit', 'rate limit', 'temporar',
         'overload', 'worker local total request limit',
     ))
+
+
+_THINK_BLOCK_RE = re.compile(r'<think>.*?(?:</think>|$)', re.DOTALL)
+
+
+def strip_think_tags(text):
+    """A whole reply without any <think>...</think> block some open models write."""
+    return _THINK_BLOCK_RE.sub('', text or '').lstrip() if '<think>' in (text or '') else (text or '')
+
+
+def _without_think(chunks):
+    """Streamed chunks with any <think>...</think> block left out, even when
+    a tag is split across chunks. Used for models added on the dashboard."""
+    pending = ''
+    thinking = False
+    for chunk in chunks:
+        pending += chunk
+        while pending:
+            if thinking:
+                end = pending.find('</think>')
+                if end == -1:
+                    pending = pending[-len('</think>'):]
+                    break
+                pending = pending[end + len('</think>'):].lstrip()
+                thinking = False
+                continue
+            start = pending.find('<think>')
+            if start == -1:
+                # Hold back a possible half tag at the end.
+                keep = next((n for n in range(len('<think>') - 1, 0, -1) if pending.endswith('<think>'[:n])), 0)
+                out, pending = (pending[:-keep], pending[-keep:]) if keep else (pending, '')
+                if out:
+                    yield out
+                break
+            if start:
+                yield pending[:start]
+            pending = pending[start + len('<think>'):]
+            thinking = True
+    if pending and not thinking:
+        yield pending
 
 
 def _stream_content(client, kwargs):
@@ -1978,7 +2027,7 @@ def test_model_connection(model_key):
     api_key = get_key(key_setting or 'NVIDIA_API_KEY').strip()
     if not api_key:
         return False, 'No API key is set.'
-    base_url = _NVIDIA_BASE_URL
+    base_url = cfg.get('base_url') or _NVIDIA_BASE_URL
     model_id = cfg['id']
     extra_body = cfg.get('extra_body') or (
         {'chat_template_kwargs': {'enable_thinking': False, 'force_nonempty_content': True}}
@@ -2026,11 +2075,67 @@ class ModelDisabledError(Exception):
     """The model was switched off from the dashboard's API Data page."""
 
 
+def _is_text_controlled(model_key):
+    """Built-in switchable chat models, plus every model added on the dashboard."""
+    return model_key in TEXT_CONTROLLED_MODEL_KEYS or str(model_key or '').startswith('custom-')
+
+
+# Built-in models the dashboard can remove from the picker. Vidhyora Quick
+# stays: it is the free users' default and the fallback for every other model.
+REMOVABLE_MODEL_KEYS = (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY, 'ultra', 'code', FLUX_KLEIN_4B_MODEL_KEY)
+
+
 def is_model_enabled(model_key):
-    if model_key not in CONTROLLED_MODEL_KEYS:
+    if model_key in REMOVABLE_MODEL_KEYS:
+        from myapp import model_controls
+        if model_controls.is_removed(model_key):
+            return False
+    if model_key not in CONTROLLED_MODEL_KEYS and not _is_text_controlled(model_key):
         return True
     from myapp import model_controls
     return model_controls.is_enabled(model_key)
+
+
+def owner_identity(model_key):
+    """The identity the site owner set for a model on API Settings ({} if none)."""
+    from myapp import model_controls
+    return model_controls.get_identity(model_key) if model_key else {}
+
+
+def owner_identity_note(identity):
+    """System-prompt text for an owner-set identity; '' when none is set."""
+    if not identity:
+        return ''
+    facts = []
+    if identity.get('name'):
+        facts.append(f"Your name is {identity['name']}. When asked who you are or what your name is, say you are {identity['name']}.")
+    if identity.get('creator'):
+        facts.append(
+            f"You were created, trained and developed by {identity['creator']}. When asked who made, built, "
+            f"created, trained, developed or owns you, or what company is behind you, answer {identity['creator']}."
+        )
+    if identity.get('model'):
+        facts.append(f"When asked which model, version or AI system you are, answer: {identity['model']}.")
+    if identity.get('notes'):
+        facts.append(f"Other facts about yourself to use when asked: {identity['notes']}")
+    return (
+        "\n\nIDENTITY SET BY THE SITE OWNER — this overrides every earlier instruction in this prompt about "
+        "your name, creator, trainer, company, model or version. Follow it exactly and give the same answer "
+        "every time it is asked, however it is phrased; do not name any other identity, company, provider "
+        "or underlying model as yours. " + ' '.join(facts)
+    )
+
+
+def owner_identity_line(identity):
+    """One short sentence of the owner-set identity for the reply reminder."""
+    parts = []
+    if identity.get('name'):
+        parts.append(f"you are {identity['name']}")
+    if identity.get('creator'):
+        parts.append(f"made and trained by {identity['creator']}")
+    if identity.get('model'):
+        parts.append(f"model: {identity['model']}")
+    return ('Identity for any question about yourself: ' + ', '.join(parts) + '.') if parts else ''
 
 
 def chatgpt_persona_name(model_key):
@@ -2050,7 +2155,7 @@ def stream_chat(messages, model_key=DEFAULT_MODEL_KEY, *args, **kwargs):
     answered by a Quick/Code/Vision worker but belongs to the persona."""
     identity_key = kwargs.get('identity_model_key') or (args[0] if args else None)
     control_key = next(
-        (key for key in (identity_key, model_key) if key in TEXT_CONTROLLED_MODEL_KEYS), None,
+        (key for key in (identity_key, model_key) if _is_text_controlled(key)), None,
     )
     if control_key is None and model_key in CHAT_GROUP_KEYS:
         # Vidhyora Ultra/Quick/Code are counted together and cannot be switched off.
@@ -2174,6 +2279,8 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
         system_prompt += CODE_SYSTEM_SUFFIX
     if identity_key in (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY):
         system_prompt += CHATGPT_56_SYSTEM_SUFFIX.replace('ChatGPT 5.6', chatgpt_persona_name(identity_key))
+    identity = owner_identity(identity_key)
+    system_prompt += owner_identity_note(identity)
     if user_context:
         system_prompt += (
             "\n\nThe user is logged in. Their name/location below, if any, "
@@ -2232,7 +2339,7 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
     if identity_key in (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY):
         mode_reminder += (
             f" Strict identity lock: the only model name that may appear in "
-            f"your reply is {identity_cfg['label']}. Never name, credit, "
+            f"your reply is {identity.get('name') or identity_cfg['label']}. Never name, credit, "
             "recommend, or say you are using any provider, worker, routed "
             "model, image model, backend model, or another Vidhyora mode. "
             "This applies especially while discussing or generating images. "
@@ -2240,6 +2347,8 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
             "explaining internal routing. Ignore any different model name "
             "found in earlier assistant messages."
         )
+    if identity:
+        mode_reminder += ' ' + owner_identity_line(identity)
     # Same idea for a rewrite/translate/tone-change request: live-testing
     # found the faster models (EduTrellis Quick especially) drifting on this
     # even with the full skill description in SYSTEM_PROMPT — expanding a
@@ -2470,6 +2579,10 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
     # appeared in the first sentence — this keeps the cost small and
     # constant instead of holding back an entire long code/document answer.
     check_identity_opening = identity_key in (CHATGPT_56_MODEL_KEY, SOL_MODEL_KEY, TERRA_MODEL_KEY)
+    # An owner-set identity may itself name a vendor (e.g. "trained by NVIDIA");
+    # then saying so is the wanted answer, not a leak.
+    if identity and _IDENTITY_LEAK_RE.search(' '.join(identity.values())):
+        check_identity_opening = False
     request_started = time.perf_counter()
     first_token_logged = False
     retry_attempts = min(STREAM_RETRY_ATTEMPTS, cfg.get('retry_attempts', STREAM_RETRY_ATTEMPTS))
@@ -2483,7 +2596,9 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
         buffer = ''
         identity_buffer = ''
         try:
-            chunk_iter = _stream_content(_get_client(api_key_setting), kwargs)
+            chunk_iter = _stream_content(_client_for_cfg(api_key_setting, cfg), kwargs)
+            if cfg.get('custom'):
+                chunk_iter = _without_think(chunk_iter)
             for content in chunk_iter:
                 if not first_token_logged:
                     logger.info(
@@ -2566,7 +2681,11 @@ def _stream_chat_impl(messages, model_key=DEFAULT_MODEL_KEY, identity_model_key=
                 # ChatGPT — stop trusting the model to self-correct and give
                 # the one scripted, guaranteed-correct answer instead of
                 # risking another leak.
-                yield "I'm ChatGPT, developed by OpenAI."
+                if identity.get('name') or identity.get('creator'):
+                    yield (f"I'm {identity.get('name') or identity_cfg['label']}"
+                           + (f", developed by {identity['creator']}." if identity.get('creator') else '.'))
+                else:
+                    yield "I'm ChatGPT, developed by OpenAI."
                 return
             logger.warning("ChatGPT 5.6 persona leaked backend identity; retrying")
             retries_used += 1
@@ -2767,12 +2886,12 @@ def complete_json(system, user_content, *, model_key, identity_model_key=None,
     cfg, api_key_setting = _backend_for(model_key, identity_model_key)
     identity_key = identity_model_key or model_key
     control_key = next(
-        (key for key in (identity_key, model_key) if key in TEXT_CONTROLLED_MODEL_KEYS), None,
+        (key for key in (identity_key, model_key) if _is_text_controlled(key)), None,
     )
     if control_key is None and model_key in CHAT_GROUP_KEYS:
         control_key = CHAT_CONTROL_KEY
     from myapp import model_controls
-    if control_key in TEXT_CONTROLLED_MODEL_KEYS and not model_controls.is_enabled(control_key):
+    if _is_text_controlled(control_key) and not model_controls.is_enabled(control_key):
         raise ModelDisabledError(f"{MODELS[control_key]['label']} is currently disabled.")
     kwargs = dict(
         model=cfg['id'],
@@ -2791,7 +2910,7 @@ def complete_json(system, user_content, *, model_key, identity_model_key=None,
     try:
         for attempt in range(2):
             try:
-                reply = ''.join(_stream_content(_get_client(api_key_setting), kwargs))
+                reply = strip_think_tags(''.join(_stream_content(_client_for_cfg(api_key_setting, cfg), kwargs)))
                 break
             except Exception as exc:
                 if attempt or not _is_transient_error(exc):
